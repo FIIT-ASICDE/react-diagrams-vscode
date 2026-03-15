@@ -13,7 +13,7 @@ class VSCodeAPIWrapper {
 			this.vsCodeApi = acquireVsCodeApi();
 		}
 
-		window.addEventListener("message", this.vscodeMessageListener);
+		// window.addEventListener("message", this.vscodeMessageListener);
 	}
 
 	/**
@@ -67,12 +67,12 @@ class VSCodeAPIWrapper {
 		return newState;
 	}
 
-	private vscodeMessageListener(message) {
-		const type = message.type;
-		const text = message.data;
+	// private vscodeMessageListener(message) {
+	// 	const type = message.type;
+	// 	const text = message.data;
 
-		console.log(type, text);
-	}
+	// 	console.log(type, text);
+	// }
 }
 
 export const vscode = new VSCodeAPIWrapper();
