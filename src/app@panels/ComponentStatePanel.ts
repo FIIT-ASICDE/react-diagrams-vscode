@@ -1,6 +1,7 @@
 import { Disposable, Webview, WebviewPanel, window, Uri, ViewColumn } from "vscode";
 import { getNonce } from "../app@utils/crypto";
 import { getUri } from "../app@utils/urls";
+import { get } from "http";
 
 export class ComponentStatePanel {
 	public static readonly WEBVIEW_DIR = "webview-ui";
@@ -19,15 +20,11 @@ export class ComponentStatePanel {
 	private constructor(panel: WebviewPanel, extensionUri: Uri) {
 		this.panel = panel;
 
-		// Set an event listener to listen for when the panel is disposed (i.e. when the user closes
-		// the panel or when the panel is closed programmatically)
-		this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+		this.panel.onDidDispose(() => this.dispose(), null, this.disposables); // when the user closes, or closed programmatically...
 
-		// Set the HTML content for the webview panel
 		this.panel.webview.html = this.getWebviewContent(this.panel.webview, extensionUri);
 
-		// Set an event listener to listen for messages passed from the webview context
-		this.setWebviewMessageListener(this.panel.webview);
+		this.panel.webview.onDidReceiveMessage(this.webviewMessageListener, this, this.disposables);
 	}
 
 	/**
@@ -37,22 +34,17 @@ export class ComponentStatePanel {
 	 * @param extensionUri The URI of the directory containing the extension.
 	 */
 	public static render(extensionUri: Uri) {
-		if (ComponentStatePanel.currentPanel) {
-			// If the webview panel already exists reveal it
+		if (ComponentStatePanel.currentPanel) { // Already exists, show it
 			ComponentStatePanel.currentPanel.panel.reveal(ViewColumn.One);
+			ComponentStatePanel.currentPanel.postMessage("test", { text: getNonce() });
 			return;
 		}
 
-		// If a webview panel does not already exist create and show a new one
 		const panel = window.createWebviewPanel(
-			// Panel view type
 			"componentState",
-			// Panel title
 			"React Component State",
-			// The editor column the panel should be displayed in
 			ViewColumn.One,
-			// Extra panel configurations
-			{
+			{ // Extra panel configurations
 				enableScripts: true,
 				localResourceRoots: [Uri.joinPath(extensionUri, "out"), Uri.joinPath(extensionUri, "webview-ui/dist")],
 			}
@@ -66,17 +58,18 @@ export class ComponentStatePanel {
 	 */
 	public dispose() {
 		ComponentStatePanel.currentPanel = undefined;
-
-		// Dispose of the current webview panel
 		this.panel.dispose();
 
-		// Dispose of all disposables (i.e. commands) for the current webview panel
 		while (this.disposables.length) {
 			const disposable = this.disposables.pop();
 			if (disposable) {
 				disposable.dispose();
 			}
 		}
+	}
+
+	public postMessage(type: string, data?) {
+		this.panel.webview.postMessage({ type, ...data });
 	}
 
 	/**
@@ -91,10 +84,8 @@ export class ComponentStatePanel {
 	 * rendered within the webview panel
 	 */
 	private getWebviewContent(webview: Webview, extensionUri: Uri) {
-		// The CSS file from the React build output
-		const stylesUri = getUri(webview, extensionUri, [ComponentStatePanel.WEBVIEW_DIR, "dist", "assets", "index.css"]);
-		// The JS file from the React build output
-		const scriptUri = getUri(webview, extensionUri, [ComponentStatePanel.WEBVIEW_DIR, "dist", "assets", "index.js"]);
+		const stylesUri = getUri(webview, extensionUri, [ComponentStatePanel.WEBVIEW_DIR, "dist", "assets", "index.css"]); // The CSS file from the React webview
+		const scriptUri = getUri(webview, extensionUri, [ComponentStatePanel.WEBVIEW_DIR, "dist", "assets", "index.js"]); // The JS file from the React webview
 
 		const nonce = getNonce();
 
@@ -111,8 +102,8 @@ export class ComponentStatePanel {
 			<body>
 				<div id="root"></div>
 				<script type="module" nonce="${nonce}" src="${scriptUri}"></script>
-				<!-- <p>${scriptUri}</p>
-				<p>${nonce}</p> -->
+				<!-- <p>${scriptUri}</p> -->
+				<!-- <p>${nonce}</p> -->
 			</body>
 			</html>
 		`;
@@ -125,21 +116,15 @@ export class ComponentStatePanel {
 	 * @param webview A reference to the extension webview
 	 * @param context A reference to the extension context
 	 */
-	private setWebviewMessageListener(webview: Webview) {
-		webview.onDidReceiveMessage(
-			(message) => {
-				const command = message.command;
-				const text = message.text;
+	private webviewMessageListener(message: any) {
+		const type = message.type;
+		const text = message.text;
 
-				switch (command) {
-					case "hello":
-						window.showInformationMessage(text);
-						return;
+		switch (type) {
+			case "hello":
+				window.showInformationMessage(text);
+				return;
 
-				}
-			},
-			undefined,
-			this.disposables
-		);
+		}
 	}
 }

@@ -23,5 +23,7 @@ export default [{
         eqeqeq: "warn",
         "no-throw-literal": "warn",
         semi: "warn",
+        "@typescript-eslint/no-unused-vars": "warn",
+        "@typescript-eslint/no-implicit-any": "off",
     },
 }];

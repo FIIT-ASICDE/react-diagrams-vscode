@@ -4,7 +4,7 @@
   "description": "",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.109.0"
+    "vscode": "^1.111.0"
   },
   "categories": [
     "Other"
@@ -20,7 +20,7 @@
     ]
   },
   "scripts": {
-    "install:all": "npm install && cd webview-ui && npm install",
+    "i:all": "npm install && cd webview-ui && npm install",
     "start:webview": "cd webview-ui && npm run start",
     "build:webview": "cd webview-ui && npm run build",
     "watch:webview": "chokidar \"webview-ui/src/**/*\" -c \"npm run build:webview\"",
@@ -37,7 +37,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "@types/vscode": "^1.109.0",
+    "@types/vscode": "^1.110.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "chokidar-cli": "^3.0.0",

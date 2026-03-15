@@ -12,6 +12,8 @@ class VSCodeAPIWrapper {
 		if (typeof acquireVsCodeApi === "function") {
 			this.vsCodeApi = acquireVsCodeApi();
 		}
+
+		window.addEventListener("message", this.vscodeMessageListener);
 	}
 
 	/**
@@ -22,12 +24,12 @@ class VSCodeAPIWrapper {
 	 *
 	 * @param message Abitrary data (must be JSON serializable) to send to the extension context.
 	 */
-	public postMessage(message: unknown) {
-		if (this.vsCodeApi) {
-			this.vsCodeApi.postMessage(message);
-		} else {
-			console.log(message);
-		}
+	public postMessage(type: string, data?) {
+		const message = { type, ...data };
+		if (this.vsCodeApi)
+			return this.vsCodeApi.postMessage(message);
+		
+		console.warn("Unable to post message, no acquireVsCodeApi", message);
 	}
 
 	/**
@@ -63,6 +65,13 @@ class VSCodeAPIWrapper {
 
 		localStorage.setItem(VSCodeAPIWrapper.STATE_KEY, JSON.stringify(newState));
 		return newState;
+	}
+
+	private vscodeMessageListener(message) {
+		const type = message.type;
+		const text = message.data;
+
+		console.log(type, text);
 	}
 }
 
