@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import path from 'node:path'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -13,6 +14,8 @@ export default defineConfig({
     tailwindcss(),
   ],
   build: {
+    outDir: path.resolve(__dirname, '../vscode-extension/webview-dist/state'),
+    emptyOutDir: false,
     rollupOptions: {
       output: {
         entryFileNames: `assets/[name].js`,

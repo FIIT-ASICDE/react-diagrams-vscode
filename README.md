@@ -1,12 +1,33 @@
-# vs-code-ext README
+# state-diagram-vscode-ext monorepo
 
-This is the README for your extension "vs-code-ext". After writing up a brief description, we recommend including the following sections.
+This repository is organized as an npm workspace monorepo.
 
-# Setup
-1. Make sure your VS Code APi is at least 1.111.0 (Help > About).
-2. Install Node 20+
-3. npm run i:all
-4. npm run build:webview
+## Packages
 
-5. npm run watch:webview
-6. press F11 (Run > Start Debugging)
+- `@react-diagrams/core` in `packages/core`: parser and shared logic, testable independently.
+- `@react-diagrams/vscode-extension` in `packages/vscode-extension`: VS Code extension host package.
+- `@react-diagrams/webview-ui` in `packages/webview-ui`: React webview application used by the extension.
+
+## Setup
+1. Make sure your VS Code API is at least 1.111.0 (Help > About).
+2. Install Node 20+.
+3. From the monorepo root, run `npm i`.
+4. Open new terminal and run to build core and rebuild when changed: `npm run watch:dev`.
+5. Press F11 (Run > Start Debugging) and Debug Anyway if necessary...
+
+## Common commands
+
+```bash
+npm run build
+npm run watch
+npm run watch-tests
+npm run test
+```
+
+## Package-scoped examples
+
+```bash
+npm --workspace @react-diagrams/core run build
+npm --workspace @react-diagrams/vscode-extension run compile
+npm --workspace @react-diagrams/webview-ui run dev
+```

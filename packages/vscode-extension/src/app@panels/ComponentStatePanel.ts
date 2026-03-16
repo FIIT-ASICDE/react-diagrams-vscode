@@ -1,10 +1,11 @@
-import { Disposable, Webview, WebviewPanel, window, Uri, ViewColumn } from "vscode";
+import * as path from "path";
+import { Disposable, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
 import { getNonce } from "../app@utils/crypto";
 import { getUri } from "../app@utils/urls";
-import { get } from "http";
+import { parseReactComponent } from "@react-diagrams/core";
 
 export class ComponentStatePanel {
-	public static readonly WEBVIEW_DIR = "webview-ui";
+	public static readonly WEBVIEW_DIR = "webview-dist/state";
 
 	public static currentPanel?: ComponentStatePanel;
 
@@ -36,7 +37,26 @@ export class ComponentStatePanel {
 	public static render(extensionUri: Uri) {
 		if (ComponentStatePanel.currentPanel) { // Already exists, show it
 			ComponentStatePanel.currentPanel.panel.reveal(ViewColumn.One);
-			ComponentStatePanel.currentPanel.postMessage("test", { text: getNonce() });
+			// ComponentStatePanel.currentPanel.postMessage("test", { text: getNonce() });
+
+			const activeEditor = window.activeTextEditor;
+			if (!activeEditor) {
+				window.showWarningMessage("No active editor found. Open a React component file first.");
+				return;
+			}
+			
+			const activeFilePath = activeEditor.document.uri.fsPath;
+			const workspaceFolder = workspace.getWorkspaceFolder(activeEditor.document.uri);
+			if (!workspaceFolder) {
+				window.showWarningMessage("Could not determine workspace folder for the active file.");
+				return;
+			}
+
+			const srcRootPath = Uri.joinPath(workspaceFolder.uri).fsPath;
+			const relativeComponentPath = path.relative(srcRootPath, activeFilePath).replace(/\\/g, "/");
+
+			console.log("Parsing component", relativeComponentPath);
+			// console.log(analyzeReactComponent(relativeComponentPath));
 			return;
 		}
 
@@ -46,7 +66,7 @@ export class ComponentStatePanel {
 			ViewColumn.One,
 			{ // Extra panel configurations
 				enableScripts: true,
-				localResourceRoots: [Uri.joinPath(extensionUri, "out"), Uri.joinPath(extensionUri, "webview-ui/dist")],
+				localResourceRoots: [Uri.joinPath(extensionUri, "out"), Uri.joinPath(extensionUri, ComponentStatePanel.WEBVIEW_DIR)],
 			}
 		);
 
@@ -84,8 +104,8 @@ export class ComponentStatePanel {
 	 * rendered within the webview panel
 	 */
 	private getWebviewContent(webview: Webview, extensionUri: Uri) {
-		const stylesUri = getUri(webview, extensionUri, [ComponentStatePanel.WEBVIEW_DIR, "dist", "assets", "index.css"]); // The CSS file from the React webview
-		const scriptUri = getUri(webview, extensionUri, [ComponentStatePanel.WEBVIEW_DIR, "dist", "assets", "index.js"]); // The JS file from the React webview
+		const stylesUri = getUri(webview, extensionUri, [ComponentStatePanel.WEBVIEW_DIR, "assets", "index.css"]); // The CSS file from the React webview
+		const scriptUri = getUri(webview, extensionUri, [ComponentStatePanel.WEBVIEW_DIR, "assets", "index.js"]); // The JS file from the React webview
 
 		const nonce = getNonce();
 
@@ -102,7 +122,9 @@ export class ComponentStatePanel {
 			<body>
 				<div id="root"></div>
 				<script type="module" nonce="${nonce}" src="${scriptUri}"></script>
+				<!-- <p>${stylesUri}</p> -->
 				<!-- <p>${scriptUri}</p> -->
+				<!-- <p>${extensionUri}</p> -->
 				<!-- <p>${nonce}</p> -->
 			</body>
 			</html>
