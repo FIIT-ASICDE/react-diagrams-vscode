@@ -10,7 +10,7 @@ This repository is organized as an npm workspace monorepo.
 
 ## Setup
 1. Make sure your VS Code API is at least 1.111.0 (Help > About).
-2. Install Node 20+.
+2. Install Node 22+.
 3. From the monorepo root, run `npm i`.
 4. Open new terminal and run to build core and rebuild when changed: `npm run watch:dev`.
 5. Press F11 (Run > Start Debugging) and Debug Anyway if necessary...

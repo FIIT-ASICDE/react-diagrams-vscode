@@ -12,10 +12,10 @@
     "build": "tsc -p .",
     "watch": "tsc -p . -w",
     "lint": "echo \"No lint task configured for @react-diagrams/core\"",
-    "test": "node -e \"console.log('No tests configured for @react-diagrams/core yet')\""
+    "test": "npm run build && node --test dist/tests/**/*.test.js"
   },
   "dependencies": {
-    "ts-morph": "^24.0.0"
+    "ts-morph": "^27.0.2"
   },
   "devDependencies": {
     "@types/node": "22.x",

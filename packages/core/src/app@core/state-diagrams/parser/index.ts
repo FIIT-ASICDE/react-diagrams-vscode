@@ -1,120 +1,241 @@
-import { Project, Node, SyntaxKind } from 'ts-morph';
-import * as path from 'node:path';
-import * as fs from 'node:fs';
+import {
+	CallExpression,
+	Node,
+	SourceFile,
+	SyntaxKind,
+	VariableDeclaration,
+} from 'ts-morph';
+import {
+	StateDiagram,
+	StateDiagramComponent,
+	StateVariable,
+} from '../types';
+import { resolveDefaultExportComponent, getLineAndColumn, text2SrcFile, truncate } from './utils';
 
-// Parse a React project
+import { SupportedComponentDeclaration } from './types';
 
-// export function analyzeReactComponent(relativePathToComponent: string) {
-// 	// Get workspace folder
-// 	const workspaceFolders = vscode.workspace.workspaceFolders;
-// 	if (!workspaceFolders?.length) {
-// 		vscode.window.showErrorMessage("No workspace folder found. Open a project first.");
-// 		return null;
-// 	}
+/*
 
-// 	const rootPath = workspaceFolders[0].uri.fsPath;
+ Each state variable will be visualized in its
+own frame, distinguished for example by color, and basic idea
+behind behind the diagram generation process can summarize
+this process like:
+- Identify all state variables defined in the component.
+- Create a dedicated frame for each variable containing its
+name, type and default value.
+- Generate base state diagram describing initialization behavior of the state variable, if any.
+- Analyze each function in the component to determine
+whether it modifies the given state variable.
+- If so, extract the relevant logic and generate a state
+diagram describing the transition. If it does not, ignore
+it.
+- Place the resulting diagram inside variables frame as a
+sub-diagram, enclosed in a box representing the function
+with its signature.
+The states themselves will be represented as nodes with
+their names being the values that the that the state variable can
+take while transitions between the states will be represented
+as directed edges, ”arrows” in layman’s term. Conditional
+structures (if-else, try-catch, ...) will be represented as decision
+nodes with multiple outgoing edges for different branches.
+Loops will be represented with edges that loop to earlier nodes.
 
-// 	try {
-// 		const parser = new ReactParser({
-// 			rootDir: rootPath,
-// 			include: [relativePathToComponent]
-// 		});
+Rough workflow:
+Step 1
+	Detect React component and all useState declarations:
+	const [value, setValue] = useState(...)
 
-// 	 	const result = parser.parse();
-// 		// const graph = serializeGraph(result.graph);
-// 		// const analyzer = new GraphAnalyzer(result.graph);
-// 		return result.graph.components;
-// 	} catch (error) {
-// 		vscode.window.showErrorMessage("Error parsing React component: " + error);
-// 		return null;
-// 	}
-// }
+	For each state variable:
+		store state name
+		store setter name
+		store initializer text
+		try to infer type text
 
+Step 2
+	Find all setter call sites (functions that mutate state variable):
+	setValue(...)
+	record enclosing function name
+	record surrounding control-flow context
 
-function findTsConfig(rootDir: string) {
-	const candidates = [
-		path.join(rootDir, 'tsconfig.json'),
-		path.join(rootDir, 'jsconfig.json'),
-	];
+Step 3
+	Classify update style:
+	direct literal: setX("done")
+	direct identifier/expression: setX(something)
+	updater callback: setX(prev => ...)
+*/
 
-	for (const candidate of candidates) {
-		if (fs.existsSync(candidate)) {
-			return candidate;
+function createStateVariableId(name: string, line: number, column: number) {
+	return `state:${name}:${line}:${column}`;
+}
+
+function getComponentName(component: SupportedComponentDeclaration) {
+	if (Node.isFunctionDeclaration(component) || Node.isFunctionExpression(component))
+		return component.getName() ?? 'default';
+
+	const parent = component.getParentIfKind(SyntaxKind.VariableDeclaration);
+	return parent?.getName() ?? 'default';
+}
+
+function getComponentDeclarationKind(component: SupportedComponentDeclaration): StateDiagramComponent['declarationKind'] {
+	if (Node.isArrowFunction(component))
+		return 'arrow-function';
+
+	if (Node.isFunctionExpression(component))
+		return 'function-expression';
+
+	return 'function';
+}
+
+function createComponentModel(sourceFile: SourceFile, component: SupportedComponentDeclaration): StateDiagramComponent {
+	const position = getLineAndColumn(sourceFile, component);
+	return {
+		name: getComponentName(component),
+		line: position.line,
+		column: position.column,
+		exportName: 'default',
+		declarationKind: getComponentDeclarationKind(component),
+	};
+}
+
+function getTrackedUseStateCall(node: Node | undefined, useStateIdentifiers: Set<string>): CallExpression | undefined {
+	if (!node || !Node.isCallExpression(node))
+		return;
+
+	const expression = node.getExpression();
+	if (Node.isIdentifier(expression))
+		return useStateIdentifiers.has(expression.getText()) ? node : undefined;
+
+	if (Node.isPropertyAccessExpression(expression))
+		return expression.getName() == 'useState' ? node : undefined;
+}
+
+function collectUseStateIdentifiers(sourceFile: SourceFile) {
+	const identifiers = new Set<string>(['useState']);
+
+	for (const importDeclaration of sourceFile.getImportDeclarations()) {
+		if (importDeclaration.getModuleSpecifierValue() !== 'react')
+			continue;
+
+		for (const namedImport of importDeclaration.getNamedImports()) {
+			if (namedImport.getName() == 'useState')
+				identifiers.add(namedImport.getAliasNode()?.getText() ?? namedImport.getName());
 		}
 	}
 
-	return undefined;
+	return identifiers;
 }
 
-function createProject(rootDir: string) {
-	const tsConfigPath = findTsConfig(rootDir);
-	return new Project({
-		tsConfigFilePath: tsConfigPath,
-		skipAddingFilesFromTsConfig: true,
-	});
+function inferStateTypeText(callExpression: Node) {
+	if (!Node.isCallExpression(callExpression))
+		return;
+
+	const typeArgument = callExpression.getTypeArguments()[0];
+	if (typeArgument)
+		return truncate(typeArgument.getText(), 120);
+
+	const initializer = callExpression.getArguments()[0];
+	if (!initializer)
+		return;
+
+	if (
+		Node.isStringLiteral(initializer) ||
+		initializer.getKind() == SyntaxKind.NoSubstitutionTemplateLiteral ||
+		Node.isTemplateExpression(initializer)
+	) {
+		return 'string';
+	}
+
+	if (Node.isNumericLiteral(initializer))
+		return 'number';
+
+	if (initializer.getKind() == SyntaxKind.TrueKeyword || initializer.getKind() == SyntaxKind.FalseKeyword)
+		return 'boolean';
+
+	if (initializer.getKind() == SyntaxKind.NullKeyword)
+		return 'null';
+
+	return truncate(initializer.getType().getText(initializer), 120);
 }
 
-function truncateSingleLine(text: string, maxLength = 80) {
-	const normalized = text.replace(/\s+/g, ' ').trim();
-	if (normalized.length <= maxLength) {
-		return normalized;
-	}
-
-	return `${normalized.slice(0, maxLength - 3)}...`;
+function getBindingElementName(node?: Node) {
+	if (!node || !Node.isBindingElement(node))
+		return;
+	return node.getNameNode().getText().trim();
 }
 
-function getNodeLabel(node: Node) {
-	if (Node.isIdentifier(node)) {
-		return ` (${node.getText()})`;
-	}
+function isDirectlyOwnedByComponent(declaration: VariableDeclaration, component: SupportedComponentDeclaration) {
+	const nearestFunction = declaration.getFirstAncestor((ancestor) => 
+		Node.isFunctionDeclaration(ancestor) ||
+		Node.isFunctionExpression(ancestor) ||
+		Node.isArrowFunction(ancestor) ||
+		Node.isMethodDeclaration(ancestor)
+	);
 
-	if (Node.isStringLiteral(node) || Node.isNumericLiteral(node)) {
-		return ` (${truncateSingleLine(node.getText(), 40)})`;
-	}
-
-	if (Node.isFunctionDeclaration(node)) {
-		return node.getName() ? ` (${node.getName()})` : '';
-	}
-
-	if (Node.isVariableDeclaration(node)) {
-		return ` (${truncateSingleLine(node.getName())})`;
-	}
-
-	if (Node.isCallExpression(node)) {
-		return ` (${truncateSingleLine(node.getExpression().getText(), 50)})`;
-	}
-
-	if (Node.isPropertyAccessExpression(node)) {
-		return ` (${truncateSingleLine(node.getText(), 50)})`;
-	}
-
-	if (Node.isJsxOpeningElement(node) || Node.isJsxSelfClosingElement(node)) {
-		return ` (<${node.getTagNameNode().getText()}>)`;
-	}
-
-	return '';
+	return nearestFunction === component;
 }
 
-function formatAstTree(node: Node, depth = 0) {
-	const indent = '  '.repeat(depth);
-	const kind = SyntaxKind[node.getKind()];
-	const line = node.getStartLineNumber();
-	const label = getNodeLabel(node);
+function collectStateVariables(sourceFile: SourceFile, component: SupportedComponentDeclaration) {
+	const body = component.getBody();
+	if (!body || !Node.isBlock(body))
+		return [];
 
-	const lines: string[] = [`${indent}${kind}${label} [L${line}]`];
-	for (const child of node.getChildren()) {
-		lines.push(formatAstTree(child, depth + 1));
+	const useStateIdentifiers = collectUseStateIdentifiers(sourceFile);
+	const declarations = body.getDescendantsOfKind(SyntaxKind.VariableDeclaration);
+	const stateVariables: StateVariable[] = [];
+
+	for (const declaration of declarations) {
+		if (!isDirectlyOwnedByComponent(declaration, component))
+			continue;
+
+		const nameNode = declaration.getNameNode();
+		if (!Node.isArrayBindingPattern(nameNode))
+			continue;
+
+		const initializer = declaration.getInitializer();
+		const useStateCall = getTrackedUseStateCall(initializer, useStateIdentifiers);
+		if (!useStateCall)
+			continue;
+
+		const [stateElement, setterElement] = nameNode.getElements();
+		const stateName = getBindingElementName(stateElement);
+		const setterName = getBindingElementName(setterElement);
+		if (!stateName || !setterName || !Node.isBindingElement(stateElement))
+			continue;
+
+		const position = getLineAndColumn(sourceFile, stateElement.getNameNode());
+		stateVariables.push({
+			id: createStateVariableId(stateName, position.line, position.column),
+			hook: 'useState',
+			name: stateName,
+			setterName,
+			initializerText: useStateCall.getArguments()[0]?.getText(),
+			typeText: inferStateTypeText(useStateCall),
+			line: position.line,
+			column: position.column,
+		});
 	}
 
-	return lines.join('\n');
+	return stateVariables;
 }
 
-export function parseReactComponent(reactComponentTxt: string, rootDir = '.') {
-	const project = createProject(rootDir);
-	const sourceFile = project.createSourceFile('__tempComponent__.tsx', reactComponentTxt);
-
+export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): StateDiagram {
+	const { sourceFile } = text2SrcFile(reactComponentTxt, rootDir);
+	
 	try {
-		return formatAstTree(sourceFile);
+		const component = resolveDefaultExportComponent(sourceFile);
+		if (!component) {
+			return {
+				component: null,
+				stateVariables: [],
+				updates: [],
+			};
+		}
+
+		return {
+			component: createComponentModel(sourceFile, component),
+			stateVariables: collectStateVariables(sourceFile, component),
+			updates: [],
+		};
 	}
 	finally {
 		sourceFile.delete();
