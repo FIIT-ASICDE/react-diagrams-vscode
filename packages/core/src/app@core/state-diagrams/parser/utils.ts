@@ -1,7 +1,8 @@
 import { Project, Node, SyntaxKind, SourceFile, VariableDeclaration } from 'ts-morph';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { SupportedComponentDeclaration } from './types';
+import { CodePos, SupportedDeclaration,  } from './types';
+import { FunctionDeclarationKind } from '../types';
 
 export function findTsConfig(rootDir: string) {
 	const candidates = [
@@ -37,90 +38,73 @@ export function truncate(str, max = 100): string {
 	return str.length > max ? `${str.substr(0, max-1)}...` : str;
 }
 
-export function getLineAndColumn(sourceFile: SourceFile, node: Node) {
+export function getCodePos(sourceFile: SourceFile, node: Node): CodePos {
 	return sourceFile.getLineAndColumnAtPos(node.getStart());
 }
 
-export function getNodeLabel(node: Node) {
-	if (Node.isIdentifier(node)) {
-		return ` (${node.getText()})`;
-	}
-
-	if (Node.isStringLiteral(node) || Node.isNumericLiteral(node)) {
-		return ` (${truncate(node.getText(), 40)})`;
-	}
-
-	if (Node.isFunctionDeclaration(node)) {
-		return node.getName() ? ` (${node.getName()})` : '';
-	}
-
-	if (Node.isVariableDeclaration(node)) {
-		return ` (${truncate(node.getName())})`;
-	}
-
-	if (Node.isCallExpression(node)) {
-		return ` (${truncate(node.getExpression().getText(), 50)})`;
-	}
-
-	if (Node.isPropertyAccessExpression(node)) {
-		return ` (${truncate(node.getText(), 50)})`;
-	}
-
-	if (Node.isJsxOpeningElement(node) || Node.isJsxSelfClosingElement(node)) {
-		return ` (<${node.getTagNameNode().getText()}>)`;
-	}
-
-	return '';
+export function createStateId(what, name: string, pos: CodePos) {
+	return `${what?.toString()}:${name}:${pos.line}:${pos.column}`;
 }
 
-export function formatAstTree(node: Node, depth = 0) {
-	const indent = '  '.repeat(depth);
-	const kind = SyntaxKind[node.getKind()];
-	const line = node.getStartLineNumber();
-	const label = getNodeLabel(node);
-
-	const lines: string[] = [`${indent}${kind}${label} [L${line}]`];
-	for (const child of node.getChildren()) {
-		lines.push(formatAstTree(child, depth + 1));
-	}
-
-	return lines.join('\n');
+export function getBindingElementName(node?: Node) {
+	if (!node || !Node.isBindingElement(node))
+		return;
+	return node.getNameNode().getText().trim();
 }
 
-function resolveComponentDeclarationFromVariable(declaration: VariableDeclaration): SupportedComponentDeclaration | undefined {
-	const initializer = declaration.getInitializer();
-	if (initializer && (Node.isArrowFunction(initializer) || Node.isFunctionExpression(initializer)))
-		return initializer;
+export function getDeclarationKind(decl: SupportedDeclaration): FunctionDeclarationKind {
+	if (Node.isArrowFunction(decl))
+		return 'arrow-function';
+
+	if (Node.isFunctionExpression(decl))
+		return 'function-expression';
+
+	return 'function';
 }
 
-export function resolveDefaultExportComponent(sourceFile: SourceFile): SupportedComponentDeclaration | undefined {
-	const defaultExportSymbol = sourceFile.getDefaultExportSymbol();
 
-	for (const declaration of defaultExportSymbol?.getDeclarations() ?? []) {
-		if (Node.isFunctionDeclaration(declaration))
-			return declaration;
+// export function getNodeLabel(node: Node) {
+// 	if (Node.isIdentifier(node)) {
+// 		return ` (${node.getText()})`;
+// 	}
 
-		if (Node.isVariableDeclaration(declaration)) {
-			const component = resolveComponentDeclarationFromVariable(declaration);
-			if (component)
-				return component;
-		}
+// 	if (Node.isStringLiteral(node) || Node.isNumericLiteral(node)) {
+// 		return ` (${truncate(node.getText(), 40)})`;
+// 	}
 
-		if (Node.isExportAssignment(declaration)) {
-			const expression = declaration.getExpression();
+// 	if (Node.isFunctionDeclaration(node)) {
+// 		return node.getName() ? ` (${node.getName()})` : '';
+// 	}
 
-			if (Node.isIdentifier(expression)) {
-				const symbol = expression.getSymbol();
-				const resolvedDeclaration = symbol?.getDeclarations().find(Node.isVariableDeclaration);
-				if (resolvedDeclaration) {
-					const component = resolveComponentDeclarationFromVariable(resolvedDeclaration);
-					if (component)
-						return component;
-				}
-			}
+// 	if (Node.isVariableDeclaration(node)) {
+// 		return ` (${truncate(node.getName())})`;
+// 	}
 
-			if (Node.isArrowFunction(expression) || Node.isFunctionExpression(expression))
-				return expression;
-		}
-	}
-}
+// 	if (Node.isCallExpression(node)) {
+// 		return ` (${truncate(node.getExpression().getText(), 50)})`;
+// 	}
+
+// 	if (Node.isPropertyAccessExpression(node)) {
+// 		return ` (${truncate(node.getText(), 50)})`;
+// 	}
+
+// 	if (Node.isJsxOpeningElement(node) || Node.isJsxSelfClosingElement(node)) {
+// 		return ` (<${node.getTagNameNode().getText()}>)`;
+// 	}
+
+// 	return '';
+// }
+
+// export function formatAstTree(node: Node, depth = 0) {
+// 	const indent = '  '.repeat(depth);
+// 	const kind = SyntaxKind[node.getKind()];
+// 	const line = node.getStartLineNumber();
+// 	const label = getNodeLabel(node);
+
+// 	const lines: string[] = [`${indent}${kind}${label} [L${line}]`];
+// 	for (const child of node.getChildren()) {
+// 		lines.push(formatAstTree(child, depth + 1));
+// 	}
+
+// 	return lines.join('\n');
+// }

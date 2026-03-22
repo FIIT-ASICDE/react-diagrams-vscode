@@ -1,6 +1,5 @@
-export const reactForm = /*js*/ `
-
-import { useState } from 'react';
+export const reactForm = /*js*/
+`import { useState } from 'react';
 
 export default function Form() {
   const [answer, setAnswer] = useState('');
@@ -71,5 +70,4 @@ function submitForm(answer) {
     }, 1500);
   });
 }
-
 `;

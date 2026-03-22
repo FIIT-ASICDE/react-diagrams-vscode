@@ -18,7 +18,7 @@
   },
   "include": [
     "src/**/*.ts"
-  ],
+, "src/tests/playground.ts"  ],
   "exclude": [
     "node_modules",
     "dist"

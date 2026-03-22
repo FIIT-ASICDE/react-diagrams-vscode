@@ -10,9 +10,10 @@ import {
 	StateDiagramComponent,
 	StateVariable,
 } from '../types';
-import { resolveDefaultExportComponent, getLineAndColumn, text2SrcFile, truncate } from './utils';
+import { createStateId, getBindingElementName, getCodePos, text2SrcFile, truncate } from './utils';
 
-import { SupportedComponentDeclaration } from './types';
+import { CodePos, SupportedComponentDeclaration } from './types';
+import { createComponentModel, resolveDefaultExportComponent } from './component';
 
 /*
 
@@ -64,39 +65,6 @@ Step 3
 	updater callback: setX(prev => ...)
 */
 
-function createStateVariableId(name: string, line: number, column: number) {
-	return `state:${name}:${line}:${column}`;
-}
-
-function getComponentName(component: SupportedComponentDeclaration) {
-	if (Node.isFunctionDeclaration(component) || Node.isFunctionExpression(component))
-		return component.getName() ?? 'default';
-
-	const parent = component.getParentIfKind(SyntaxKind.VariableDeclaration);
-	return parent?.getName() ?? 'default';
-}
-
-function getComponentDeclarationKind(component: SupportedComponentDeclaration): StateDiagramComponent['declarationKind'] {
-	if (Node.isArrowFunction(component))
-		return 'arrow-function';
-
-	if (Node.isFunctionExpression(component))
-		return 'function-expression';
-
-	return 'function';
-}
-
-function createComponentModel(sourceFile: SourceFile, component: SupportedComponentDeclaration): StateDiagramComponent {
-	const position = getLineAndColumn(sourceFile, component);
-	return {
-		name: getComponentName(component),
-		line: position.line,
-		column: position.column,
-		exportName: 'default',
-		declarationKind: getComponentDeclarationKind(component),
-	};
-}
-
 function getTrackedUseStateCall(node: Node | undefined, useStateIdentifiers: Set<string>): CallExpression | undefined {
 	if (!node || !Node.isCallExpression(node))
 		return;
@@ -113,7 +81,7 @@ function collectUseStateIdentifiers(sourceFile: SourceFile) {
 	const identifiers = new Set<string>(['useState']);
 
 	for (const importDeclaration of sourceFile.getImportDeclarations()) {
-		if (importDeclaration.getModuleSpecifierValue() !== 'react')
+		if (importDeclaration.getModuleSpecifierValue() != 'react')
 			continue;
 
 		for (const namedImport of importDeclaration.getNamedImports()) {
@@ -157,12 +125,6 @@ function inferStateTypeText(callExpression: Node) {
 	return truncate(initializer.getType().getText(initializer), 120);
 }
 
-function getBindingElementName(node?: Node) {
-	if (!node || !Node.isBindingElement(node))
-		return;
-	return node.getNameNode().getText().trim();
-}
-
 function isDirectlyOwnedByComponent(declaration: VariableDeclaration, component: SupportedComponentDeclaration) {
 	const nearestFunction = declaration.getFirstAncestor((ancestor) => 
 		Node.isFunctionDeclaration(ancestor) ||
@@ -171,7 +133,7 @@ function isDirectlyOwnedByComponent(declaration: VariableDeclaration, component:
 		Node.isMethodDeclaration(ancestor)
 	);
 
-	return nearestFunction === component;
+	return nearestFunction == component;
 }
 
 function collectStateVariables(sourceFile: SourceFile, component: SupportedComponentDeclaration) {
@@ -202,16 +164,15 @@ function collectStateVariables(sourceFile: SourceFile, component: SupportedCompo
 		if (!stateName || !setterName || !Node.isBindingElement(stateElement))
 			continue;
 
-		const position = getLineAndColumn(sourceFile, stateElement.getNameNode());
+		const pos = getCodePos(sourceFile, stateElement.getNameNode());
 		stateVariables.push({
-			id: createStateVariableId(stateName, position.line, position.column),
+			id: createStateId('state', stateName, pos),
 			hook: 'useState',
 			name: stateName,
 			setterName,
 			initializerText: useStateCall.getArguments()[0]?.getText(),
 			typeText: inferStateTypeText(useStateCall),
-			line: position.line,
-			column: position.column,
+			pos,
 		});
 	}
 
@@ -225,16 +186,14 @@ export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): S
 		const component = resolveDefaultExportComponent(sourceFile);
 		if (!component) {
 			return {
-				component: null,
 				stateVariables: [],
-				updates: [],
 			};
 		}
 
 		return {
 			component: createComponentModel(sourceFile, component),
 			stateVariables: collectStateVariables(sourceFile, component),
-			updates: [],
+			// updates: [],
 		};
 	}
 	finally {

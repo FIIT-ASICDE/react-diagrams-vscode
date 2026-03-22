@@ -5,7 +5,16 @@ import {
 	FunctionExpression,
 } from 'ts-morph';
 
-export type SupportedComponentDeclaration =
+export type SupportedDeclaration =
 	| FunctionDeclaration
 	| ArrowFunction
 	| FunctionExpression;
+
+export type SupportedComponentDeclaration = SupportedDeclaration
+	//|
+	;
+
+export type CodePos = {
+	line: number;
+	column: number;
+};

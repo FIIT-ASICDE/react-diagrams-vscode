@@ -1,11 +1,14 @@
+import { CodePos } from "./parser/types";
+
+export type FunctionDeclarationKind = 'function' | 'arrow-function' | 'function-expression';
+
 export type StateHookKind = 'useState';
 
 export interface StateDiagramComponent {
 	name: string;
-	line: number;
-	column: number;
+	pos: CodePos;
 	exportName: 'default';
-	declarationKind: 'function' | 'arrow-function' | 'function-expression';
+	declarationKind: FunctionDeclarationKind;
 }
 
 export interface StateVariable {
@@ -15,25 +18,35 @@ export interface StateVariable {
 	setterName: string;
 	initializerText?: string;
 	typeText?: string;
-	line: number;
-	column: number;
+	pos: CodePos;
+
+	states?: StateUpdate[]; // This will be populated later with the updates related to all the states this variable can reach in all functions that mut it.
+	mutators?: StateMutatingFunction[]; // All the functions that mutate this state variable.
+}
+
+export interface StateMutatingFunction { // A function that mutates a specific StateVariable.
+	id: string;
+	name: string;
+	pos: CodePos;
+	type: FunctionDeclarationKind;
+	// Add more if needed...
+
+	states: StateUpdate[]; // All the states reachable in this function for a specific state variable. Same objects will be shared with StateVariable.states.
+	//graph: ? TODO // Graph representing the state diagram of transitions between states in this function for a specific state variable. 
 }
 
 export type StateUpdateKind = 'direct' | 'expression' | 'updater';
 
-export interface StateUpdate {
+export interface StateUpdate { // The state represented by the updateer function
 	id: string;
 	stateVariableId: string;
 	setterName: string;
 	kind: StateUpdateKind;
-	line: number;
-	column: number;
-	enclosingFunctionName?: string;
+	pos: CodePos;
 	expressionText?: string;
 }
 
 export interface StateDiagram {
-	component: StateDiagramComponent | null;
+	component?: StateDiagramComponent;
 	stateVariables: StateVariable[];
-	updates: StateUpdate[];
 }
