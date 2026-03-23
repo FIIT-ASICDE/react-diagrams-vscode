@@ -1,5 +1,6 @@
 import {
 	CallExpression,
+	FunctionExpression,
 	Node,
 	SourceFile,
 	SyntaxKind,
@@ -7,12 +8,14 @@ import {
 } from 'ts-morph';
 import {
 	StateDiagram,
-	StateDiagramComponent,
+	StateMutatingFunction,
+	StateUpdate,
+	StateUpdateKind,
 	StateVariable,
 } from '../types';
-import { createStateId, getBindingElementName, getCodePos, text2SrcFile, truncate } from './utils';
+import { createId, getBindingElementName, getCodePos, getDeclarationKind, getFirstAncestorOfKinds, getFuncName, normText, text2SrcFile, truncate } from './utils';
 
-import { CodePos, SupportedComponentDeclaration } from './types';
+import { SupportedComponentDeclaration, SupportedDeclaration } from './types';
 import { createComponentModel, resolveDefaultExportComponent } from './component';
 
 /*
@@ -65,6 +68,9 @@ Step 3
 	updater callback: setX(prev => ...)
 */
 
+/* State variables population */
+
+/** Returns a call expression when a node matches a tracked useState invocation. */
 function getTrackedUseStateCall(node: Node | undefined, useStateIdentifiers: Set<string>): CallExpression | undefined {
 	if (!node || !Node.isCallExpression(node))
 		return;
@@ -77,6 +83,7 @@ function getTrackedUseStateCall(node: Node | undefined, useStateIdentifiers: Set
 		return expression.getName() == 'useState' ? node : undefined;
 }
 
+/** Collects local identifier names that refer to React's useState import. */
 function collectUseStateIdentifiers(sourceFile: SourceFile) {
 	const identifiers = new Set<string>(['useState']);
 
@@ -93,6 +100,7 @@ function collectUseStateIdentifiers(sourceFile: SourceFile) {
 	return identifiers;
 }
 
+/** Infers a human-readable type string from a useState call and its initializer. */
 function inferStateTypeText(callExpression: Node) {
 	if (!Node.isCallExpression(callExpression))
 		return;
@@ -125,17 +133,12 @@ function inferStateTypeText(callExpression: Node) {
 	return truncate(initializer.getType().getText(initializer), 120);
 }
 
-function isDirectlyOwnedByComponent(declaration: VariableDeclaration, component: SupportedComponentDeclaration) {
-	const nearestFunction = declaration.getFirstAncestor((ancestor) => 
-		Node.isFunctionDeclaration(ancestor) ||
-		Node.isFunctionExpression(ancestor) ||
-		Node.isArrowFunction(ancestor) ||
-		Node.isMethodDeclaration(ancestor)
-	);
-
-	return nearestFunction == component;
+/** Checks whether a declaration belongs directly to the component's top-level scope. */
+function isDirectlyOwnedByComponent(declaration: Node, component: SupportedComponentDeclaration) {
+	return getFirstAncestorOfKinds(declaration, [Node.isFunctionDeclaration, Node.isFunctionExpression, Node.isArrowFunction, Node.isMethodDeclaration,]) == component
 }
 
+/** Extracts component-owned useState declarations and creates initial StateVariable models. */
 function collectStateVariables(sourceFile: SourceFile, component: SupportedComponentDeclaration) {
 	const body = component.getBody();
 	if (!body || !Node.isBlock(body))
@@ -165,20 +168,168 @@ function collectStateVariables(sourceFile: SourceFile, component: SupportedCompo
 			continue;
 
 		const pos = getCodePos(sourceFile, stateElement.getNameNode());
-		stateVariables.push({
-			id: createStateId('state', stateName, pos),
+		const stateVariable: StateVariable = {
+			id: createId('state', stateName, pos),
 			hook: 'useState',
 			name: stateName,
 			setterName,
 			initializerText: useStateCall.getArguments()[0]?.getText(),
 			typeText: inferStateTypeText(useStateCall),
 			pos,
-		});
+
+			states: [],
+			mutators: [],
+			// inlineMutator: undefined,
+		};
+
+		stateVariables.push(stateVariable);
 	}
 
 	return stateVariables;
 }
 
+/* State updates and mutators population */
+
+/** Classifies setter-call argument shape into direct, expression, or updater update kind. */
+function classifyStateUpdateKind(argument?: Node): StateUpdateKind {
+	if (!argument)
+		return 'expression';
+
+	if (Node.isArrowFunction(argument) || Node.isFunctionExpression(argument))
+		return 'updater';
+
+	if (
+		Node.isStringLiteral(argument) ||
+		Node.isNumericLiteral(argument) ||
+		argument.getKind() == SyntaxKind.TrueKeyword ||
+		argument.getKind() == SyntaxKind.FalseKeyword ||
+		argument.getKind() == SyntaxKind.NullKeyword ||
+		argument.getKind() == SyntaxKind.NoSubstitutionTemplateLiteral
+	) {
+		return 'direct';
+	}
+
+	return 'expression';
+}
+
+/** Builds a StateUpdate object from a matched setter call expression. */
+function createStateUpdate(stateVariable: StateVariable, callExpression: CallExpression, sourceFile: SourceFile) {
+	const arg = callExpression.getArguments()[0];
+	const expressionText = arg ? normText(arg) : undefined;
+	const kind = classifyStateUpdateKind(arg);
+	const pos = getCodePos(sourceFile, callExpression);
+
+	const update: StateUpdate = {
+		id: createId('update', `${stateVariable.name}:${kind}:${expressionText ?? '<none>'}`, pos),
+		stateVariableId: stateVariable.id,
+		setterName: stateVariable.setterName,
+		kind,
+		pos,
+		expressionText,
+	};
+
+	return update;
+}
+
+/** Gets or creates the dedicated render-body mutator for top-level setter calls. */
+function getOrCreateInlineMutator(stateVariable: StateVariable, sourceFile: SourceFile, component: SupportedComponentDeclaration) {
+	if (stateVariable.inlineMutator)
+		return stateVariable.inlineMutator;
+
+	const pos = getCodePos(sourceFile, component);
+	const mutator: StateMutatingFunction = {
+		id: createId('mutator', `${stateVariable.name}:<render-body>`, pos),
+		name: '<render-body>',
+		pos,
+		type: getDeclarationKind(component),
+		states: [],
+	};
+
+	stateVariable.inlineMutator = mutator;
+	return mutator;
+}
+
+/** Gets or creates a mutator model for a specific state variable and function scope. */
+function getOrCreateMutator(stateVariable: StateVariable, sourceFile: SourceFile, component: SupportedComponentDeclaration, funcLike?: SupportedDeclaration) {
+	stateVariable.mutators ??= [];
+
+	if (!funcLike)
+		return getOrCreateInlineMutator(stateVariable, sourceFile, component);
+
+	const pos = getCodePos(sourceFile, funcLike);
+	const type = getDeclarationKind(funcLike);
+	const existing = stateVariable.mutators.find((mutator) => mutator.pos.line == pos.line && mutator.pos.column == pos.column && mutator.type == type);
+	if (existing)
+		return existing;
+	
+	const name = getFuncName(funcLike) ?? '<anonymous>';
+	const mutator: StateMutatingFunction = {
+		id: createId('mutator', `${stateVariable.name}:${name}`, pos),
+		name,
+		pos,
+		type,
+		states: [],
+	};
+
+	stateVariable.mutators.push(mutator);
+	return mutator;
+}
+
+/** Adds a deduplicated update to the state variable and returns the shared stored instance. */
+function addUniqueUpdateToStateVariable(stateVariable: StateVariable, update: StateUpdate) {
+	stateVariable.states ??= [];
+
+	const key = `${update.kind}:${normText(update.expressionText)}`;
+	const existing = stateVariable.states.find((current) => `${current.kind}:${normText(current.expressionText)}` == key);
+	if (existing)
+		return existing;
+
+	stateVariable.states.push(update);
+	return update;
+}
+
+/** Adds a deduplicated update reference to a mutator's reachable states list. */
+function addUniqueUpdateToMutator(mutator: StateMutatingFunction, update: StateUpdate) {
+	const key = `${update.kind}:${normText(update.expressionText)}`;
+	const existing = mutator.states.find((current) => `${current.kind}:${normText(current.expressionText)}` == key);
+	if (!existing)
+		mutator.states.push(update);
+}
+
+/** Populates per-state mutators and reachable updates by scanning setter call sites. */
+function populateStateUpdatesAndMutators(sourceFile: SourceFile, component: SupportedComponentDeclaration, stateVariables: StateVariable[]) {
+	if (!stateVariables.length)
+		return;
+
+	const bySetter = new Map<string, StateVariable>();
+	for (const stateVariable of stateVariables)
+		bySetter.set(stateVariable.setterName, stateVariable);
+
+	const callExpressions = component.getDescendantsOfKind(SyntaxKind.CallExpression);
+	for (const callExpression of callExpressions) {
+		const setterName = getFuncName(callExpression);
+		if (!setterName)
+			continue;
+
+		const stateVariable = bySetter.get(setterName);
+		if (!stateVariable)
+			continue;
+
+		const fn = getFirstAncestorOfKinds<SupportedDeclaration>(callExpression, [
+			Node.isFunctionDeclaration,
+			Node.isFunctionExpression,
+			Node.isArrowFunction
+		], component);
+
+		const update = createStateUpdate(stateVariable, callExpression, sourceFile);
+		const sharedUpdate = addUniqueUpdateToStateVariable(stateVariable, update);
+
+		const mutator = getOrCreateMutator(stateVariable, sourceFile, component, fn);
+		addUniqueUpdateToMutator(mutator, sharedUpdate);
+	}
+}
+
+/** Parses a React component source text into a structured state diagram model. */
 export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): StateDiagram {
 	const { sourceFile } = text2SrcFile(reactComponentTxt, rootDir);
 	
@@ -190,10 +341,12 @@ export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): S
 			};
 		}
 
+		const stateVariables = collectStateVariables(sourceFile, component);
+		populateStateUpdatesAndMutators(sourceFile, component, stateVariables);
+
 		return {
 			component: createComponentModel(sourceFile, component),
-			stateVariables: collectStateVariables(sourceFile, component),
-			// updates: [],
+			stateVariables,
 		};
 	}
 	finally {

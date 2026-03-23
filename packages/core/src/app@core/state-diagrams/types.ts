@@ -20,6 +20,8 @@ export interface StateVariable {
 	typeText?: string;
 	pos: CodePos;
 
+	inlineMutator?: StateMutatingFunction; // Setter calls in component render-body (outside nested function declarations).
+
 	states?: StateUpdate[]; // This will be populated later with the updates related to all the states this variable can reach in all functions that mut it.
 	mutators?: StateMutatingFunction[]; // All the functions that mutate this state variable.
 }
@@ -29,7 +31,7 @@ export interface StateMutatingFunction { // A function that mutates a specific S
 	name: string;
 	pos: CodePos;
 	type: FunctionDeclarationKind;
-	// Add more if needed...
+	// Add more info if needed, like parameters, etc. 
 
 	states: StateUpdate[]; // All the states reachable in this function for a specific state variable. Same objects will be shared with StateVariable.states.
 	//graph: ? TODO // Graph representing the state diagram of transitions between states in this function for a specific state variable. 
@@ -37,7 +39,7 @@ export interface StateMutatingFunction { // A function that mutates a specific S
 
 export type StateUpdateKind = 'direct' | 'expression' | 'updater';
 
-export interface StateUpdate { // The state represented by the updateer function
+export interface StateUpdate {
 	id: string;
 	stateVariableId: string;
 	setterName: string;

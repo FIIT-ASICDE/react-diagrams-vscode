@@ -1,4 +1,4 @@
-import { Project, Node, SyntaxKind, SourceFile, VariableDeclaration } from 'ts-morph';
+import { Project, Node, SyntaxKind, SourceFile, VariableDeclaration, CallExpression } from 'ts-morph';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { CodePos, SupportedDeclaration,  } from './types';
@@ -42,7 +42,7 @@ export function getCodePos(sourceFile: SourceFile, node: Node): CodePos {
 	return sourceFile.getLineAndColumnAtPos(node.getStart());
 }
 
-export function createStateId(what, name: string, pos: CodePos) {
+export function createId(what, name: string, pos: CodePos) {
 	return `${what?.toString()}:${name}:${pos.line}:${pos.column}`;
 }
 
@@ -60,6 +60,46 @@ export function getDeclarationKind(decl: SupportedDeclaration): FunctionDeclarat
 		return 'function-expression';
 
 	return 'function';
+}
+
+export function getFuncName(fn: SupportedDeclaration | CallExpression): string | undefined {
+	if (Node.isCallExpression(fn)) {
+		const expression = fn.getExpression();
+		if (Node.isIdentifier(expression))
+			return expression.getText();
+
+		if (Node.isPropertyAccessExpression(expression))
+			return expression.getName();
+		return;
+	}
+
+	if (Node.isFunctionDeclaration(fn) || Node.isFunctionExpression(fn))
+		return fn.getName();
+
+	const parent = fn.getParent();
+
+	if (Node.isVariableDeclaration(parent))
+		return parent.getName();
+
+	if (Node.isPropertyAssignment(parent) || Node.isShorthandPropertyAssignment(parent) || Node.isMethodDeclaration(parent))
+		return parent.getName();
+
+	if (Node.isJsxExpression(parent)) {
+		const attr = parent.getParentIfKind(SyntaxKind.JsxAttribute);
+		if (attr)
+			return attr.getNameNode().getText();
+	}
+}
+
+export function normText(text?: string | Node) {
+	if (text instanceof Node) 
+		return normText(text.getText());
+	return text?.replace(/\s+/g, ' ').trim() || "";
+}
+
+export function getFirstAncestorOfKinds<T extends Node>(node: Node, kinds: ((Node) => boolean)[], ignore?: Node): T | undefined {
+	const ancestor = node.getFirstAncestor(ancestor => kinds.some(kind => kind(ancestor)));
+	return ancestor == ignore ? undefined : ancestor as T;
 }
 
 
