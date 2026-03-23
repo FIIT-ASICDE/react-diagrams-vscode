@@ -1,12 +1,18 @@
-import { commands, ExtensionContext } from "vscode";
+import { commands, ExtensionContext, workspace } from "vscode";
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
 
 export function activate(context: ExtensionContext) {
-	// Create the show hello world command
-	const showHelloWorldCommand = commands.registerCommand("vs-code-ext.componentState", () => {
+	const showComponentStateDiagram = commands.registerCommand("vs-code-ext.componentState", () => {
 		ComponentStatePanel.render(context.extensionUri);
 	});
 
-	// Add command to the extension context
-	context.subscriptions.push(showHelloWorldCommand);
+	const refreshCurrentPanelOnSave = workspace.onDidSaveTextDocument((document) => {
+		if (!ComponentStatePanel.currentPanel) {
+			return;
+		}
+
+		void ComponentStatePanel.refreshCurrentPanel(document);
+	});
+
+	context.subscriptions.push(showComponentStateDiagram, refreshCurrentPanelOnSave);
 }

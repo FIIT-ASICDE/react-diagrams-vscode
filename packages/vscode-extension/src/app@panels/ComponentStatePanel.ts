@@ -1,16 +1,24 @@
 import * as path from "path";
-import { Disposable, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
+import { Disposable, TextDocument, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
 import { getNonce } from "../app@utils/crypto";
 import { getUri } from "../app@utils/urls";
-import { parseReactComponent } from "@react-diagrams/core";
+import { parseReactComponent, type StateDiagram } from "@react-diagrams/core";
+import { normalizeFilePath } from "@react-diagrams/core";
 
 export class ComponentStatePanel {
+	public static readonly NAME = "Component State";
 	public static readonly WEBVIEW_DIR = "webview-dist/state";
+	private static readonly SUPPORTED_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx"];
+	// private static readonly modelCache = new Map<string, any>();
 
 	public static currentPanel?: ComponentStatePanel;
 
 	private readonly panel: WebviewPanel;
 	private disposables: Disposable[] = [];
+	private currentFilePath?: string;
+	private refreshRequestId = 0;
+
+	private initialDocument?: TextDocument;
 
 	/**
 	 * The ComponentStatePanel class private constructor (called only from the render method).
@@ -18,8 +26,9 @@ export class ComponentStatePanel {
 	 * @param panel A reference to the webview panel
 	 * @param extensionUri The URI of the directory containing the extension
 	 */
-	private constructor(panel: WebviewPanel, extensionUri: Uri) {
+	private constructor(panel: WebviewPanel, extensionUri: Uri, initialDocument?: TextDocument) {
 		this.panel = panel;
+		this.initialDocument = initialDocument;
 
 		this.panel.onDidDispose(() => this.dispose(), null, this.disposables); // when the user closes, or closed programmatically...
 
@@ -36,42 +45,88 @@ export class ComponentStatePanel {
 	 */
 	public static render(extensionUri: Uri) {
 		if (ComponentStatePanel.currentPanel) { // Already exists, show it
-			ComponentStatePanel.currentPanel.panel.reveal(ViewColumn.One);
-			// ComponentStatePanel.currentPanel.postMessage("test", { text: getNonce() });
-
-			const activeEditor = window.activeTextEditor;
-			if (!activeEditor) {
-				window.showWarningMessage("No active editor found. Open a React component file first.");
-				return;
-			}
-			
-			const activeFilePath = activeEditor.document.uri.fsPath;
-			const workspaceFolder = workspace.getWorkspaceFolder(activeEditor.document.uri);
-			if (!workspaceFolder) {
-				window.showWarningMessage("Could not determine workspace folder for the active file.");
-				return;
-			}
-
-			const srcRootPath = Uri.joinPath(workspaceFolder.uri).fsPath;
-			const relativeComponentPath = path.relative(srcRootPath, activeFilePath).replace(/\\/g, "/");
-
-			console.log("Parsing component", relativeComponentPath);
-			// console.log(analyzeReactComponent(relativeComponentPath));
+			console.debug("ComponentStatePanel already exists, showing existing panel");
+			ComponentStatePanel.currentPanel.panel.reveal(ViewColumn.Beside, true);
+			ComponentStatePanel.refreshCurrentPanel();
 			return;
 		}
 
+		const initialDocument = window.activeTextEditor?.document;
+
 		const panel = window.createWebviewPanel(
 			"componentState",
-			"React Component State",
-			ViewColumn.One,
+			ComponentStatePanel.NAME,
+			{ viewColumn: ViewColumn.Beside, preserveFocus: true },
 			{ // Extra panel configurations
 				enableScripts: true,
 				localResourceRoots: [Uri.joinPath(extensionUri, "out"), Uri.joinPath(extensionUri, ComponentStatePanel.WEBVIEW_DIR)],
 			}
 		);
 
-		ComponentStatePanel.currentPanel = new ComponentStatePanel(panel, extensionUri);
+		ComponentStatePanel.currentPanel = new ComponentStatePanel(panel, extensionUri, initialDocument);
 	}
+
+	public static async refreshCurrentPanel(document?: TextDocument) {
+		await ComponentStatePanel.currentPanel?.refresh(document);
+	}
+
+	// public static isShowingDocument(document: TextDocument) {
+	// 	return ComponentStatePanel.currentPanel?.isShowingDocument(document) ?? false;
+	// }
+
+	public async refresh(document?: TextDocument) {
+		const targetDocument = document ?? window.activeTextEditor?.document;
+		if (!targetDocument) {
+			window.showWarningMessage("No active editor found. Open a React component file first.");
+			return;
+		}
+
+		const activeFilePath = targetDocument.uri.fsPath;
+		if (!ComponentStatePanel.isSupportedFile(activeFilePath)) {
+			if (!document)
+				window.showWarningMessage("Active file is not a JavaScript or TypeScript file. Open a React component file first.");
+			return;
+		}
+
+		const rootPath = workspace.getWorkspaceFolder(targetDocument.uri)?.uri.fsPath ?? workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!rootPath) {
+			window.showWarningMessage("No workspace folder found. Open the project folder first.");
+			return;
+		}
+
+		const cacheKey = normalizeFilePath(activeFilePath);
+		const requestId = ++this.refreshRequestId;
+		this.currentFilePath = cacheKey;
+
+		this.panel.title = `${ComponentStatePanel.NAME} (${path.basename(activeFilePath)})`;
+
+		// if (!forceRefresh) {
+		// 	const cachedModel = ComponentStatePanel.modelCache.get(cacheKey);
+		// 	if (cachedModel) {
+		// 		console.debug("Using cached model for", cacheKey);
+		// 		this.postMessage("update", cachedModel);
+		// 		return;
+		// 	}
+		// }
+
+		try {
+			const model = parseReactComponent(targetDocument.getText(), rootPath);
+
+			if (requestId != this.refreshRequestId) // Ignore if a newer refresh started while this parse was running.
+				return console.debug("Outdated refresh result discarded");
+
+			const data = { debug: model };
+			// ComponentStatePanel.modelCache.set(cacheKey, data);
+			this.postMessage("update", data);
+			// console.debug("Sending update");
+		} catch (error) {
+			console.error("Error parsing React component:", error);
+		}
+	}
+
+	// public isShowingDocument(document: TextDocument) {
+	// 	return this.currentFilePath === normalizeFilePath(document.uri.fsPath);
+	// }
 
 	/**
 	 * Cleans up and disposes of webview resources when the webview panel is closed.
@@ -89,7 +144,11 @@ export class ComponentStatePanel {
 	}
 
 	public postMessage(type: string, data?) {
-		this.panel.webview.postMessage({ type, ...data });
+		this.panel.webview.postMessage({ type, data });
+	}
+
+	private static isSupportedFile(filePath: string) {
+		return ComponentStatePanel.SUPPORTED_EXTENSIONS.includes(path.extname(filePath));
 	}
 
 	/**
@@ -117,7 +176,7 @@ export class ComponentStatePanel {
 				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 				<link rel="stylesheet" type="text/css" href="${stylesUri}">
-				<title>React Component State</title>
+				<title>${ComponentStatePanel.NAME}</title>
 			</head>
 			<body>
 				<div id="root"></div>
@@ -125,7 +184,6 @@ export class ComponentStatePanel {
 				<!-- <p>${stylesUri}</p> -->
 				<!-- <p>${scriptUri}</p> -->
 				<!-- <p>${extensionUri}</p> -->
-				<!-- <p>${nonce}</p> -->
 			</body>
 			</html>
 		`;
@@ -139,12 +197,12 @@ export class ComponentStatePanel {
 	 * @param context A reference to the extension context
 	 */
 	private webviewMessageListener(message: any) {
-		const type = message.type;
-		const text = message.text;
+		const { type, data } = message;
 
 		switch (type) {
-			case "hello":
-				window.showInformationMessage(text);
+			case "refresh":
+				void this.refresh(this.initialDocument);
+				this.initialDocument = undefined;
 				return;
 
 		}

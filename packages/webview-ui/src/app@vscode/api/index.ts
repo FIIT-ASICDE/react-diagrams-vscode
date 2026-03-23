@@ -25,7 +25,7 @@ class VSCodeAPIWrapper {
 	 * @param message Abitrary data (must be JSON serializable) to send to the extension context.
 	 */
 	public postMessage(type: string, data?) {
-		const message = { type, ...data };
+		const message = { type, data };
 		if (this.vsCodeApi)
 			return this.vsCodeApi.postMessage(message);
 		
@@ -40,7 +40,7 @@ class VSCodeAPIWrapper {
 	 *
 	 * @return The current state or `undefined` if no state has been set.
 	 */
-	public getState(): unknown | undefined {
+	public getState(){
 		if (this.vsCodeApi)
 			return this.vsCodeApi.getState();
 
@@ -59,7 +59,7 @@ class VSCodeAPIWrapper {
 	 *
 	 * @return The new state.
 	 */
-	public setState<T extends unknown | undefined>(newState: T): T {
+	public setState<T>(newState: T): T {
 		if (this.vsCodeApi)
 			return this.vsCodeApi.setState(newState);
 

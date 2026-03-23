@@ -13,7 +13,8 @@ import {
 	StateUpdateKind,
 	StateVariable,
 } from '../types';
-import { createId, getBindingElementName, getCodePos, getDeclarationKind, getFirstAncestorOfKinds, getFuncName, normText, text2SrcFile, truncate } from './utils';
+import { createId, getBindingElementName, getCodePos, getDeclarationKind, getFirstAncestorOfKinds, getFuncName, normText, text2SrcFile } from './utils';
+import { truncate } from '../../utils';
 
 import { SupportedComponentDeclaration, SupportedDeclaration } from './types';
 import { createComponentModel, resolveDefaultExportComponent } from './component';
@@ -335,6 +336,7 @@ export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): S
 	
 	try {
 		const component = resolveDefaultExportComponent(sourceFile);
+		console.log(component);
 		if (!component) {
 			return {
 				stateVariables: [],

@@ -33,11 +33,6 @@ export function text2SrcFile(text: string, rootDir: Project | string = '.') {
 	return { project, sourceFile };
 }
 
-export function truncate(str, max = 100): string {
-	str = str.toString().replace(/\s+/g, ' ').trim();
-	return str.length > max ? `${str.substr(0, max-1)}...` : str;
-}
-
 export function getCodePos(sourceFile: SourceFile, node: Node): CodePos {
 	return sourceFile.getLineAndColumnAtPos(node.getStart());
 }

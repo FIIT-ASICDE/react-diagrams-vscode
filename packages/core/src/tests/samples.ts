@@ -1,7 +1,7 @@
 export const reactForm = /*js*/
 `import { useState } from 'react';
 
-export default function Form() {
+function Form() {
   const [answer, setAnswer] = useState('');
   const [error, setError] = useState(null);
   const [status, setStatus] = useState('typing');
@@ -56,6 +56,8 @@ export default function Form() {
     </>
   );
 }
+
+export default Form;
 
 function submitForm(answer) {
   // Pretend it's hitting the network.
