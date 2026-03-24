@@ -336,7 +336,7 @@ export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): S
 	
 	try {
 		const component = resolveDefaultExportComponent(sourceFile);
-		console.log(component);
+		// console.debug(component);
 		if (!component) {
 			return {
 				stateVariables: [],

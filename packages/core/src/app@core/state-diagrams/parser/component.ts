@@ -44,8 +44,11 @@ export function resolveDefaultExportComponent(sourceFile: SourceFile): Supported
 
 			if (Node.isIdentifier(expression)) {
 				const symbol = expression.getSymbol();
-				const resolvedDeclaration = symbol?.getDeclarations().find(Node.isVariableDeclaration);
+				const resolvedDeclaration = symbol?.getDeclarations().find(decl => Node.isVariableDeclaration(decl) || Node.isFunctionDeclaration(decl));
 				if (resolvedDeclaration) {
+					if (Node.isFunctionDeclaration(resolvedDeclaration))
+						return resolvedDeclaration;
+
 					const component = resolveComponentDeclarationFromVariable(resolvedDeclaration);
 					if (component)
 						return component;
