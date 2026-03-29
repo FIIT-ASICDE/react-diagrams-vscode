@@ -20,13 +20,13 @@ export function activate(context: ExtensionContext) {
 }
 
 function setupAutoRestartInDevelopment(context: ExtensionContext) {
-	if (context.extensionMode !== ExtensionMode.Development)
+	if (context.extensionMode != ExtensionMode.Development)
 		return { dispose() { } };
 
 	const extensionDistPattern = new RelativePattern(context.extensionUri.fsPath, "dist/**/*.js");
 	const watcher = workspace.createFileSystemWatcher(extensionDistPattern, true, false, true);
 
-	let restartTimer: NodeJS.Timeout | undefined;
+	let restartTimer;
 	const scheduleRestart = () => {
 		if (restartTimer)
 			clearTimeout(restartTimer);

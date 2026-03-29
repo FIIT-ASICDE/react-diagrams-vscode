@@ -67,6 +67,13 @@ Step 3
 	direct literal: setX("done")
 	direct identifier/expression: setX(something)
 	updater callback: setX(prev => ...)
+
+Step 4:
+	Identify and find the best way/type to represent the transitions between states.
+	Obtain the transitions between the states by analyzing the control flow of the each mutating functions and subsequently linking the updates to the transitions:
+		Identify in which branches (if elses, switch statements, try catch) the state sets occur and construct the transitions accordingly.
+			If elses, try catch, should become decision branches with subsequent merges.
+		Loops should be incorporated into this with the backwards transitions cyclic transitions.
 */
 
 /* State variables population */
@@ -330,7 +337,6 @@ function populateStateUpdatesAndMutators(sourceFile: SourceFile, component: Supp
 	}
 }
 
-/** Parses a React component source text into a structured state diagram model. */
 export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): StateDiagram {
 	const { sourceFile } = text2SrcFile(reactComponentTxt, rootDir);
 	
