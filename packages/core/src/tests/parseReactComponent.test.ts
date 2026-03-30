@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { parseReactComponent } from '../app@core/state-diagrams/parser/react-parser';
-import { reactForm } from './samples';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+const reactForm = readFileSync(join(__dirname, 'samples', 'form.jsx')).toString();
 
 test('parseReactComponent parses reactForm sample into AST text', () => {
   const astTree = parseReactComponent(reactForm);

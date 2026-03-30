@@ -1,5 +1,4 @@
-export const reactForm = /*js*/
-`import { useState } from 'react';
+import { useState } from 'react';
 
 function Form() {
   const [answer, setAnswer] = useState('');
@@ -8,9 +7,8 @@ function Form() {
 
   const test = 'tst';
 
-  if (status === 'success') {
+  if (status === 'success')
     return <h1>That's right!</h1>
-  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -60,16 +58,11 @@ function Form() {
 export default Form;
 
 function submitForm(answer) {
-  // Pretend it's hitting the network.
   return new Promise((resolve, reject) => {
     setTimeout(() => {
-      let shouldError = answer.toLowerCase() !== 'lima'
-      if (shouldError) {
-        reject(new Error('Good guess but a wrong answer. Try again!'));
-      } else {
-        resolve();
-      }
-    }, 1500);
+      if (answer.toLowerCase() !== 'lima')
+        return reject(new Error('Good guess but a wrong answer. Try again!'));
+      return resolve();
+    }, 1500); // Pretend it's hitting the network.
   });
 }
-`;

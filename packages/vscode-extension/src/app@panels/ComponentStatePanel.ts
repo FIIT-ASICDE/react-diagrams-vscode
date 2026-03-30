@@ -51,7 +51,9 @@ export class ComponentStatePanel {
 			return;
 		}
 
-		const initialDocument = window.activeTextEditor?.document;
+		const result = ComponentStatePanel.doCommonChecksAndGet();
+		if (!result)
+			return;
 
 		const panel = window.createWebviewPanel(
 			"componentState",
@@ -63,7 +65,7 @@ export class ComponentStatePanel {
 			}
 		);
 
-		ComponentStatePanel.currentPanel = new ComponentStatePanel(panel, extensionUri, initialDocument);
+		ComponentStatePanel.currentPanel = new ComponentStatePanel(panel, extensionUri, result.targetDocument);
 	}
 
 	public static async refreshCurrentPanel(document?: TextDocument) {
@@ -75,24 +77,10 @@ export class ComponentStatePanel {
 	// }
 
 	public async refresh(document?: TextDocument) {
-		const targetDocument = document ?? window.activeTextEditor?.document;
-		if (!targetDocument) {
-			window.showWarningMessage("No active editor found. Open a React component file first.");
+		const result = ComponentStatePanel.doCommonChecksAndGet(document);
+		if (!result)
 			return;
-		}
-
-		const activeFilePath = targetDocument.uri.fsPath;
-		if (!ComponentStatePanel.isSupportedFile(activeFilePath)) {
-			if (!document)
-				window.showWarningMessage("Active file is not a JavaScript or TypeScript file. Open a React component file first.");
-			return;
-		}
-
-		const rootPath = workspace.getWorkspaceFolder(targetDocument.uri)?.uri.fsPath ?? workspace.workspaceFolders?.[0]?.uri.fsPath;
-		if (!rootPath) {
-			window.showWarningMessage("No workspace folder found. Open the project folder first.");
-			return;
-		}
+		const { activeFilePath, rootPath, targetDocument } = result;
 
 		const cacheKey = normalizeFilePath(activeFilePath);
 		const requestId = ++this.refreshRequestId;
@@ -145,6 +133,29 @@ export class ComponentStatePanel {
 
 	public postMessage(type: string, data?) {
 		this.panel.webview.postMessage({ type, data });
+	}
+
+	public static doCommonChecksAndGet(doc?: TextDocument) {
+		const targetDocument = doc ?? window.activeTextEditor?.document;
+		if (!targetDocument) {
+			window.showWarningMessage("No active editor found. Open a React component file first.");
+			return;
+		}
+
+		const activeFilePath = targetDocument.uri.fsPath;
+		if (!ComponentStatePanel.isSupportedFile(activeFilePath)) {
+			if (!doc)
+				window.showWarningMessage("Active file is not a JavaScript or TypeScript file. Open a React component file first.");
+			return;
+		}
+
+		const rootPath = workspace.getWorkspaceFolder(targetDocument.uri)?.uri.fsPath ?? workspace.workspaceFolders?.[0]?.uri.fsPath;
+		if (!rootPath) {
+			window.showWarningMessage("No workspace folder found. Open the project folder first.");
+			return;
+		}
+
+		return { activeFilePath, rootPath, targetDocument };
 	}
 
 	private static isSupportedFile(filePath: string) {

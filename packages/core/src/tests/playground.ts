@@ -1,7 +1,10 @@
 import { parseReactComponent, text2SrcFile } from '../app@core/state-diagrams';
-import { reactForm } from './samples';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 import { inspect } from "util";
+
+const reactForm = readFileSync(join(__dirname, 'samples', 'form.jsx')).toString();
 
 // for (let i = 0; i < 10; i++) {
 // 	console.time(`parseReactComponent ${i}`);
