@@ -33,19 +33,34 @@ export interface StateMutatingFunction { // A function that mutates a specific S
 	type: FunctionDeclarationKind;
 	// Add more info if needed, like parameters, etc. 
 
-	states: StateUpdate[]; // All the states reachable in this function for a specific state variable. Same objects will be shared with StateVariable.states.
+	//states: StateUpdate[]; // All the states reachable in this function for a specific state variable. Same objects will be shared with StateVariable.states.
 	nodes: StateGraphNode[]; // Ordered list of graph nodes (state updates and control-flow structure) in this function.
 	transitions: StateTransition[]; // Directed edges connecting the graph nodes.
 }
 
-export type StateUpdateKind = 'direct' | 'expression' | 'updater';
+export enum StateUpdateKind {
+	Direct = 'direct',
+	Expression = 'expression',
+	Updater = 'updater',
+}
 
-export type ControlFlowNodeKind = 'entry' | 'decision' | 'merge' | 'exit'; // Future: 'loop', 'switch' (if needed)
+export enum ControlFlowNodeKind { // Future: Loop, Switch (if needed)
+	Entry = 'entry',
+	Decision = 'decision',
+	Merge = 'merge',
+	Exit = 'exit',
+}
+
+export enum StateGraphNodeType {
+	StateUpdate = 'state-update',
+	ControlFlow = 'control-flow',
+}
 
 export type StateGraphNode = StateUpdate | ControlFlowNode;
 
 export interface ControlFlowNode {
 	id: string;
+	nodeType: StateGraphNodeType.ControlFlow;
 	kind: ControlFlowNodeKind;
 	label?: string; // txt for decision nodes
 	pos: CodePos;
@@ -53,6 +68,7 @@ export interface ControlFlowNode {
 
 export interface StateUpdate {
 	id: string;
+	nodeType: StateGraphNodeType.StateUpdate;
 	stateVariableId: string;
 	setterName: string;
 	kind: StateUpdateKind;
@@ -60,7 +76,15 @@ export interface StateUpdate {
 	expressionText?: string;
 }
 
-export type StateTransitionKind = 'normal' | 'then' | 'else' | 'catch' | 'finally' | 'return' | 'throw';
+export enum StateTransitionKind {
+	Normal = 'normal',
+	Then = 'then',
+	Else = 'else',
+	Catch = 'catch',
+	Finally = 'finally',
+	Return = 'return',
+	Throw = 'throw',
+}
 
 export interface StateTransition {
 	id: string;

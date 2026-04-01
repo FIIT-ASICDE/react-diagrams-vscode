@@ -9,7 +9,7 @@ import { createComponentModel, resolveDefaultExportComponent } from './component
 import { truncate } from '../../utils';
 import { collectStateVariables } from './state-variables';
 import { classifyStateUpdateKind, populateStateUpdatesAndMutators } from './state-mutators';
-import { buildTransitionFlowGraph } from './state-transitions';
+import { buildTransitionFlowGraph, GraphBuilder } from './state-transitions';
 
 /*
 
@@ -70,7 +70,6 @@ Step 4:
 
 export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): StateDiagram {
 	const { sourceFile } = text2SrcFile(reactComponentTxt, rootDir);
-	
 	try {
 		const component = resolveDefaultExportComponent(sourceFile);
 		// console.debug(component);

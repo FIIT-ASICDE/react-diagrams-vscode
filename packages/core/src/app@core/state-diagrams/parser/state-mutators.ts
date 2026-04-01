@@ -11,20 +11,21 @@ import {
 	VariableDeclaration,
 } from 'ts-morph';
 import {
+	StateGraphNodeType,
 	StateMutatingFunction,
 	StateUpdate,
 	StateUpdateKind,
 	StateVariable,
 } from '../types';
-import { createId, getBindingElementName, getCodePos, getDeclarationKind, getFirstAncestorOfKinds, getFuncName, normText } from './utils';
+import { createId, getCodePos, getDeclarationKind, getFirstAncestorOfKinds, getFuncName, normText } from './utils';
 import { SupportedComponentDeclaration, SupportedDeclaration } from './types';
 
 export function classifyStateUpdateKind(argument?: Node): StateUpdateKind {
 	if (!argument)
-		return 'expression';
+		return StateUpdateKind.Expression;
 
 	if (Node.isArrowFunction(argument) || Node.isFunctionExpression(argument))
-		return 'updater';
+		return StateUpdateKind.Updater;
 
 	if (
 		Node.isStringLiteral(argument) ||
@@ -34,10 +35,10 @@ export function classifyStateUpdateKind(argument?: Node): StateUpdateKind {
 		argument.getKind() == SyntaxKind.NullKeyword ||
 		argument.getKind() == SyntaxKind.NoSubstitutionTemplateLiteral
 	) {
-		return 'direct';
+		return StateUpdateKind.Direct;
 	}
 
-	return 'expression';
+	return StateUpdateKind.Expression;
 }
 
 export function createStateUpdate(stateVariable: StateVariable, callExpression: CallExpression, sourceFile: SourceFile) {
@@ -48,6 +49,7 @@ export function createStateUpdate(stateVariable: StateVariable, callExpression: 
 
 	const update: StateUpdate = {
 		id: createId('update', `${stateVariable.name}:${kind}:${expressionText ?? '<none>'}`, pos),
+		nodeType: StateGraphNodeType.StateUpdate,
 		stateVariableId: stateVariable.id,
 		setterName: stateVariable.setterName,
 		kind,
@@ -69,7 +71,7 @@ function getOrCreateInlineMutator(stateVariable: StateVariable, sourceFile: Sour
 		name: '<render-body>',
 		pos,
 		type: getDeclarationKind(component),
-		states: [],
+		// states: [],
 		nodes: [],
 		transitions: [],
 	};
@@ -97,7 +99,7 @@ function getOrCreateMutator(stateVariable: StateVariable, sourceFile: SourceFile
 		name,
 		pos,
 		type,
-		states: [],
+		// states: [],
 		nodes: [],
 		transitions: [],
 	};
@@ -119,12 +121,15 @@ function addUniqueUpdateToStateVariable(stateVariable: StateVariable, update: St
 	return update;
 }
 
-/** Adds a deduplicated update reference to a mutator reachable states list. */
-function addUniqueUpdateToMutator(mutator: StateMutatingFunction, update: StateUpdate) {
-	const key = `${update.kind}:${normText(update.expressionText)}`;
-	const existing = mutator.states.find((current) => `${current.kind}:${normText(current.expressionText)}` == key);
+/** Adds a setter call-site update node to mutator graph nodes without duplicate positions. */
+function addUpdateNodeToMutator(mutator: StateMutatingFunction, update: StateUpdate) {
+	const existing = mutator.nodes.find((node) =>
+		node.nodeType == StateGraphNodeType.StateUpdate &&
+		node.pos.line == update.pos.line &&
+		node.pos.column == update.pos.column
+	);
 	if (!existing)
-		mutator.states.push(update);
+		mutator.nodes.push(update);
 }
 
 export function populateStateUpdatesAndMutators(sourceFile: SourceFile, component: SupportedComponentDeclaration, stateVariables: StateVariable[]) {
@@ -154,10 +159,10 @@ export function populateStateUpdatesAndMutators(sourceFile: SourceFile, componen
 		], component);
 
 		const update = createStateUpdate(stateVariable, callExpression, sourceFile);
-		const sharedUpdate = addUniqueUpdateToStateVariable(stateVariable, update);
+		addUniqueUpdateToStateVariable(stateVariable, update);
 
 		const mutator = getOrCreateMutator(stateVariable, sourceFile, component, fn);
-		addUniqueUpdateToMutator(mutator, sharedUpdate);
+		addUpdateNodeToMutator(mutator, update);
 
 		if (!mutatorBodies.has(mutator.id)) {
 			const body = (fn ?? component as SupportedDeclaration).getBody();

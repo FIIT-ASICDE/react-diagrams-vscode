@@ -1,4 +1,4 @@
-import { parseReactComponent, text2SrcFile } from '../app@core/state-diagrams';
+import { parseReactComponent, text2SrcFile, GraphBuilder } from '../app@core/state-diagrams';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 

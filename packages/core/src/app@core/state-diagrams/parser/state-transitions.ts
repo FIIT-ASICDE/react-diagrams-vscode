@@ -5,32 +5,33 @@ import {
 	Node,
 	ReturnStatement,
 	SourceFile,
+	Statement,
 	SyntaxKind,
 	ThrowStatement,
 	TryStatement,
-	VariableDeclaration,
+	ts,
 } from 'ts-morph';
 import {
 	ControlFlowNode,
 	ControlFlowNodeKind,
-	StateDiagram,
-	StateMutatingFunction,
 	StateGraphNode,
+	StateGraphNodeType,
+	StateMutatingFunction,
 	StateTransition,
 	StateTransitionKind,
 	StateUpdate,
 	StateUpdateKind,
 	StateVariable,
 } from '../types';
-import { createId, getCodePos, getFuncName, normText } from './utils';
+import { codePosStr, createId, getAllCalls, getCodePos, getFuncName, normText } from './utils';
 import { truncate } from '../../utils';
-import { collectStateVariables } from './state-variables';
-import { classifyStateUpdateKind, populateStateUpdatesAndMutators } from './state-mutators';
+import { classifyStateUpdateKind } from './state-mutators';
 
 export function createFlowNode(kind: ControlFlowNodeKind, sourceFile: SourceFile, node: Node, label?: string): ControlFlowNode {
 	const pos = getCodePos(sourceFile, node);
 	return {
 		id: createId('flow', `${kind}:${label ?? ''}`, pos),
+		nodeType: StateGraphNodeType.ControlFlow,
 		kind,
 		label,
 		pos,
@@ -49,14 +50,15 @@ export function createTransition(from: StateGraphNode, to: StateGraphNode, kind:
 	};
 }
 
-/** Returns a per-occurrence StateUpdate graph node for a call expression, creating it if absent. */
-function getOrCreateOccurrenceNode(call: CallExpression, stateVariable: StateVariable, sourceFile: SourceFile): StateUpdate {
+export function createOccurrenceUpdateNode(call: CallExpression, stateVariable: StateVariable, sourceFile: SourceFile): StateUpdate {
 	const pos = getCodePos(sourceFile, call);
 	const arg = call.getArguments()[0];
 	const expressionText = arg ? normText(arg) : undefined;
 	const kind = classifyStateUpdateKind(arg);
+
 	return {
 		id: createId('update-occ', `${stateVariable.name}:${kind}:${pos.line}:${pos.column}`, pos),
+		nodeType: StateGraphNodeType.StateUpdate,
 		stateVariableId: stateVariable.id,
 		setterName: stateVariable.setterName,
 		kind,
@@ -65,160 +67,208 @@ function getOrCreateOccurrenceNode(call: CallExpression, stateVariable: StateVar
 	};
 }
 
-/**
- * Walks the body of function (component or mutating function) and builds
- * the control-flow graph (nodes + transitions) for one specific state variable.
- *
- * Handled constructs: sequential updates, if/else, try/catch/finally, early return/throw.
- */
-function buildMutatorGraph(funcBody: Block, sourceFile: SourceFile, stateVariable: StateVariable, mutator: StateMutatingFunction) {
-	const nodes = mutator.nodes;
-	const transitions = mutator.transitions;
+interface OpenEdge { // We dont yet know "to", remember type and from...
+	from: StateGraphNode;
+	kind: StateTransitionKind;
+	rawConditionText?: string;
+}
 
-	const entry = createFlowNode('entry', sourceFile, funcBody, mutator.name);
-	nodes.push(entry);
+export class GraphBuilder {
+	private readonly updateNodesByPos: Map<string, StateUpdate> = new Map();
 
-	type OpenEdge = { from: StateGraphNode; kind: StateTransitionKind; raw?: string };
+	constructor(
+		private readonly sourceFile: SourceFile,
+		private readonly stateVariable: StateVariable,
+		private readonly mutator: StateMutatingFunction,
+		private readonly nodes: StateGraphNode[],
+		private readonly transitions: StateTransition[],
+		
+	) {
+		for (const node of nodes) {
+			if (node.nodeType != StateGraphNodeType.StateUpdate || node.stateVariableId != stateVariable.id)
+				continue;
+			this.updateNodesByPos.set(codePosStr(node.pos), node);
+		}
+	}
 
-	const wire = (to: StateGraphNode, edges: OpenEdge[]) => edges.forEach(e => transitions.push(createTransition(e.from, to, e.kind, e.raw)));
+	private connect(to: StateGraphNode, edges: OpenEdge[]) {
+		for (const edge of edges)
+			this.transitions.push(createTransition(edge.from, to, edge.kind, edge.rawConditionText));
+	}
 
-	function visitBlock(block: Block, incoming: OpenEdge[]): OpenEdge[] {
+	private appendFlowNode(kind: ControlFlowNodeKind, node: Node, label?: string) {
+		const flowNode = createFlowNode(kind, this.sourceFile, node, label);
+		this.nodes.push(flowNode);
+		return flowNode;
+	}
+
+	private appendUpdateNode(call: CallExpression) {
+		const pos = getCodePos(this.sourceFile, call);
+		const key = codePosStr(pos);
+
+		const existing = this.updateNodesByPos.get(key);
+		if (existing)
+			return existing;
+
+		const created = createOccurrenceUpdateNode(call, this.stateVariable, this.sourceFile);
+		this.nodes.push(created);
+		this.updateNodesByPos.set(key, created);
+		return created;
+	}
+
+	visitReturn(statement: ReturnStatement, incoming: OpenEdge[]) {
 		let current = incoming;
+		const setterCalls = getAllCalls(statement, this.stateVariable.setterName);
 
-		for (const stmt of block.getStatements()) {
-			if (Node.isIfStatement(stmt)) {
-				current = visitIf(stmt as IfStatement, current);
-			} else if (Node.isTryStatement(stmt)) {
-				current = visitTry(stmt as TryStatement, current);
-			} else if (Node.isReturnStatement(stmt)) {
-				return visitReturn(stmt as ReturnStatement, current);
-			} else if (Node.isThrowStatement(stmt)) {
-				return visitThrow(stmt as ThrowStatement, current);
-			} else { // Collect any setter calls in this statement (covers expression-statement & nested inline cases).
-				const calls = stmt.getDescendantsOfKind(SyntaxKind.CallExpression);
-				for (const call of calls) {
-					if (getFuncName(call) !== stateVariable.setterName)
-						continue;
-					const updateNode = getOrCreateOccurrenceNode(call, stateVariable, sourceFile);
-					nodes.push(updateNode);
-					wire(updateNode, current);
-					current = [{ from: updateNode, kind: 'normal' }];
-				}
-			}
+		for (const call of setterCalls) {
+			const updateNode = this.appendUpdateNode(call);
+			this.connect(updateNode, current);
+			current = [{ from: updateNode, kind: StateTransitionKind.Normal }];
+		}
+
+		const exitNode = this.appendFlowNode(ControlFlowNodeKind.Exit, statement, 'return');
+		this.connect(exitNode, current);
+		return [];
+	}
+
+	visitThrow(statement: ThrowStatement, incoming: OpenEdge[]) {
+		const throwText = statement.getExpression().getText();
+		const exitNode = this.appendFlowNode(ControlFlowNodeKind.Exit, statement, `throw ${truncate(throwText, 40)}`);
+		this.connect(exitNode, incoming);
+		return [];
+	}
+
+	visitIf(statement: IfStatement, incoming: OpenEdge[]) {
+		const conditionText = statement.getExpression().getText();
+		const decisionNode = this.appendFlowNode(ControlFlowNodeKind.Decision, statement, truncate(conditionText, 80));
+		this.connect(decisionNode, incoming);
+
+		const thenIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Then, rawConditionText: conditionText }];
+		const thenBody = statement.getThenStatement();
+		const thenOpen = Node.isBlock(thenBody)
+			? this.visitBlock(thenBody, thenIncoming)
+			: this.visitStatement(thenBody as Statement, thenIncoming);
+
+		const elseIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Else, rawConditionText: `!(${conditionText})` }];
+		const elseBody = statement.getElseStatement();
+		const elseOpen = !elseBody
+			? elseIncoming
+			: Node.isIfStatement(elseBody)
+				? this.visitIf(elseBody, elseIncoming)
+				: Node.isBlock(elseBody)
+					? this.visitBlock(elseBody, elseIncoming)
+					: this.visitStatement(elseBody as Statement, elseIncoming);
+
+		const allOpen = [...thenOpen, ...elseOpen];
+		if (!allOpen.length)
+			return [];
+
+		const mergeNode = this.appendFlowNode(ControlFlowNodeKind.Merge, statement);
+		this.connect(mergeNode, allOpen);
+		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
+	}
+
+	visitTry(statement: TryStatement, incoming: OpenEdge[]) {
+		const decisionNode = this.appendFlowNode(ControlFlowNodeKind.Decision, statement, 'try');
+		this.connect(decisionNode, incoming);
+
+		const tryOpen = this.visitBlock(statement.getTryBlock(), [{ from: decisionNode, kind: StateTransitionKind.Normal }]);
+
+		const catchClause = statement.getCatchClause();
+		let catchOpen: OpenEdge[] = [];
+		if (catchClause) {
+			const catchParam = catchClause.getVariableDeclaration()?.getName() ?? 'error';
+			catchOpen = this.visitBlock(catchClause.getBlock(), [{
+				from: decisionNode,
+				kind: StateTransitionKind.Catch,
+				rawConditionText: catchParam,
+			}]);
+		}
+
+		const finallyBlock = statement.getFinallyBlock();
+		let finalOpen: OpenEdge[];
+		if (finallyBlock) {
+			const toFinally = [...tryOpen, ...catchOpen];
+			const finallyIncoming = toFinally.length ? toFinally : [{ from: decisionNode, kind: StateTransitionKind.Finally }];
+			finalOpen = this.visitBlock(finallyBlock, finallyIncoming);
+		}
+		else {
+			finalOpen = [...tryOpen, ...catchOpen];
+		}
+
+		if (!finalOpen.length)
+			return [];
+
+		const mergeNode = this.appendFlowNode(ControlFlowNodeKind.Merge, statement);
+		this.connect(mergeNode, finalOpen);
+		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
+	}
+
+	visitStatement(statement: Statement, incoming: OpenEdge[]) {
+		if (Node.isIfStatement(statement))
+			return this.visitIf(statement, incoming);
+
+		if (Node.isTryStatement(statement))
+			return this.visitTry(statement, incoming);
+
+		if (Node.isReturnStatement(statement))
+			return this.visitReturn(statement, incoming);
+
+		if (Node.isThrowStatement(statement))
+			return this.visitThrow(statement, incoming);
+
+		let current = incoming;
+		const setterCalls = getAllCalls(statement, this.stateVariable.setterName);
+		for (const call of setterCalls) {
+			const updateNode = this.appendUpdateNode(call);
+			this.connect(updateNode, current);
+			current = [{ from: updateNode, kind: StateTransitionKind.Normal }];
 		}
 
 		return current;
 	}
 
-	function visitIf(stmt: IfStatement, incoming: OpenEdge[]): OpenEdge[] {
-		const condText = stmt.getExpression().getText();
-		const decision = createFlowNode('decision', sourceFile, stmt, truncate(condText, 80));
-		nodes.push(decision);
-		wire(decision, incoming);
-
-		// if {}
-		const thenBody = stmt.getThenStatement();
-		const thenIncoming: OpenEdge[] = [{ from: decision, kind: 'then', raw: condText }];
-		const thenOpen = Node.isBlock(thenBody) ? visitBlock(thenBody, thenIncoming) : visitBlock(thenBody as unknown as Block, thenIncoming);
-
-		// else (optional)
-		const elseBody = stmt.getElseStatement();
-		const elseIncoming: OpenEdge[] = [{ from: decision, kind: 'else', raw: `!(${condText})` }];
-		let elseOpen: OpenEdge[];
-		if (elseBody) {
-			elseOpen = Node.isBlock(elseBody) ? visitBlock(elseBody, elseIncoming) : visitIf(elseBody as IfStatement, elseIncoming);
-		} else {
-			elseOpen = elseIncoming; // fall through from decision via the implicit else edge.
-		}
-
-		const allOpen = [...thenOpen, ...elseOpen];
-		if (allOpen.length > 0) { // Only create a merge node when there are actual dangling edges (i.e. no early terminations consumed both branches).
-			const merge = createFlowNode('merge', sourceFile, stmt);
-			nodes.push(merge);
-			wire(merge, allOpen);
-			return [{ from: merge, kind: 'normal' }];
-		}
-
-		return [];
-	}
-
-	function visitTry(stmt: TryStatement, incoming: OpenEdge[]): OpenEdge[] {
-		const decision = createFlowNode('decision', sourceFile, stmt, 'try');
-		nodes.push(decision);
-		wire(decision, incoming);
-
-		// try
-		const tryOpen = visitBlock(stmt.getTryBlock(), [{ from: decision, kind: 'normal' }]);
-		
-		// catch
-		let catchOpen: OpenEdge[] = [];
-		const catchClause = stmt.getCatchClause();
-		if (catchClause) {
-			const catchParam = catchClause.getVariableDeclaration()?.getName() ?? 'error';
-			catchOpen = visitBlock(catchClause.getBlock(), [{ from: decision, kind: 'catch', raw: catchParam }]);
-		}
-
-		// finally
-		let finallyOpen: OpenEdge[] = [];
-		const finallyBlock = stmt.getFinallyBlock();
-		if (finallyBlock) { // Finally receives edges from both try and catch exits.
-			const toFinally = [...tryOpen, ...catchOpen];
-			const finallyIncoming = toFinally.length > 0 ? toFinally : [{ from: decision, kind: 'finally' as StateTransitionKind }];
-			finallyOpen = visitBlock(finallyBlock, finallyIncoming);
-		}
-
-		const allOpen = finallyBlock ? finallyOpen : [...tryOpen, ...catchOpen];
-		if (allOpen.length > 0) {
-			const merge = createFlowNode('merge', sourceFile, stmt);
-			nodes.push(merge);
-			wire(merge, allOpen);
-			return [{ from: merge, kind: 'normal' }];
-		}
-
-		return [];
-	}
-
-	function visitReturn(stmt: ReturnStatement, incoming: OpenEdge[]): OpenEdge[] { // Wire any setter calls in the return expression before the exit.
-		const calls = stmt.getDescendantsOfKind(SyntaxKind.CallExpression);
+	visitBlock(block: Block, incoming: OpenEdge[]) {
 		let current = incoming;
-		for (const call of calls) {
-			if (getFuncName(call) !== stateVariable.setterName)
-				continue;
-			const updateNode = getOrCreateOccurrenceNode(call, stateVariable, sourceFile);
-			nodes.push(updateNode);
-			wire(updateNode, current);
-			current = [{ from: updateNode, kind: 'normal' }];
+		for (const statement of block.getStatements()) {
+			current = this.visitStatement(statement, current);
+			if (!current.length)
+				return current;
 		}
-
-		const exitNode = createFlowNode('exit', sourceFile, stmt, 'return');
-		nodes.push(exitNode);
-		wire(exitNode, current);
-		return []; // Terminates
+		return current;
 	}
 
-	function visitThrow(stmt: ThrowStatement, incoming: OpenEdge[]): OpenEdge[] {
-		const throwText = stmt.getExpression().getText();
-		const exitNode = createFlowNode('exit', sourceFile, stmt, `throw ${truncate(throwText, 40)}`);
-		nodes.push(exitNode);
-		wire(exitNode, incoming);
-		return []; // Terminates.
-	}
+	build(body: Block) {
+		const entryNode = this.appendFlowNode(ControlFlowNodeKind.Entry, body, this.mutator.name);
+		const finalOpen = this.visitBlock(body, [{ from: entryNode, kind: StateTransitionKind.Normal }]);
+		if (!finalOpen.length)
+			return;
 
-	const finalEdges = visitBlock(funcBody, [{ from: entry, kind: 'normal' }]); // Start traversal
-	if (finalEdges.length > 0) { // Connect remaining 
-		const exitNode = createFlowNode('exit', sourceFile, funcBody, 'return');
-		nodes.push(exitNode);
-		wire(exitNode, finalEdges);
+		const exitNode = this.appendFlowNode(ControlFlowNodeKind.Exit, body, 'return');
+		this.connect(exitNode, finalOpen);
 	}
 }
 
 export function buildTransitionFlowGraph(sourceFile: SourceFile, mutatorBodies: Map<string, Block>, stateVariables: StateVariable[]) {
 	for (const stateVariable of stateVariables) {
-		const allMutators = [ ...(stateVariable.mutators ?? []), ...(stateVariable.inlineMutator ? [stateVariable.inlineMutator] : [])];
-		for (const mutator of allMutators) {
+		const mutators = [...(stateVariable.mutators ?? []), ...(stateVariable.inlineMutator ? [stateVariable.inlineMutator] : [])]; // remember obj instances are shared
+		for (const mutator of mutators) {
 			const body = mutatorBodies.get(mutator.id);
-			if (body)
-				buildMutatorGraph(body, sourceFile, stateVariable, mutator);
+			if (!body)
+				continue;
+
+			mutator.nodes = mutator.nodes.filter(({nodeType}) => nodeType == StateGraphNodeType.StateUpdate);
+			mutator.transitions = [];
+
+			const builder = new GraphBuilder(
+				sourceFile,
+				stateVariable,
+				mutator,
+				mutator.nodes,
+				mutator.transitions
+			);
+
+			builder.build(body);
 		}
 	}
 }

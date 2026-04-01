@@ -1,4 +1,4 @@
-import { Project, Node, SyntaxKind, SourceFile, VariableDeclaration, CallExpression } from 'ts-morph';
+import { Project, Node, SyntaxKind, SourceFile, VariableDeclaration, CallExpression, Statement } from 'ts-morph';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { CodePos, SupportedDeclaration,  } from './types';
@@ -37,8 +37,12 @@ export function getCodePos(sourceFile: SourceFile, node: Node): CodePos {
 	return sourceFile.getLineAndColumnAtPos(node.getStart());
 }
 
+export function codePosStr({line, column}: CodePos) {
+	return `${line}:${column}`;
+}
+
 export function createId(what, name: string, pos: CodePos) {
-	return `${what?.toString()}:${name}:${pos.line}:${pos.column}`;
+	return `${what?.toString()}:${name}:${codePosStr(pos)}`;
 }
 
 export function getBindingElementName(node?: Node) {
@@ -84,6 +88,10 @@ export function getFuncName(fn: SupportedDeclaration | CallExpression): string |
 		if (attr)
 			return attr.getNameNode().getText();
 	}
+}
+
+export function getAllCalls(statement: Statement, funcName: string) {
+	return statement.getDescendantsOfKind(SyntaxKind.CallExpression).filter(cl => getFuncName(cl) == funcName);
 }
 
 export function normText(text?: string | Node) {
