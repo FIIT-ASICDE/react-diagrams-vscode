@@ -149,7 +149,7 @@ function buildMutatorGraph(funcBody: Block, sourceFile: SourceFile, stateVariabl
 
 		// try
 		const tryOpen = visitBlock(stmt.getTryBlock(), [{ from: decision, kind: 'normal' }]);
-
+		
 		// catch
 		let catchOpen: OpenEdge[] = [];
 		const catchClause = stmt.getCatchClause();

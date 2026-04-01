@@ -26,15 +26,6 @@ export interface StateVariable {
 	mutators?: StateMutatingFunction[]; // All the functions that mutate this state variable.
 }
 
-export interface StateUpdate {
-	id: string;
-	stateVariableId: string;
-	setterName: string;
-	kind: StateUpdateKind;
-	pos: CodePos;
-	expressionText?: string;
-}
-
 export interface StateMutatingFunction { // A function that mutates a specific StateVariable.
 	id: string;
 	name: string;
@@ -49,7 +40,9 @@ export interface StateMutatingFunction { // A function that mutates a specific S
 
 export type StateUpdateKind = 'direct' | 'expression' | 'updater';
 
-export type ControlFlowNodeKind = 'entry' | 'decision' | 'merge' | 'exit'; // Future: 'loop', 'switch'
+export type ControlFlowNodeKind = 'entry' | 'decision' | 'merge' | 'exit'; // Future: 'loop', 'switch' (if needed)
+
+export type StateGraphNode = StateUpdate | ControlFlowNode;
 
 export interface ControlFlowNode {
 	id: string;
@@ -58,7 +51,14 @@ export interface ControlFlowNode {
 	pos: CodePos;
 }
 
-export type StateGraphNode = StateUpdate | ControlFlowNode;
+export interface StateUpdate {
+	id: string;
+	stateVariableId: string;
+	setterName: string;
+	kind: StateUpdateKind;
+	pos: CodePos;
+	expressionText?: string;
+}
 
 export type StateTransitionKind = 'normal' | 'then' | 'else' | 'catch' | 'finally' | 'return' | 'throw';
 
