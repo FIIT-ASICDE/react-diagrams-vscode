@@ -37,9 +37,7 @@ export function getCodePos(sourceFile: SourceFile, node: Node): CodePos {
 	return sourceFile.getLineAndColumnAtPos(node.getStart());
 }
 
-export function codePosStr({line, column}: CodePos) {
-	return `${line}:${column}`;
-}
+export const codePosStr = ({line, column}: CodePos) => `${line}:${column}`;
 
 export function createId(what, name: string, pos: CodePos) {
 	return `${what?.toString()}:${name}:${codePosStr(pos)}`;

@@ -67,14 +67,14 @@ export function createOccurrenceUpdateNode(call: CallExpression, stateVariable: 
 	};
 }
 
-interface OpenEdge { // We dont yet know "to", remember type and from...
+export interface OpenEdge { // We dont yet know "to", remember type and from...
 	from: StateGraphNode;
 	kind: StateTransitionKind;
 	rawConditionText?: string;
 }
 
 export class GraphBuilder {
-	private readonly updateNodesByPos: Map<string, StateUpdate> = new Map();
+	private readonly updateNodesByPos: Map<string, StateUpdate> = new Map(); // cache to dedup updates
 
 	constructor(
 		private readonly sourceFile: SourceFile,
