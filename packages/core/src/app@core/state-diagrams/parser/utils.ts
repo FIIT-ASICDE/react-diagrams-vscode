@@ -41,6 +41,20 @@ export const codePosStr = ({line, column}: CodePos) => `${line}:${column}`;
 
 export function createId(what, name: string, pos: CodePos) {
 	return `${what?.toString()}:${name}:${codePosStr(pos)}`;
+	// if (what == null)
+	// 	return 0;
+
+	// const str = `${what.toString()}${name}`
+	// let hash = 0;
+	// for (let i = 0, len = str.length; i < len; i++) {
+	// 	hash = hash + str.charCodeAt(i);
+	// 	hash |= 0;
+	// }
+	// hash = hash + pos.line;
+	// hash |= 0;
+	// hash = hash + pos.column;
+	// hash |= 0;
+	// return hash;
 }
 
 export function getBindingElementName(node?: Node) {

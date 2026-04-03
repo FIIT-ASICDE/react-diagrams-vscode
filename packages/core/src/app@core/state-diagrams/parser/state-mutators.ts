@@ -11,6 +11,7 @@ import {
 	VariableDeclaration,
 } from 'ts-morph';
 import {
+	Id,
 	StateGraphNodeType,
 	StateMutatingFunction,
 	StateUpdate,
@@ -48,7 +49,7 @@ export function createStateUpdate(stateVariable: StateVariable, callExpression: 
 	const pos = getCodePos(sourceFile, callExpression);
 
 	const update: StateUpdate = {
-		id: createId('update', `${stateVariable.name}:${kind}:${expressionText ?? '<none>'}`, pos),
+		id: createId('update', `${stateVariable.name}:${kind}`, pos),
 		nodeType: StateGraphNodeType.StateUpdate,
 		stateVariableId: stateVariable.id,
 		setterName: stateVariable.setterName,
@@ -133,7 +134,7 @@ function addUpdateNodeToMutator(mutator: StateMutatingFunction, update: StateUpd
 }
 
 export function populateStateUpdatesAndMutators(sourceFile: SourceFile, component: SupportedComponentDeclaration, stateVariables: StateVariable[]) {
-	const mutatorBodies = new Map<string, Block>(); // mutator id - func body block map
+	const mutatorBodies = new Map<Id, Block>(); // mutator id - func body block map
 	if (!stateVariables.length)
 		return mutatorBodies;
 

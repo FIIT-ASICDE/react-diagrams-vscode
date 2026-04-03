@@ -14,6 +14,7 @@ import {
 import {
 	ControlFlowNode,
 	ControlFlowNodeKind,
+	Id,
 	StateGraphNode,
 	StateGraphNodeType,
 	StateMutatingFunction,
@@ -30,7 +31,7 @@ import { classifyStateUpdateKind } from './state-mutators';
 export function createFlowNode(kind: ControlFlowNodeKind, sourceFile: SourceFile, node: Node, label?: string): ControlFlowNode {
 	const pos = getCodePos(sourceFile, node);
 	return {
-		id: createId('flow', `${kind}:${label ?? ''}`, pos),
+		id: createId('flow', `${label ?? ''}:${kind}`, pos),
 		nodeType: StateGraphNodeType.ControlFlow,
 		kind,
 		label,
@@ -57,7 +58,7 @@ export function createOccurrenceUpdateNode(call: CallExpression, stateVariable: 
 	const kind = classifyStateUpdateKind(arg);
 
 	return {
-		id: createId('update-occ', `${stateVariable.name}:${kind}:${pos.line}:${pos.column}`, pos),
+		id: createId('update-occ', `${stateVariable.name}:${kind}`, pos),
 		nodeType: StateGraphNodeType.StateUpdate,
 		stateVariableId: stateVariable.id,
 		setterName: stateVariable.setterName,
@@ -249,7 +250,7 @@ export class GraphBuilder {
 	}
 }
 
-export function buildTransitionFlowGraph(sourceFile: SourceFile, mutatorBodies: Map<string, Block>, stateVariables: StateVariable[]) {
+export function buildTransitionFlowGraph(sourceFile: SourceFile, mutatorBodies: Map<Id, Block>, stateVariables: StateVariable[]) {
 	for (const stateVariable of stateVariables) {
 		const mutators = [...(stateVariable.mutators ?? []), ...(stateVariable.inlineMutator ? [stateVariable.inlineMutator] : [])]; // remember obj instances are shared
 		for (const mutator of mutators) {

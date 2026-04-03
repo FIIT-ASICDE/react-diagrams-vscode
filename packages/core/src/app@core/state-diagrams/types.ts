@@ -4,6 +4,8 @@ export type FunctionDeclarationKind = 'function' | 'arrow-function' | 'function-
 
 export type StateHookKind = 'useState';
 
+export type Id = number | string;
+
 export interface StateDiagramComponent {
 	name: string;
 	pos: CodePos;
@@ -12,7 +14,7 @@ export interface StateDiagramComponent {
 }
 
 export interface StateVariable {
-	id: string;
+	id: Id;
 	hook: StateHookKind;
 	name: string;
 	setterName: string;
@@ -27,7 +29,7 @@ export interface StateVariable {
 }
 
 export interface StateMutatingFunction { // A function that mutates a specific StateVariable.
-	id: string;
+	id: Id;
 	name: string;
 	pos: CodePos;
 	type: FunctionDeclarationKind;
@@ -59,7 +61,7 @@ export enum StateGraphNodeType {
 export type StateGraphNode = StateUpdate | ControlFlowNode;
 
 export interface ControlFlowNode {
-	id: string;
+	id: Id;
 	nodeType: StateGraphNodeType.ControlFlow;
 	kind: ControlFlowNodeKind;
 	label?: string; // txt for decision nodes
@@ -67,9 +69,9 @@ export interface ControlFlowNode {
 }
 
 export interface StateUpdate {
-	id: string;
+	id: Id;
 	nodeType: StateGraphNodeType.StateUpdate;
-	stateVariableId: string;
+	stateVariableId: Id;
 	setterName: string;
 	kind: StateUpdateKind;
 	pos: CodePos;
@@ -87,9 +89,9 @@ export enum StateTransitionKind {
 }
 
 export interface StateTransition {
-	id: string;
-	fromNodeId: string;
-	toNodeId: string;
+	id: Id;
+	fromNodeId: Id;
+	toNodeId: Id;
 	kind: StateTransitionKind;
 	label: string;
 	rawConditionText?: string;

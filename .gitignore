@@ -5,4 +5,4 @@ node_modules
 *.vsix
 *.github
 
-.vscode/settings.json
+**/.vscode/settings.json

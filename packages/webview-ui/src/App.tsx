@@ -4,20 +4,25 @@ import StateDiagram from './app@diagrams/state/StateDiagram';
 import Tests from './app@components/Tests';
 import Debug from './app@components/Debug';
 import { vscode } from './app@vscode/api';
-import type { Message } from '@react-diagrams/core';
+import type { Message, StateDiagram as StateDiagramModel } from '@react-diagrams/core';
+
+type UpdatePayload = {
+	model?: StateDiagramModel;
+};
 
 function App() {
-	const [updatePayload, setUpdatePayload] = useState(vscode.getState() ?? {});
+	const [updatePayload, setUpdatePayload] = useState<UpdatePayload>(() => (vscode.getState() as UpdatePayload) ?? {});
 	const [activeTabId, setActiveTabId] = useState('diagram');
 
 	useEffect(() => {
-		const onMessage = (event: MessageEvent<Message>) => {
+		const onMessage = (event: MessageEvent<Message<UpdatePayload>>) => {
 			if (event.data?.type != 'update')
 				return;
 			
-			// console.debug(event.data.data);
-			setUpdatePayload(event.data.data);
-			vscode.setState(event.data.data);
+			//console.debug(event.data.data);
+			const nextPayload = event.data.data ?? {};
+			setUpdatePayload(nextPayload);
+			vscode.setState(nextPayload);
 		};
 
 		window.addEventListener('message', onMessage);
@@ -25,8 +30,8 @@ function App() {
 		return () => window.removeEventListener('message', onMessage);
 	}, []);
 
-	const showDebugTab = useMemo(() => updatePayload?.debug !== undefined, [updatePayload]);
-	const debugValue = updatePayload?.debug;
+	const showDebugTab = useMemo(() => updatePayload?.model !== undefined, [updatePayload]);
+	const model = updatePayload?.model;
 	const resolvedActiveTabId = !showDebugTab && activeTabId == 'debug' ? 'diagram' : activeTabId;
 
 	const onPanelsChange = (event) => {
@@ -49,7 +54,7 @@ function App() {
 				{showDebugTab && <VSCodePanelTab id="debug" className="mx-2">Debug</VSCodePanelTab>}
 
 				<VSCodePanelView id="diagram" className="h-full p-1">
-					<StateDiagram />
+					<StateDiagram model={model} />
 				</VSCodePanelView>
 
 				<VSCodePanelView id="details">
@@ -67,7 +72,7 @@ function App() {
 
 				{showDebugTab && (
 					<VSCodePanelView id="debug">
-						<Debug value={debugValue} />
+						<Debug value={model} />
 					</VSCodePanelView>
 				)}
 			</VSCodePanels>

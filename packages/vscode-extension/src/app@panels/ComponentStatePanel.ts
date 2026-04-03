@@ -103,7 +103,7 @@ export class ComponentStatePanel {
 			if (requestId != this.refreshRequestId) // Ignore if a newer refresh started while this parse was running.
 				return console.debug("Outdated refresh result discarded");
 
-			const data = { debug: model };
+			const data = { model };
 			// ComponentStatePanel.modelCache.set(cacheKey, data);
 			this.postMessage("update", data);
 			// console.debug("Sending update");
