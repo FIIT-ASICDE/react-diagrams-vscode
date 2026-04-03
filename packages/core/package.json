@@ -4,21 +4,39 @@
   "private": true,
   "type": "commonjs",
   "main": "./dist/index.js",
+  "module": "./dist/esm/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./app@*": {
+      "types": "./dist/app@*/index.d.ts",
+      "import": "./dist/esm/app@*/index.js",
+      "require": "./dist/app@*/index.js",
+      "default": "./dist/app@*/index.js"
+    }
+  },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p .",
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc -p .",
+    "build:esm": "tsc -p tsconfig.esm.json",
     "watch": "tsc -p . -w",
     "lint": "echo \"No lint task configured for @react-diagrams/core\"",
-    "test": "node -e \"console.log('No tests configured for @react-diagrams/core yet')\""
+    "test": "npm run build && node --test dist/tests/**/*.test.js"
   },
   "dependencies": {
-    "ts-morph": "^24.0.0"
+    "ts-morph": "^27.0.2"
   },
   "devDependencies": {
     "@types/node": "22.x",
+    "@types/vscode-webview": "^1.57.5",
     "typescript": "^5.9.3"
   }
 }

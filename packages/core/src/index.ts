@@ -1,1 +1,2 @@
-export * from "./app@core/state-diagrams/parser";
+// default for /core
+export * from "./app@core";

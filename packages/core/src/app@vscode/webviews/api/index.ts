@@ -3,12 +3,12 @@ import type { WebviewApi } from "vscode-webview";
 /**
  * A utility wrapper around the VS Code API.
  */
-class VSCodeAPIWrapper {
-	public static readonly STATE_KEY = "vscodeState";
+export class VSCodeAPIWrapper<T> {
+	private readonly vsCodeApi: WebviewApi<T> | undefined;
 
-	private readonly vsCodeApi: WebviewApi<unknown> | undefined;
-
-	constructor() {
+	constructor(
+		private readonly storageKey: string,
+	) {
 		if (typeof acquireVsCodeApi === "function") {
 			this.vsCodeApi = acquireVsCodeApi();
 		}
@@ -25,7 +25,7 @@ class VSCodeAPIWrapper {
 	 * @param message Abitrary data (must be JSON serializable) to send to the extension context.
 	 */
 	public postMessage(type: string, data?) {
-		const message = { type, ...data };
+		const message = { type, data };
 		if (this.vsCodeApi)
 			return this.vsCodeApi.postMessage(message);
 		
@@ -40,11 +40,11 @@ class VSCodeAPIWrapper {
 	 *
 	 * @return The current state or `undefined` if no state has been set.
 	 */
-	public getState(): unknown | undefined {
+	public getState(){
 		if (this.vsCodeApi)
 			return this.vsCodeApi.getState();
 
-		const state = localStorage.getItem(VSCodeAPIWrapper.STATE_KEY);
+		const state = localStorage.getItem(this.storageKey);
 		return state ? JSON.parse(state) : undefined;
 	}
 
@@ -59,20 +59,11 @@ class VSCodeAPIWrapper {
 	 *
 	 * @return The new state.
 	 */
-	public setState<T extends unknown | undefined>(newState: T): T {
+	public setState(newState: T): T {
 		if (this.vsCodeApi)
 			return this.vsCodeApi.setState(newState);
 
-		localStorage.setItem(VSCodeAPIWrapper.STATE_KEY, JSON.stringify(newState));
+		localStorage.setItem(this.storageKey, JSON.stringify(newState));
 		return newState;
 	}
-
-	// private vscodeMessageListener(message) {
-	// 	const type = message.type;
-	// 	const text = message.data;
-
-	// 	console.log(type, text);
-	// }
 }
-
-export const vscode = new VSCodeAPIWrapper();

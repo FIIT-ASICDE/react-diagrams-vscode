@@ -25,5 +25,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src", "../core/src/app@vscode/webviews/api", "../core/src/app@vscode/webviews/api/types.ts"]
 }

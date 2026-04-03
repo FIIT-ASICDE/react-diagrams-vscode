@@ -2,25 +2,31 @@ import { commands, ExtensionContext, ExtensionMode, RelativePattern, workspace }
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
 
 export function activate(context: ExtensionContext) {
-	// Create the show hello world command
-	const showHelloWorldCommand = commands.registerCommand("vs-code-ext.componentState", () => {
+	const showComponentStateDiagram = commands.registerCommand("vs-code-ext.componentState", () => {
 		ComponentStatePanel.render(context.extensionUri);
 	});
 
-	// Add command to the extension context
+	const refreshCurrentPanelOnSave = workspace.onDidSaveTextDocument((document) => {
+		if (!ComponentStatePanel.currentPanel) {
+			return;
+		}
+
+		void ComponentStatePanel.refreshCurrentPanel(document);
+	});
+
 	const autoRestartInDev = setupAutoRestartInDevelopment(context);
 
-	context.subscriptions.push(showHelloWorldCommand, autoRestartInDev);
+	context.subscriptions.push(showComponentStateDiagram, refreshCurrentPanelOnSave, autoRestartInDev);
 }
 
 function setupAutoRestartInDevelopment(context: ExtensionContext) {
-	if (context.extensionMode !== ExtensionMode.Development)
+	if (context.extensionMode != ExtensionMode.Development)
 		return { dispose() { } };
 
 	const extensionDistPattern = new RelativePattern(context.extensionUri.fsPath, "dist/**/*.js");
 	const watcher = workspace.createFileSystemWatcher(extensionDistPattern, true, false, true);
 
-	let restartTimer: NodeJS.Timeout | undefined;
+	let restartTimer;
 	const scheduleRestart = () => {
 		if (restartTimer)
 			clearTimeout(restartTimer);
