@@ -1,5 +1,5 @@
 import * as path from "path";
-import { Disposable, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
+import { Disposable, TextDocument, TextEditor, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
 import { getNonce } from "../app@utils/crypto";
 import { getUri } from "../app@utils/urls";
 
@@ -10,6 +10,8 @@ export class ComponentActivityPanel {
 
 	private readonly panel: WebviewPanel;
 	private disposables: Disposable[] = [];
+	// Cache the last file-backed document so we can still read code after the webview gets focus.
+	private lastKnownFileDocument?: TextDocument;
 
 	/**
 	 * The ComponentActivityPanel class private constructor (called only from the render method).
@@ -17,10 +19,17 @@ export class ComponentActivityPanel {
 	 * @param panel A reference to the webview panel
 	 * @param extensionUri The URI of the directory containing the extension
 	 */
-	private constructor(panel: WebviewPanel, extensionUri: Uri) {
+	private constructor(panel: WebviewPanel, extensionUri: Uri, initialEditor?: TextEditor) {
 		this.panel = panel;
+		this.lastKnownFileDocument = initialEditor?.document.uri.scheme === "file" ? initialEditor.document : undefined;
 
 		this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+
+		window.onDidChangeActiveTextEditor((editor) => {
+			if (editor?.document.uri.scheme === "file") {
+				this.lastKnownFileDocument = editor.document;
+			}
+		}, null, this.disposables);
 
 		this.panel.webview.html = this.getWebviewContent(this.panel.webview, extensionUri);
 
@@ -36,28 +45,19 @@ export class ComponentActivityPanel {
 	 */
 	public static render(extensionUri: Uri) {
 		if (ComponentActivityPanel.currentPanel) {
+			// Capture the editor before revealing webview; reveal can clear activeTextEditor.
+			const editorBeforeReveal = window.activeTextEditor;
+			if (editorBeforeReveal?.document.uri.scheme === "file") {
+				ComponentActivityPanel.currentPanel.lastKnownFileDocument = editorBeforeReveal.document;
+			}
+
 			ComponentActivityPanel.currentPanel.panel.reveal(ViewColumn.One);
 			ComponentActivityPanel.currentPanel.postDiagramType();
-
-			const activeEditor = window.activeTextEditor;
-			if (!activeEditor) {
-				window.showWarningMessage("No active editor found. Open a source file first.");
-				return;
-			}
-
-			const activeFilePath = activeEditor.document.uri.fsPath;
-			const workspaceFolder = workspace.getWorkspaceFolder(activeEditor.document.uri);
-			if (!workspaceFolder) {
-				window.showWarningMessage("Could not determine workspace folder for the active file.");
-				return;
-			}
-
-			const srcRootPath = Uri.joinPath(workspaceFolder.uri).fsPath;
-			const relativeComponentPath = path.relative(srcRootPath, activeFilePath).replace(/\\/g, "/");
-
-			console.log("Parsing activity component", relativeComponentPath);
+			void ComponentActivityPanel.currentPanel.publishActiveEditorCode();
 			return;
 		}
+
+		const initialEditor = window.activeTextEditor;
 
 		const panel = window.createWebviewPanel(
 			"componentActivity",
@@ -69,7 +69,8 @@ export class ComponentActivityPanel {
 			}
 		);
 
-		ComponentActivityPanel.currentPanel = new ComponentActivityPanel(panel, extensionUri);
+		ComponentActivityPanel.currentPanel = new ComponentActivityPanel(panel, extensionUri, initialEditor);
+		void ComponentActivityPanel.currentPanel.publishActiveEditorCode();
 	}
 
 	/**
@@ -93,6 +94,55 @@ export class ComponentActivityPanel {
 
 	private postDiagramType() {
 		this.postMessage("diagram/type", { diagramType: "activity" });
+	}
+
+	private getBestEditorForCode(): TextEditor | undefined {
+		// First choice: current active file editor.
+		const activeEditor = window.activeTextEditor;
+		if (activeEditor && activeEditor.document.uri.scheme === "file") {
+			this.lastKnownFileDocument = activeEditor.document;
+			return activeEditor;
+		}
+
+		// Second choice: any visible file editor (works when focus is currently in webview).
+		const visibleFileEditor = window.visibleTextEditors.find(editor => editor.document.uri.scheme === "file");
+		if (visibleFileEditor) {
+			this.lastKnownFileDocument = visibleFileEditor.document;
+			return visibleFileEditor;
+		}
+
+		return undefined;
+	}
+
+	private async publishActiveEditorCode() {
+		const activeEditor = this.getBestEditorForCode();
+		const documentFromEditor = activeEditor?.document;
+		const documentFromCache = this.lastKnownFileDocument;
+		// Last resort: any file document currently open in the workspace session.
+		const fallbackOpenFile = workspace.textDocuments.find(doc => doc.uri.scheme === "file");
+		const bestDocument = documentFromEditor || documentFromCache || fallbackOpenFile;
+
+		if (!bestDocument) {
+			this.postMessage("code/error", { message: "No file editor found. Open a source file and try again." });
+			return;
+		}
+
+		this.lastKnownFileDocument = bestDocument;
+
+		const activeFilePath = bestDocument.uri.fsPath;
+		const workspaceFolder = workspace.getWorkspaceFolder(bestDocument.uri);
+		const srcRootPath = workspaceFolder ? Uri.joinPath(workspaceFolder.uri).fsPath : undefined;
+		// relativePath is optional: useful in UI, but not required for sending raw code.
+		const relativeComponentPath = srcRootPath ? path.relative(srcRootPath, activeFilePath).replace(/\\/g, "/") : undefined;
+		const text = bestDocument.getText();
+
+		// Send raw code payload to webview; parsing is intentionally done later.
+		this.postMessage("code/data", {
+			fileName: bestDocument.fileName,
+			languageId: bestDocument.languageId,
+			relativePath: relativeComponentPath,
+			text,
+		});
 	}
 
 	private getWebviewContent(webview: Webview, extensionUri: Uri) {
@@ -126,6 +176,10 @@ export class ComponentActivityPanel {
 		switch (type) {
 			case "diagram/requestType":
 				this.postDiagramType();
+				return;
+
+			case "code/request":
+				void this.publishActiveEditorCode();
 				return;
 
 			case "hello":
