@@ -1,16 +1,20 @@
 import { commands, ExtensionContext, ExtensionMode, RelativePattern, workspace } from "vscode";
+import { ComponentActivityPanel } from "./app@panels/ComponentActivityPanel";
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
 
 export function activate(context: ExtensionContext) {
-	// Create the show hello world command
-	const showHelloWorldCommand = commands.registerCommand("vs-code-ext.componentState", () => {
+	const showStateCommand = commands.registerCommand("vs-code-ext.componentState", () => {
 		ComponentStatePanel.render(context.extensionUri);
+	});
+
+	const showActivityCommand = commands.registerCommand("vs-code-ext.componentActivity", () => {
+		ComponentActivityPanel.render(context.extensionUri);
 	});
 
 	// Add command to the extension context
 	const autoRestartInDev = setupAutoRestartInDevelopment(context);
 
-	context.subscriptions.push(showHelloWorldCommand, autoRestartInDev);
+	context.subscriptions.push(showStateCommand, showActivityCommand, autoRestartInDev);
 }
 
 function setupAutoRestartInDevelopment(context: ExtensionContext) {
