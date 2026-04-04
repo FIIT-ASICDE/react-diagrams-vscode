@@ -2,7 +2,8 @@ import * as path from "path";
 import { Disposable, TextDocument, TextEditor, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
 import { getNonce } from "../app@utils/crypto";
 import { getUri } from "../app@utils/urls";
-
+import { parseActivityComponent } from "@react-diagrams/core";
+import { Node, Edge } from "@xyflow/react";
 export class ComponentActivityPanel {
 	public static readonly WEBVIEW_DIR = "webview-dist/state";
 
@@ -128,20 +129,13 @@ export class ComponentActivityPanel {
 		}
 
 		this.lastKnownFileDocument = bestDocument;
+		const parsedComponent: { nodes: Node[]; edges: Edge[] } = await parseActivityComponent(bestDocument.getText());
 
-		const activeFilePath = bestDocument.uri.fsPath;
-		const workspaceFolder = workspace.getWorkspaceFolder(bestDocument.uri);
-		const srcRootPath = workspaceFolder ? Uri.joinPath(workspaceFolder.uri).fsPath : undefined;
-		// relativePath is optional: useful in UI, but not required for sending raw code.
-		const relativeComponentPath = srcRootPath ? path.relative(srcRootPath, activeFilePath).replace(/\\/g, "/") : undefined;
-		const text = bestDocument.getText();
 
 		// Send raw code payload to webview; parsing is intentionally done later.
 		this.postMessage("code/data", {
-			fileName: bestDocument.fileName,
-			languageId: bestDocument.languageId,
-			relativePath: relativeComponentPath,
-			text,
+			nodes: parsedComponent.nodes,
+			edges: parsedComponent.edges,
 		});
 	}
 

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges } from '@xyflow/react';
+import { ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges, type Node, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { vscode } from '../../app@vscode/api';
 
-const initialNodes = [
+type CustomNode = Node<{ label: string }>;
+
+const initialNodes: CustomNode[] = [
 	{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'Activity diagram ready' } },
 	{ id: 'n2', position: { x: 0, y: 100 }, data: { label: 'Waiting for code/data...' } },
 ];
@@ -12,10 +14,8 @@ const initialEdges = [{ id: 'n1-n2', source: 'n1', target: 'n2' }];
 
 type CodeDataMessage = {
 	type: 'code/data';
-	fileName?: string;
-	relativePath?: string;
-	languageId?: string;
-	text?: string;
+	nodes: CustomNode[];
+	edges: Edge[];
 };
 
 type CodeErrorMessage = {
@@ -39,21 +39,8 @@ export default function ActivityDiagram() {
 
 			if (message.type === 'code/data') {
 				const codeMessage = message as CodeDataMessage;
-				const source = (codeMessage.text ?? '').trim();
-				const previewLine = source ? truncate(source.split(/\r?\n/)[0], 60) : 'No content';
-				const fileLabel = codeMessage.relativePath ?? codeMessage.fileName ?? 'Unknown file';
-				const languageLabel = codeMessage.languageId ? `Language: ${codeMessage.languageId}` : 'Language: unknown';
-
-				setNodes([
-					{ id: 'n1', position: { x: 0, y: 0 }, data: { label: `File: ${fileLabel}` } },
-					{ id: 'n2', position: { x: 0, y: 100 }, data: { label: languageLabel } },
-					{ id: 'n3', position: { x: 0, y: 200 }, data: { label: `Preview: ${previewLine}` } },
-				]);
-
-				setEdges([
-					{ id: 'n1-n2', source: 'n1', target: 'n2' },
-					{ id: 'n2-n3', source: 'n2', target: 'n3' },
-				]);
+				setNodes(codeMessage.nodes);
+				setEdges(codeMessage.edges);
 				return;
 			}
 
