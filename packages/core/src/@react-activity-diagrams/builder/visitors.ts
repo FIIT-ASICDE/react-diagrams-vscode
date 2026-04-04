@@ -1,80 +1,35 @@
-import { Edge, Node } from '@xyflow/react';
 import {
   Statement,
   Node as MorphNode,
+  SyntaxKind,
   IfStatement,
   WhileStatement,
   ForStatement,
   ExpressionStatement,
   VariableStatement,
-  ReturnStatement,
   Block,
 } from 'ts-morph';
+import { GraphWriter } from './graph-writer';
 
 export type BuildResult = {
   entry?: string;
   exits: string[];
 };
 
-export type VisitorState = {
-  nodeIdCounter: number;
-  currentY: number;
-};
-
 export class StatementVisitor {
-  constructor(
-    private nodes: Node[],
-    private edges: Edge[],
-    private state: VisitorState,
-    private centerX: number,
-    private verticalGap: number,
-    private branchOffset: number,
-  ) {}
-
-  private nextId(prefix = 'node'): string {
-    return `${prefix}-${this.state.nodeIdCounter++}`;
-  }
-
-  private nextY(): number {
-    const y = this.state.currentY;
-    this.state.currentY += this.verticalGap;
-    return y;
-  }
-
-  private addFlowNode(type: string, label: string, x: number, y: number): string {
-    const id = this.nextId(type);
-
-    this.nodes.push({
-      id,
-      type,
-      position: { x, y },
-      data: { label },
-    });
-
-    return id;
-  }
-
-  private addEdge(source: string, target: string, label?: string): void {
-    this.edges.push({
-      id: `edge-${this.edges.length}-${source}-${target}`,
-      source,
-      target,
-      label,
-      type: 'smoothstep',
-    });
-  }
+  constructor(private writer: GraphWriter) {}
 
   private compact(text: string): string {
     const cleaned = text.replace(/\s+/g, ' ').trim();
     return cleaned.length > 40 ? `${cleaned.slice(0, 37)}...` : cleaned;
   }
 
-  visitStatements(statements: Statement[], x: number): BuildResult {
+  visitStatements(statements: Statement[]): BuildResult {
     let entry: string | undefined;
     let pendingExits: string[] = [];
 
     for (let i = 0; i < statements.length; i++) {
-      const result = this.visitStatement(statements[i], x);
+      const result = this.visitStatement(statements[i]);
 
       if (!result.entry) continue;
 
@@ -83,7 +38,7 @@ export class StatementVisitor {
       }
 
       for (const exit of pendingExits) {
-        this.addEdge(exit, result.entry);
+        this.writer.addEdge(exit, result.entry);
       }
 
       pendingExits = result.exits;
@@ -95,158 +50,149 @@ export class StatementVisitor {
     };
   }
 
-  visitStatement(stmt: Statement, x: number): BuildResult {
-    if (stmt.getKind() === 1) {
-      // ExpressionStatement
-      return this.visitAction((stmt as ExpressionStatement).getExpression().getText(), x);
+  visitStatement(stmt: Statement): BuildResult {
+    if (stmt.getKind() === SyntaxKind.ExpressionStatement) {
+      return this.visitAction((stmt as ExpressionStatement).getExpression().getText());
     }
 
-    if (stmt.getKind() === 2) {
-      // VariableStatement
-      return this.visitAction((stmt as VariableStatement).getText(), x);
+    if (stmt.getKind() === SyntaxKind.VariableStatement) {
+      return this.visitAction((stmt as VariableStatement).getText());
     }
 
-    if (stmt.getKind() === 3) {
-      // ReturnStatement
-      const id = this.addFlowNode('action', stmt.getText(), x, this.nextY());
+    if (stmt.getKind() === SyntaxKind.ReturnStatement) {
+      const id = this.writer.addFlowNode('action', stmt.getText());
       return { entry: id, exits: [] };
     }
 
-    if (stmt.getKind() === 5) {
-      // IfStatement
-      return this.visitIf(stmt as IfStatement, x);
+    if (stmt.getKind() === SyntaxKind.IfStatement) {
+      return this.visitIf(stmt as IfStatement);
     }
 
-    if (stmt.getKind() === 6) {
-      // WhileStatement
-      return this.visitWhile(stmt as WhileStatement, x);
+    if (stmt.getKind() === SyntaxKind.WhileStatement) {
+      return this.visitWhile(stmt as WhileStatement);
     }
 
-    if (stmt.getKind() === 7) {
-      // ForStatement
-      return this.visitFor(stmt as ForStatement, x);
+    if (stmt.getKind() === SyntaxKind.ForStatement) {
+      return this.visitFor(stmt as ForStatement);
     }
 
-    if (stmt.getKind() === 8) {
-      // Block
-      return this.visitStatements((stmt as Block).getStatements(), x);
+    if (stmt.getKind() === SyntaxKind.Block) {
+      return this.visitStatements((stmt as Block).getStatements());
     }
 
-    return this.visitAction(this.compact(stmt.getText()), x);
+    return this.visitAction(this.compact(stmt.getText()));
   }
 
-  visitAction(label: string, x: number): BuildResult {
-    const id = this.addFlowNode('action', this.compact(label), x, this.nextY());
+  visitAction(label: string): BuildResult {
+    const id = this.writer.addFlowNode('action', this.compact(label));
     return { entry: id, exits: [id] };
   }
 
-  visitIf(stmt: IfStatement, x: number): BuildResult {
-    const decisionId = this.addFlowNode('decision', this.compact(stmt.getExpression().getText()), x, this.nextY());
+  visitIf(stmt: IfStatement): BuildResult {
+    const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()));
 
-    const thenResult = this.visitBranch(stmt.getThenStatement(), x - this.branchOffset);
+    const thenResult = this.visitBranch(stmt.getThenStatement());
     const elseStmt = stmt.getElseStatement();
     const elseResult = elseStmt
-      ? this.visitBranch(elseStmt, x + this.branchOffset)
+      ? this.visitBranch(elseStmt)
       : undefined;
 
-    const mergeId = this.addFlowNode('merge', '', x, this.nextY());
+    const mergeId = this.writer.addFlowNode('merge', '');
 
     if (thenResult.entry) {
-      this.addEdge(decisionId, thenResult.entry, 'yes');
-      for (const exit of thenResult.exits) this.addEdge(exit, mergeId);
+      this.writer.addEdge(decisionId, thenResult.entry, 'yes');
+      for (const exit of thenResult.exits) this.writer.addEdge(exit, mergeId);
     } else {
-      this.addEdge(decisionId, mergeId, 'yes');
+      this.writer.addEdge(decisionId, mergeId, 'yes');
     }
 
     if (elseResult?.entry) {
-      this.addEdge(decisionId, elseResult.entry, 'no');
-      for (const exit of elseResult.exits) this.addEdge(exit, mergeId);
+      this.writer.addEdge(decisionId, elseResult.entry, 'no');
+      for (const exit of elseResult.exits) this.writer.addEdge(exit, mergeId);
     } else {
-      this.addEdge(decisionId, mergeId, 'no');
+      this.writer.addEdge(decisionId, mergeId, 'no');
     }
 
     return { entry: decisionId, exits: [mergeId] };
   }
 
-  visitWhile(stmt: WhileStatement, x: number): BuildResult {
-    const decisionId = this.addFlowNode('decision', this.compact(stmt.getExpression().getText()), x, this.nextY());
+  visitWhile(stmt: WhileStatement): BuildResult {
+    const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()));
 
-    const body = this.visitBranch(stmt.getStatement(), x - this.branchOffset);
+    const body = this.visitBranch(stmt.getStatement());
 
     if (body.entry) {
-      this.addEdge(decisionId, body.entry, 'yes');
+      this.writer.addEdge(decisionId, body.entry, 'yes');
       for (const exit of body.exits) {
-        this.addEdge(exit, decisionId);
+        this.writer.addEdge(exit, decisionId);
       }
     } else {
-      this.addEdge(decisionId, decisionId, 'yes');
+      this.writer.addEdge(decisionId, decisionId, 'yes');
     }
 
-    const afterId = this.addFlowNode('merge', '', x, this.nextY());
-    this.addEdge(decisionId, afterId, 'no');
+    const afterId = this.writer.addFlowNode('merge', '');
+    this.writer.addEdge(decisionId, afterId, 'no');
 
     return { entry: decisionId, exits: [afterId] };
   }
 
-  visitFor(stmt: ForStatement, x: number): BuildResult {
+  visitFor(stmt: ForStatement): BuildResult {
     let firstEntry: string | undefined;
 
     const initializer = stmt.getInitializer();
     if (initializer) {
-      firstEntry = this.addFlowNode('action', this.compact(initializer.getText()), x, this.nextY());
+      firstEntry = this.writer.addFlowNode('action', this.compact(initializer.getText()));
     }
 
-    const decisionId = this.addFlowNode(
+    const decisionId = this.writer.addFlowNode(
       'decision',
       this.compact(stmt.getCondition()?.getText() ?? 'for'),
-      x,
-      this.nextY()
     );
 
     if (firstEntry) {
-      this.addEdge(firstEntry, decisionId);
+      this.writer.addEdge(firstEntry, decisionId);
     } else {
       firstEntry = decisionId;
     }
 
-    const body = this.visitBranch(stmt.getStatement(), x - this.branchOffset);
+    const body = this.visitBranch(stmt.getStatement());
     const incrementor = stmt.getIncrementor();
 
     let incrementId: string | undefined;
     if (incrementor) {
-      incrementId = this.addFlowNode('action', this.compact(incrementor.getText()), x + this.branchOffset, this.nextY());
+      incrementId = this.writer.addFlowNode('action', this.compact(incrementor.getText()));
     }
 
     if (body.entry) {
-      this.addEdge(decisionId, body.entry, 'yes');
+      this.writer.addEdge(decisionId, body.entry, 'yes');
       for (const exit of body.exits) {
-        if (incrementId) this.addEdge(exit, incrementId);
-        else this.addEdge(exit, decisionId);
+        if (incrementId) this.writer.addEdge(exit, incrementId);
+        else this.writer.addEdge(exit, decisionId);
       }
     } else {
-      if (incrementId) this.addEdge(decisionId, incrementId, 'yes');
-      else this.addEdge(decisionId, decisionId, 'yes');
+      if (incrementId) this.writer.addEdge(decisionId, incrementId, 'yes');
+      else this.writer.addEdge(decisionId, decisionId, 'yes');
     }
 
     if (incrementId) {
-      this.addEdge(incrementId, decisionId);
+      this.writer.addEdge(incrementId, decisionId);
     }
 
-    const afterId = this.addFlowNode('merge', '', x, this.nextY());
-    this.addEdge(decisionId, afterId, 'no');
+    const afterId = this.writer.addFlowNode('merge', '');
+    this.writer.addEdge(decisionId, afterId, 'no');
 
     return { entry: firstEntry, exits: [afterId] };
   }
 
-  visitBranch(node: MorphNode, x: number): BuildResult {
+  visitBranch(node: MorphNode): BuildResult {
     if (MorphNode.isBlock(node)) {
-      return this.visitStatements(node.getStatements(), x);
+      return this.visitStatements(node.getStatements());
     }
 
     if (MorphNode.isStatement(node)) {
-      return this.visitStatement(node, x);
+      return this.visitStatement(node);
     }
 
-    return this.visitAction(node.getText(), x);
+    return this.visitAction(node.getText());
   }
 }
