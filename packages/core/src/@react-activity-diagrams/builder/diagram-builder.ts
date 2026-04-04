@@ -4,13 +4,13 @@ import {
 } from 'ts-morph';
 import { GraphWriter, type WriterState } from './graph-writer';
 import { StatementVisitor } from './visitors';
-
+import { applyElkLayout } from './elkLayout';
 export class DiagramBuilder {
   private nodes: Node[] = [];
   private edges: Edge[] = [];
   private nodeIdCounter = 0;
 
-  public build(ast: SourceFile): { nodes: Node[]; edges: Edge[] } {
+  public async build(ast: SourceFile): Promise<{ nodes: Node[]; edges: Edge[] }> {
     this.reset();
 
     const state: WriterState = { nodeIdCounter: 0 };
@@ -32,8 +32,8 @@ export class DiagramBuilder {
     } else {
       writer.addEdge(startId, endId);
     }
-
-    return { nodes: this.nodes, edges: this.edges };
+	const layoutedGraph = await applyElkLayout(this.nodes, this.edges);
+    return { nodes: layoutedGraph.nodes, edges: layoutedGraph.edges };
   }
 
   private reset() {

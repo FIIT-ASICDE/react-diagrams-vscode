@@ -30,7 +30,7 @@ export class GraphWriter {
       source,
       target,
       label,
-      type: 'smoothstep',
+      type: 'floating',
     });
   }
 }

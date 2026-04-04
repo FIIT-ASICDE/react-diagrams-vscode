@@ -45,13 +45,13 @@ function createProject(rootDir: string): Project {
 
 // Parse the provided source text as a temporary file in a ts-morph project.
 // Use custom diagram builder to convert the source file into a graph of nodes and edges representing the activity diagram.
-export function parseActivityComponent(sourceText: string, rootDir = ".", tempFileName = "__activity_temp__.tsx"): {nodes: Nds[], edges: Edge[]} {
+export async function parseActivityComponent(sourceText: string, rootDir = ".", tempFileName = "__activity_temp__.tsx"): Promise<{nodes: Nds[], edges: Edge[]}> {
 	const project = createProject(rootDir);
 	const sourceFile = project.createSourceFile(tempFileName, sourceText, { overwrite: true });
 	const diagramBuilder = new DiagramBuilder();
 
 	try {
-		const graph = diagramBuilder.build(sourceFile);
+		const graph = await diagramBuilder.build(sourceFile);
 		return graph;
 	}
 	finally {

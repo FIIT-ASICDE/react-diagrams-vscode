@@ -2,19 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges, type Node, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { vscode } from '../../app@vscode/api';
+import {nodeTypes} from './diagram-rendering/nodeTypes';
+import  FloatingConnectionLine  from './diagram-rendering/floatingConnectionLine';
+import FloatingEdge from './diagram-rendering/floatingEdge';
 
-type CustomNode = Node<{ label: string }>;
-
-const initialNodes: CustomNode[] = [
-	{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'Activity diagram ready' } },
-	{ id: 'n2', position: { x: 0, y: 100 }, data: { label: 'Waiting for code/data...' } },
-];
-
-const initialEdges = [{ id: 'n1-n2', source: 'n1', target: 'n2' }];
 
 type CodeDataMessage = {
 	type: 'code/data';
-	nodes: CustomNode[];
+	nodes: Node[];
 	edges: Edge[];
 };
 
@@ -23,6 +18,16 @@ type CodeErrorMessage = {
 	message?: string;
 };
 
+const customNode = {
+	action: nodeTypes.action,
+	decision: nodeTypes.decision,
+	merge: nodeTypes.merge,
+	start: nodeTypes.initial,
+	end: nodeTypes.final,
+};
+
+const customEdge = { floating: FloatingEdge };
+
 type ActivityMessage = CodeDataMessage | CodeErrorMessage | { type?: string };
 
 function truncate(text: string, maxLength: number) {
@@ -30,8 +35,8 @@ function truncate(text: string, maxLength: number) {
 }
 
 export default function ActivityDiagram() {
-	const [nodes, setNodes] = useState(initialNodes);
-	const [edges, setEdges] = useState(initialEdges);
+	const [nodes, setNodes] = useState<Node[]>([]);
+	const [edges, setEdges] = useState<Edge[]>([]);
 
 	useEffect(() => {
 		const onMessage = (event: MessageEvent) => {
@@ -86,6 +91,9 @@ export default function ActivityDiagram() {
 				onNodesChange={onNodesChange}
 				onEdgesChange={onEdgesChange}
 				onConnect={onConnect}
+				nodeTypes={customNode}
+				edgeTypes={customEdge}
+        		connectionLineComponent={FloatingConnectionLine}
 				fitView
 			/>
 		</div>
