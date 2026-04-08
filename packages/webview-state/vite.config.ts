@@ -13,6 +13,11 @@ export default defineConfig({
     }),
     tailwindcss(),
   ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   build: {
     outDir: path.resolve(__dirname, '../vscode-extension/webview-dist/state'),
     emptyOutDir: false,

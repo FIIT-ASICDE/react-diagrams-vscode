@@ -1,10 +1,14 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+/* @import "@fontsource-variable/inter"; */
 
-.vscode-bg {
-	background-color: var(--vscode-editor-background, #252526);
-	color: var(--vscode-foreground, #252526);
-}
+@import "./App.sass";
 
-.webview-panels {
-	--design-unit: 3.4;
+@layer base {
+	@import "@xyflow/react/dist/style.css";
+
+	.floating-edges .react-flow__handle {
+		@apply opacity-0 w-0 h-0 min-w-0 min-h-0 pointer-events-none;
+	}
 }
