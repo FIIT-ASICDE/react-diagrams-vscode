@@ -54,8 +54,7 @@ export function GroupNode({ label, position, ...props }: GroupNodeProps) {
     }
   };
 
-  const pos = position || props.data?.position as PanelPosition;
-  const lbl = label || props.data?.label as ReactNode;
+  // console.debug(label, position, props);
 
   return (
     <BaseNode
@@ -63,10 +62,10 @@ export function GroupNode({ label, position, ...props }: GroupNodeProps) {
       {...props}
     >
       {/* <p>{label}</p> */}
-      <Panel className="m-0 p-0" position={pos}>
-        {lbl && (
-          <GroupNodeLabel className={getLabelClassName(pos)}>
-            {lbl}
+      <Panel className="m-0 p-0" position={position}>
+        {label && (
+          <GroupNodeLabel className={getLabelClassName(position)}>
+            {label}
           </GroupNodeLabel>
         )}
       </Panel>

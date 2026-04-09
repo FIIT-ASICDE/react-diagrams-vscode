@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
+    "build:debug": "vite --debug plugin-transform build",
     "lint": "eslint .",
     "preview": "vite preview",
     "watch": "vite build --watch"

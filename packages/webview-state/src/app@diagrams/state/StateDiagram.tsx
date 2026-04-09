@@ -4,7 +4,8 @@ import { Background, Controls, MarkerType, Position, ReactFlow, useReactFlow, ty
 import type { Id, StateDiagram as StateDiagramModel, StateGraphNode, StateMutatingFunction } from '@react-diagrams/core';
 import FloatingEdge from '@/app@components/xyflow-react/components/FloatingEdge';
 import FloatingConnectionLine from '@/app@components/xyflow-react/components/FloatingConnectionLine';
-import { GroupNode as LabeledGroupNode, type GroupNodeProps } from "@/app@shadcn/components/labeled-group-node";
+import LabeledGroupNode from '@/app@components/xyflow-react/components/LabeledGroupNode';
+import type { GroupNodeProps } from '@/app@shadcn/components/labeled-group-node';
 
 type StateDiagramProps = {
 	model?: StateDiagramModel;
@@ -15,30 +16,35 @@ const elk = new ELK();
 const LAYOUT = {
 	canvasPaddingX: 24,
 	canvasPaddingY: 24,
+
 	stateGroupMinWidth: 320,
 	stateGroupMinHeight: 180,
 	stateGroupGapX: 48,
 	stateGroupPaddingX: 24,
 	stateGroupPaddingY: 28,
 	stateGroupHeaderOffsetY: 28,
+
 	mutatorGroupMinWidth: 280,
 	mutatorGroupMinHeight: 170,
 	mutatorGroupGapX: 24,
 	mutatorGroupPaddingX: 18,
 	mutatorGroupPaddingY: 18,
 	mutatorGroupHeaderOffsetY: 24,
+
 	graphNodeWidth: 220,
 	graphNodeHeight: 56,
-	emptyMessageWidth: 220,
-	emptyMessageHeight: 56,
 };
 
 const ELK_OPTIONS = {
 	'elk.algorithm': 'layered',
 	'elk.direction': 'DOWN',
-	'elk.layered.spacing.nodeNodeBetweenLayers': '70',
-	'elk.spacing.nodeNode': '48',
-	'elk.padding': '[top=20,left=20,bottom=20,right=20]',
+	'elk.layered.spacing.nodeNodeBetweenLayers': '46',
+	'elk.spacing.nodeNode': '80',
+	'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
+	'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+	'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+	'elk.layered.feedbackEdges': 'true',
+	'elk.edgeRouting': 'ORTHOGONAL',
 };
 
 const edgeTypes: EdgeTypes = {
@@ -61,7 +67,9 @@ function asNodeLabel(node: StateGraphNode) {
 async function layoutMutator(mutator: StateMutatingFunction) {
 	if (!mutator.nodes.length) {
 		return {
+			mutator,
 			layoutedNodes: [],
+			transitions: [],
 			width: LAYOUT.mutatorGroupMinWidth,
 			height: LAYOUT.mutatorGroupMinHeight,
 		};
@@ -70,36 +78,34 @@ async function layoutMutator(mutator: StateMutatingFunction) {
 	const graph = {
 		id: `elk:${mutator.id}`,
 		layoutOptions: ELK_OPTIONS,
-		children: mutator.nodes.map((node) => ({
-			id: node.id,
+		children: mutator.nodes.map(node => ({
 			width: LAYOUT.graphNodeWidth,
 			height: LAYOUT.graphNodeHeight,
+			...node
 		})),
-		edges: mutator.transitions.map((transition) => ({
-			id: transition.id,
+		edges: mutator.transitions.map(transition => ({
 			sources: [transition.fromNodeId],
 			targets: [transition.toNodeId],
+			...transition
 		})),
 	};
 
-	const result = await elk.layout(graph);
-	const layoutedNodes = (result.children ?? []).map((node) => ({
-		id: node.id,
+	const { children = [], edges: transitions } = await elk.layout(graph);
+	const layoutedNodes = children.map(node => ({
+		...node,
 		x: node.x ?? 0,
 		y: node.y ?? 0,
 		width: node.width ?? LAYOUT.graphNodeWidth,
 		height: node.height ?? LAYOUT.graphNodeHeight,
 	}));
 
-	const maxX = layoutedNodes.length
-		? Math.max(...layoutedNodes.map((node) => node.x + node.width))
-		: 0;
-	const maxY = layoutedNodes.length
-		? Math.max(...layoutedNodes.map((node) => node.y + node.height))
-		: 0;
+	const maxX = layoutedNodes.length ? Math.max(...layoutedNodes.map((node) => node.x + node.width)) : 0;
+	const maxY = layoutedNodes.length ? Math.max(...layoutedNodes.map((node) => node.y + node.height)) : 0;
 
 	return {
+		mutator,
 		layoutedNodes,
+		transitions,
 		width: Math.max(LAYOUT.mutatorGroupMinWidth, maxX + (LAYOUT.mutatorGroupPaddingX * 2)),
 		height: Math.max(LAYOUT.mutatorGroupMinHeight, maxY + (LAYOUT.mutatorGroupPaddingY * 2) + LAYOUT.mutatorGroupHeaderOffsetY),
 	};
@@ -134,17 +140,17 @@ async function toFlow(model?: StateDiagramModel) {
 			? Math.max(LAYOUT.stateGroupMinHeight, tallestMutator + (LAYOUT.stateGroupPaddingY * 2) + LAYOUT.stateGroupHeaderOffsetY)
 			: LAYOUT.stateGroupMinHeight;
 
-		const stateGroupId = `state-group:${stateVariable.id}`;
+		const stateGroupId = stateVariable.id;
 		nodes.push({
 			id: stateGroupId,
 			type: 'labeledGroupNode',
 			position: { x: stateGroupOffsetX, y: LAYOUT.canvasPaddingY },
 			data: { label: stateVariable.name, position: 'top-left' } as GroupNodeProps,
+			width: stateGroupWidth,
+			height: stateGroupHeight,
 			style: {
-				width: stateGroupWidth,
-				height: stateGroupHeight,
 				borderRadius: 12,
-					border: 'none',
+				border: 'none',
 				color: 'var(--vscode-foreground)',
 			},
 			draggable: false,
@@ -157,9 +163,9 @@ async function toFlow(model?: StateDiagramModel) {
 				parentId: stateGroupId,
 				extent: 'parent',
 				data: { label: 'No states or mutators' },
+				width: Math.min(stateGroupWidth - (LAYOUT.stateGroupPaddingX * 2), LAYOUT.graphNodeWidth + 40),
+				height: LAYOUT.graphNodeHeight,
 				style: {
-					width: Math.min(stateGroupWidth - (LAYOUT.stateGroupPaddingX * 2), LAYOUT.emptyMessageWidth + 40),
-					height: LAYOUT.emptyMessageHeight,
 					padding: 14,
 					borderRadius: 8,
 					border: '1px dashed var(--vscode-descriptionForeground)',
@@ -175,11 +181,8 @@ async function toFlow(model?: StateDiagramModel) {
 		}
 
 		let mutatorOffsetX = LAYOUT.stateGroupPaddingX;
-		for (let mutatorIndex = 0; mutatorIndex < mutators.length; mutatorIndex++) {
-			const mutator = mutators[mutatorIndex];
-			const mutatorLayout = mutatorLayouts[mutatorIndex];
-			const mutatorGroupId = `${stateGroupId}:mutator-group:${mutator.id}`;
-
+		for (const mutatorLayout of mutatorLayouts) {
+			const mutatorGroupId = `${stateGroupId}-${mutatorLayout.mutator.id}`;
 			nodes.push({
 				id: mutatorGroupId,
 				type: 'labeledGroupNode',
@@ -189,10 +192,10 @@ async function toFlow(model?: StateDiagramModel) {
 				},
 				parentId: stateGroupId,
 				extent: 'parent',
-				data: { label: mutator.name, position: 'top-left' } as GroupNodeProps,
+				data: { label: mutatorLayout.mutator.name, position: 'top-left' } as GroupNodeProps,
+				width: mutatorLayout.width,
+				height: mutatorLayout.height,
 				style: {
-					width: mutatorLayout.width,
-					height: mutatorLayout.height,
 					borderRadius: 14,
 					border: 'none',
 					color: 'var(--vscode-foreground)',
@@ -201,30 +204,25 @@ async function toFlow(model?: StateDiagramModel) {
 			});
 
 			const nodeIdMap = new Map<Id, string>();
-			const layoutedNodesById = new Map(mutatorLayout.layoutedNodes.map((node) => [node.id, node]));
-			for (const graphNode of mutator.nodes) {
-				const flowNodeId = `${mutatorGroupId}:node:${graphNode.id}`;
+			for (const graphNode of mutatorLayout.layoutedNodes) {
+				const flowNodeId = `${mutatorGroupId}-${graphNode.id}`;
 				nodeIdMap.set(graphNode.id, flowNodeId);
-				const layoutedNode = layoutedNodesById.get(graphNode.id);
-				const nodeX = layoutedNode?.x ?? 0;
-				const nodeY = layoutedNode?.y ?? 0;
-				const nodeWidth = layoutedNode?.width ?? LAYOUT.graphNodeWidth;
-				const nodeHeight = layoutedNode?.height ?? LAYOUT.graphNodeHeight;
-
+				const { x, y, width, height } = graphNode;
+		
 				nodes.push({
 					id: flowNodeId,
 					position: {
-						x: LAYOUT.mutatorGroupPaddingX + nodeX,
-						y: LAYOUT.mutatorGroupHeaderOffsetY + LAYOUT.mutatorGroupPaddingY + nodeY,
+						x: LAYOUT.mutatorGroupPaddingX + x,
+						y: LAYOUT.mutatorGroupHeaderOffsetY + LAYOUT.mutatorGroupPaddingY + y,
 					},
 					parentId: mutatorGroupId,
 					extent: 'parent',
 					data: { label: asNodeLabel(graphNode) },
 					targetPosition: Position.Top,
 					sourcePosition: Position.Bottom,
+					width,
+					height,
 					style: {
-						width: nodeWidth,
-						height: nodeHeight,
 						borderRadius: 8,
 						border: graphNode.nodeType === 'state-update'
 							? '1px solid var(--vscode-testing-iconPassed)'
@@ -239,15 +237,17 @@ async function toFlow(model?: StateDiagramModel) {
 				});
 			}
 
-			for (const transition of mutator.transitions) {
+			for (const { id, ...transition } of mutatorLayout.transitions) {
 				const source = nodeIdMap.get(transition.fromNodeId);
 				const target = nodeIdMap.get(transition.toNodeId);
+
+				console.debug(source == transition.fromNodeId, source, transition.toNodeId, transition)
 
 				if (!source || !target)
 					continue;
 
 				edges.push({
-					id: `${mutatorGroupId}:edge:${transition.id}`,
+					id,
 					source,
 					target,
 					label: transition.label,

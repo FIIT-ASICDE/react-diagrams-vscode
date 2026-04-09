@@ -20,6 +20,9 @@ export default defineConfig({
   },
   build: {
     outDir: path.resolve(__dirname, '../vscode-extension/webview-dist/state'),
+    // minify: false,
+    // cssMinify: false,
+    reportCompressedSize: false,
     emptyOutDir: false,
     rollupOptions: {
       output: {
