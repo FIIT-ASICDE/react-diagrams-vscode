@@ -7,7 +7,7 @@ import { componentStateCache, getRootPath } from "../app@utils/cache";
 
 export class ComponentStatePanel {
 	public static readonly NAME = "Component State";
-	public static readonly WEBVIEW_DIR = "webview-dist/state";
+	public static readonly WEBVIEW_DIR = "dist/webview";
 	private static readonly SUPPORTED_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx"];
 	// private static readonly modelCache = new Map<string, any>();
 
