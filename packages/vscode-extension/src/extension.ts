@@ -1,5 +1,6 @@
-import { commands, ExtensionContext, ExtensionMode, RelativePattern, workspace } from "vscode";
+import { commands, ExtensionContext, ExtensionMode, RelativePattern, window, workspace } from "vscode";
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
+import { normalizeFilePath } from "@react-diagrams/core";
 
 export function activate(context: ExtensionContext) {
 	const showComponentStateDiagram = commands.registerCommand("vs-code-ext.componentState", () => {
@@ -11,7 +12,16 @@ export function activate(context: ExtensionContext) {
 			return;
 		}
 
-		void ComponentStatePanel.refreshCurrentPanel(document);
+		ComponentStatePanel.updateCache(document);
+
+		const activeDocument = window.activeTextEditor?.document;
+		if (!activeDocument)
+			return;
+
+		if (normalizeFilePath(activeDocument.uri.fsPath) != normalizeFilePath(document.uri.fsPath))
+			return;
+
+		void ComponentStatePanel.refreshCurrentPanel(activeDocument);
 	});
 
 	const autoRestartInDev = setupAutoRestartInDevelopment(context);
