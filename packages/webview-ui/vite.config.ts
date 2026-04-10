@@ -13,8 +13,16 @@ export default defineConfig({
     }),
     tailwindcss(),
   ],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   build: {
-    outDir: path.resolve(__dirname, '../vscode-extension/webview-dist/state'),
+    outDir: path.resolve(__dirname, '../vscode-extension/dist/webview'),
+    // minify: false,
+    // cssMinify: false,
+    reportCompressedSize: false,
     emptyOutDir: false,
     rollupOptions: {
       output: {

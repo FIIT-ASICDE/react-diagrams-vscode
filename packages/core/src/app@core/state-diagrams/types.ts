@@ -4,7 +4,7 @@ export type FunctionDeclarationKind = 'function' | 'arrow-function' | 'function-
 
 export type StateHookKind = 'useState';
 
-export type Id = number | string;
+export type Id = string /*| number*/;
 
 export interface StateDiagramComponent {
 	name: string;

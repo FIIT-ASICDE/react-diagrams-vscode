@@ -1,13 +1,13 @@
-import * as path from "path";
 import { Disposable, TextDocument, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
 import { getNonce } from "../app@utils/crypto";
 import { getUri } from "../app@utils/urls";
-import { parseReactComponent, type StateDiagram } from "@react-diagrams/core";
 import { normalizeFilePath } from "@react-diagrams/core";
+import { basename, extname } from "path";
+import { componentStateCache, getRootPath } from "../app@utils/cache";
 
 export class ComponentStatePanel {
 	public static readonly NAME = "Component State";
-	public static readonly WEBVIEW_DIR = "webview-dist/state";
+	public static readonly WEBVIEW_DIR = "dist/webview";
 	private static readonly SUPPORTED_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx"];
 	// private static readonly modelCache = new Map<string, any>();
 
@@ -15,7 +15,7 @@ export class ComponentStatePanel {
 
 	private readonly panel: WebviewPanel;
 	private disposables: Disposable[] = [];
-	private currentFilePath?: string;
+	// private currentFilePath?: string;
 	private refreshRequestId = 0;
 
 	private initialDocument?: TextDocument;
@@ -72,40 +72,36 @@ export class ComponentStatePanel {
 		await ComponentStatePanel.currentPanel?.refresh(document);
 	}
 
+	public static updateCache(document: TextDocument, forceUpdate?) {
+		const result = ComponentStatePanel.doCommonChecksAndGet(document);
+		if (!result)
+			return;
+
+		const { rootPath, targetDocument } = result;
+		return componentStateCache.update(targetDocument, rootPath, forceUpdate);
+	}
+
 	// public static isShowingDocument(document: TextDocument) {
 	// 	return ComponentStatePanel.currentPanel?.isShowingDocument(document) ?? false;
 	// }
 
-	public async refresh(document?: TextDocument) {
+	public async refresh(document?: TextDocument, forceUpdate?) {
 		const result = ComponentStatePanel.doCommonChecksAndGet(document);
 		if (!result)
 			return;
 		const { activeFilePath, rootPath, targetDocument } = result;
 
-		const cacheKey = normalizeFilePath(activeFilePath);
-		const requestId = ++this.refreshRequestId;
-		this.currentFilePath = cacheKey;
+		const requestId = ++this.refreshRequestId;;
 
-		this.panel.title = `${ComponentStatePanel.NAME} (${path.basename(activeFilePath)})`;
-
-		// if (!forceRefresh) {
-		// 	const cachedModel = ComponentStatePanel.modelCache.get(cacheKey);
-		// 	if (cachedModel) {
-		// 		console.debug("Using cached model for", cacheKey);
-		// 		this.postMessage("update", cachedModel);
-		// 		return;
-		// 	}
-		// }
+		this.panel.title = `${ComponentStatePanel.NAME} (${basename(activeFilePath)})`;
 
 		try {
-			const model = parseReactComponent(targetDocument.getText(), rootPath);
+			const model = componentStateCache.update(targetDocument, rootPath, forceUpdate);
 
 			if (requestId != this.refreshRequestId) // Ignore if a newer refresh started while this parse was running.
 				return console.debug("Outdated refresh result discarded");
 
-			const data = { model };
-			// ComponentStatePanel.modelCache.set(cacheKey, data);
-			this.postMessage("update", data);
+			this.postMessage("update", { model });
 			// console.debug("Sending update");
 		} catch (error) {
 			console.error("Error parsing React component:", error);
@@ -149,7 +145,7 @@ export class ComponentStatePanel {
 			return;
 		}
 
-		const rootPath = workspace.getWorkspaceFolder(targetDocument.uri)?.uri.fsPath ?? workspace.workspaceFolders?.[0]?.uri.fsPath;
+		const rootPath = getRootPath(targetDocument);
 		if (!rootPath) {
 			window.showWarningMessage("No workspace folder found. Open the project folder first.");
 			return;
@@ -159,7 +155,7 @@ export class ComponentStatePanel {
 	}
 
 	private static isSupportedFile(filePath: string) {
-		return ComponentStatePanel.SUPPORTED_EXTENSIONS.includes(path.extname(filePath));
+		return ComponentStatePanel.SUPPORTED_EXTENSIONS.includes(extname(filePath));
 	}
 
 	/**

@@ -1,9 +1,9 @@
-export * from "./types";
+// export * from "./types";
 
-import path from "path";
+import { normalize } from "path";
 
 export function normalizeFilePath(filePath: string) {
-	const normalizedPath = path.normalize(filePath);
+	const normalizedPath = normalize(filePath);
 	return process.platform == "win32" ? normalizedPath.toLowerCase() : normalizedPath;
 }
 
