@@ -58,6 +58,7 @@ export default function ActivityDiagram() {
 	const [edges, setEdges] = useState<Edge[]>([]);
 	const [renameDraft, setRenameDraft] = useState<{ nodeId: string; value: string } | null>(null);
 	const [previewStack, setPreviewStack] = useState<Array<{ title: string; sourceText?: string; nodes: Node[]; edges: Edge[] }>>([]);
+	const [fitViewRevision, setFitViewRevision] = useState(0);
 	const nodeCounter = useRef(1);
 	const reactFlowRef = useRef<{ fitView: (options?: { padding?: number; duration?: number }) => void } | null>(null);
 
@@ -122,6 +123,7 @@ export default function ActivityDiagram() {
 				setNodes(codeMessage.nodes);
 				setEdges(codeMessage.edges);
 				setPreviewStack([]);
+				setFitViewRevision((revision) => revision + 1);
 				nodeCounter.current = codeMessage.nodes.length + 1;
 				return;
 			}
@@ -135,6 +137,7 @@ export default function ActivityDiagram() {
 
 				setEdges([{ id: 'n1-n2', source: 'n1', target: 'n2' }]);
 				setPreviewStack([]);
+				setFitViewRevision((revision) => revision + 1);
 				return;
 			}
 
@@ -149,6 +152,7 @@ export default function ActivityDiagram() {
 						edges: previewMessage.edges,
 					},
 				]);
+				setFitViewRevision((revision) => revision + 1);
 				return;
 			}
 
@@ -158,6 +162,7 @@ export default function ActivityDiagram() {
 					...stackSnapshot,
 					{ title: 'Preview unavailable', sourceText: errorMessage.message, nodes: [], edges: [] },
 				]);
+				setFitViewRevision((revision) => revision + 1);
 				return;
 			}
 		};
@@ -182,13 +187,27 @@ export default function ActivityDiagram() {
 		requestAnimationFrame(() => {
 			reactFlowRef.current?.fitView({ padding: 0.22, duration: 250 });
 		});
-	}, [displayedNodes, displayedEdges]);
+	}, [fitViewRevision, displayedNodes.length]);
 
 	const onNodesChange = useCallback(
 		(changes) => {
 			if (inPreview) {
+				setPreviewStack((stackSnapshot) => {
+					if (stackSnapshot.length === 0) {
+						return stackSnapshot;
+					}
+
+					const lastIndex = stackSnapshot.length - 1;
+					const lastPreview = stackSnapshot[lastIndex];
+
+					return [
+						...stackSnapshot.slice(0, lastIndex),
+						{ ...lastPreview, nodes: applyNodeChanges(changes, lastPreview.nodes) },
+					];
+				});
 				return;
 			}
+
 			setNodes((nodesSnapshot) => applyNodeChanges(changes, nodesSnapshot));
 		},
 		[inPreview],

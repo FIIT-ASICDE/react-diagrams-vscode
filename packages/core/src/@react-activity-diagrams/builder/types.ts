@@ -2,6 +2,8 @@ export type FlowNodeData = {
 	label: string;
 	sourceText?: string;
 	nodeKind?: string;
+	hasFalseBranch?: boolean;
+	preferredWidth?: number;
 };
 
 export type FlowGraph = {

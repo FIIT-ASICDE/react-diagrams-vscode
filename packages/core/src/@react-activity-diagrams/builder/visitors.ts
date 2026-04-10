@@ -19,6 +19,29 @@ export type BuildResult = {
 export class StatementVisitor {
   constructor(private writer: GraphWriter) {}
 
+  private preferredWidthContext?: number;
+
+  private withPreferredWidth<T>(preferredWidth: number | undefined, build: () => T): T {
+    const previousWidth = this.preferredWidthContext;
+    this.preferredWidthContext = preferredWidth;
+    try {
+      return build();
+    } finally {
+      this.preferredWidthContext = previousWidth;
+    }
+  }
+
+  private withNodeLayoutData<T extends Record<string, unknown>>(data: T): T {
+    if (!this.preferredWidthContext) {
+      return data;
+    }
+
+    return {
+      ...data,
+      preferredWidth: this.preferredWidthContext,
+    };
+  }
+
   private getExpandableMeta(stmt: Statement): { label: string; nodeKind: 'function' | 'class' | 'interface' | 'type' } | undefined {
     if (stmt.getKind() === SyntaxKind.FunctionDeclaration) {
       const name = stmt.asKind(SyntaxKind.FunctionDeclaration)?.getName() ?? 'anonymous';
@@ -107,8 +130,10 @@ export class StatementVisitor {
     const expandableMeta = this.getExpandableMeta(stmt);
     if (expandableMeta) {
       const id = this.writer.addFlowNode('expandable', this.compact(expandableMeta.label), {
-        sourceText: stmt.getText(),
-        nodeKind: expandableMeta.nodeKind,
+        ...this.withNodeLayoutData({
+          sourceText: stmt.getText(),
+          nodeKind: expandableMeta.nodeKind,
+        }),
       });
       return { entry: id, exits: [id] };
     }
@@ -118,8 +143,10 @@ export class StatementVisitor {
     }
     if (stmt.getKind() === SyntaxKind.ReturnStatement) {
       const id = this.writer.addFlowNode('action', this.compact(stmt.getText()) + " return", {
-        sourceText: stmt.getText(),
-        nodeKind: 'return',
+        ...this.withNodeLayoutData({
+          sourceText: stmt.getText(),
+          nodeKind: 'return',
+        }),
       });
       return { entry: id, exits: [] };
     }
@@ -145,20 +172,26 @@ export class StatementVisitor {
 
   visitAction(label: string, sourceText?: string): BuildResult {
     const id = this.writer.addFlowNode('action', this.compact(label) + " action", {
-      sourceText,
-      nodeKind: 'action',
+      ...this.withNodeLayoutData({
+        sourceText,
+        nodeKind: 'action',
+      }),
     });
     return { entry: id, exits: [id] };
   }
 
   visitIf(stmt: IfStatement): BuildResult {
+    const elseStmt = stmt.getElseStatement();
     const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()) + " if", {
-      sourceText: stmt.getText(),
-      nodeKind: 'decision',
+      ...this.withNodeLayoutData({
+        sourceText: stmt.getText(),
+        nodeKind: 'decision',
+      }),
     });
 
-    const thenResult = this.visitBranch(stmt.getThenStatement());
-    const elseStmt = stmt.getElseStatement();
+    const thenResult = elseStmt
+      ? this.visitBranch(stmt.getThenStatement())
+      : this.withPreferredWidth(500, () => this.visitBranch(stmt.getThenStatement()));
     const elseResult = elseStmt
       ? this.visitBranch(elseStmt)
       : undefined;
@@ -184,8 +217,10 @@ export class StatementVisitor {
 
   visitWhile(stmt: WhileStatement): BuildResult {
     const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()) + " while", {
-      sourceText: stmt.getText(),
-      nodeKind: 'decision',
+      ...this.withNodeLayoutData({
+        sourceText: stmt.getText(),
+        nodeKind: 'decision',
+      }),
     });
 
     const body = this.visitBranch(stmt.getStatement());
@@ -211,14 +246,20 @@ export class StatementVisitor {
     const initializer = stmt.getInitializer();
     if (initializer) {
       firstEntry = this.writer.addFlowNode('action', this.compact(initializer.getText()) + " for", {
-        sourceText: stmt.getText(),
-        nodeKind: 'action',
+        ...this.withNodeLayoutData({
+          sourceText: stmt.getText(),
+          nodeKind: 'action',
+        }),
       });
     }
 
     const decisionId = this.writer.addFlowNode(
       'decision',
       this.compact(stmt.getCondition()?.getText() ?? 'for') + " for",
+      this.withNodeLayoutData({
+        sourceText: stmt.getText(),
+        nodeKind: 'decision',
+      }),
     );
 
     if (firstEntry) {
@@ -233,8 +274,10 @@ export class StatementVisitor {
     let incrementId: string | undefined;
     if (incrementor) {
       incrementId = this.writer.addFlowNode('action', this.compact(incrementor.getText()) + " for"  , {
-        sourceText: stmt.getText(),
-        nodeKind: 'action',
+        ...this.withNodeLayoutData({
+          sourceText: stmt.getText(),
+          nodeKind: 'action',
+        }),
       });
     }
 
