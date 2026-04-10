@@ -11,17 +11,27 @@ export interface LayoutResult {
   edges: Edge[];
 }
 
-const elkOptions: ElkLayoutOptions = {
+const elkBaseOptions: ElkLayoutOptions = {
   'elk.algorithm': 'layered',
-  'elk.direction': 'DOWN',
   'elk.layered.spacing.nodeNodeBetweenLayers': '100',
-  'elk.spacing.nodeNode': '80',
+  'elk.spacing.nodeNode': '70',
   'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
   'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
   'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+  'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
   'elk.layered.feedbackEdges': 'true',
-  'elk.edgeRouting': 'ORTHOGONAL',
+  'elk.edgeRouting': 'POLYLINE',
 };
+
+function estimateNodeSize(node: Node): { width: number; height: number } {
+  const nodeType = String(node.type ?? 'action');
+
+  if (nodeType === 'initial' || nodeType === 'end' || nodeType === 'merge') {
+    return { width: 56, height: 56 };
+  }
+
+  return { width: 220, height: 56 };
+}
 
 /**
  * Applies ELK layered layout algorithm to nodes and edges
@@ -33,23 +43,24 @@ const elkOptions: ElkLayoutOptions = {
 export async function applyElkLayout(
   nodes: Node[],
   edges: Edge[],
-  direction: ElkDirection = 'RIGHT',
+  direction: ElkDirection = 'DOWN',
 ): Promise<LayoutResult> {
   const isHorizontal = direction === 'RIGHT';
 
   const graph = {
     id: 'root',
     layoutOptions: {
-      'elk.direction': isHorizontal ? 'RIGHT' : 'RIGHT',
-      ...elkOptions,
+      ...elkBaseOptions,
+      'elk.direction': isHorizontal ? 'RIGHT' : 'DOWN',
     },
-    children: nodes.map((node) => ({
-      ...node,
-      targetPosition: isHorizontal ? Position.Left : Position.Top,
-      sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
-      width: 150,
-      height: 50,
-    })),
+    children: nodes.map((node) => {
+      const { width, height } = estimateNodeSize(node);
+      return {
+        id: node.id,
+        width,
+        height,
+      };
+    }),
     edges: edges.map((edge) => ({
       id: edge.id,
       sources: [edge.source],
@@ -65,6 +76,7 @@ export async function applyElkLayout(
     position: { x: elkNode.x ?? 0, y: elkNode.y ?? 0 },
     data: nodes.find((n) => n.id === elkNode.id)?.data ?? {},
     type: nodes.find((n) => n.id === elkNode.id)?.type,
+    draggable: true,
     sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
     targetPosition: isHorizontal ? Position.Left : Position.Top,
   }));

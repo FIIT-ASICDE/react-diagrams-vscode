@@ -1,5 +1,6 @@
 import { Edge, Node } from '@xyflow/react';
 import {
+  Statement,
   SourceFile,
 } from 'ts-morph';
 import { GraphWriter, type WriterState } from './graph-writer';
@@ -11,18 +12,22 @@ export class DiagramBuilder {
   private nodeIdCounter = 0;
 
   public async build(ast: SourceFile): Promise<{ nodes: Node[]; edges: Edge[] }> {
+    return this.buildStatements(ast.getStatements());
+  }
+
+  public async buildStatements(statements: Statement[]): Promise<{ nodes: Node[]; edges: Edge[] }> {
     this.reset();
 
     const state: WriterState = { nodeIdCounter: 0 };
     const writer = new GraphWriter(this.nodes, this.edges, state);
     const visitor = new StatementVisitor(writer);
 
-    const startId = writer.addFlowNode('terminator', 'Start');
-    const main = visitor.visitStatements(ast.getStatements());
+    const startId = writer.addFlowNode('initial', 'Start');
+    const main = visitor.visitStatements(statements);
 
     this.nodeIdCounter = state.nodeIdCounter;
 
-    const endId = writer.addFlowNode('terminator', 'End');
+    const endId = writer.addFlowNode('end', 'End');
 
     if (main.entry) {
       writer.addEdge(startId, main.entry);

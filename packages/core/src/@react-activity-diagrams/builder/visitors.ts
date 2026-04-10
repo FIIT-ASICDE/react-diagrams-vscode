@@ -19,6 +19,55 @@ export type BuildResult = {
 export class StatementVisitor {
   constructor(private writer: GraphWriter) {}
 
+  private getExpandableMeta(stmt: Statement): { label: string; nodeKind: 'function' | 'class' | 'interface' | 'type' } | undefined {
+    if (stmt.getKind() === SyntaxKind.FunctionDeclaration) {
+      const name = stmt.asKind(SyntaxKind.FunctionDeclaration)?.getName() ?? 'anonymous';
+      return { label: `function ${name}()`, nodeKind: 'function' };
+    }
+
+    if (stmt.getKind() === SyntaxKind.ClassDeclaration) {
+      const name = stmt.asKind(SyntaxKind.ClassDeclaration)?.getName() ?? 'anonymous';
+      return { label: `class ${name}`, nodeKind: 'class' };
+    }
+
+    if (stmt.getKind() === SyntaxKind.InterfaceDeclaration) {
+      const name = stmt.asKind(SyntaxKind.InterfaceDeclaration)?.getName() ?? 'anonymous';
+      return { label: `interface ${name}`, nodeKind: 'interface' };
+    }
+
+    if (stmt.getKind() === SyntaxKind.TypeAliasDeclaration) {
+      const name = stmt.asKind(SyntaxKind.TypeAliasDeclaration)?.getName() ?? 'anonymous';
+      return { label: `type ${name}`, nodeKind: 'type' };
+    }
+
+    if (stmt.getKind() === SyntaxKind.VariableStatement) {
+      const variableStmt = stmt as VariableStatement;
+      const declaration = variableStmt.getDeclarations()[0];
+      const initializer = declaration?.getInitializer();
+
+      if (!initializer) {
+        return undefined;
+      }
+
+      const hasFunctionInitializer =
+        initializer.getDescendantsOfKind(SyntaxKind.ArrowFunction).length > 0 ||
+        initializer.getDescendantsOfKind(SyntaxKind.FunctionExpression).length > 0;
+      const hasClassInitializer = initializer.getDescendantsOfKind(SyntaxKind.ClassExpression).length > 0;
+
+      if (hasFunctionInitializer) {
+        const name = declaration?.getName() ?? 'anonymous';
+        return { label: `function ${name}()`, nodeKind: 'function' };
+      }
+
+      if (hasClassInitializer) {
+        const name = declaration?.getName() ?? 'anonymous';
+        return { label: `class ${name}`, nodeKind: 'class' };
+      }
+    }
+
+    return undefined;
+  }
+
   private compact(text: string): string {
     const cleaned = text.replace(/\s+/g, ' ').trim();
     return cleaned.length > 40 ? `${cleaned.slice(0, 37)}...` : cleaned;
@@ -29,6 +78,10 @@ export class StatementVisitor {
     let pendingExits: string[] = [];
 
     for (let i = 0; i < statements.length; i++) {
+      if (statements[i].getKind() === SyntaxKind.ImportDeclaration) {
+        continue;
+      }
+
       const result = this.visitStatement(statements[i]);
 
       if (!result.entry) continue;
@@ -51,16 +104,23 @@ export class StatementVisitor {
   }
 
   visitStatement(stmt: Statement): BuildResult {
+    const expandableMeta = this.getExpandableMeta(stmt);
+    if (expandableMeta) {
+      const id = this.writer.addFlowNode('expandable', this.compact(expandableMeta.label), {
+        sourceText: stmt.getText(),
+        nodeKind: expandableMeta.nodeKind,
+      });
+      return { entry: id, exits: [id] };
+    }
+
     if (stmt.getKind() === SyntaxKind.ExpressionStatement) {
-      return this.visitAction((stmt as ExpressionStatement).getExpression().getText());
+      return this.visitAction((stmt as ExpressionStatement).getExpression().getText(), stmt.getText());
     }
-
-    if (stmt.getKind() === SyntaxKind.VariableStatement) {
-      return this.visitAction((stmt as VariableStatement).getText());
-    }
-
     if (stmt.getKind() === SyntaxKind.ReturnStatement) {
-      const id = this.writer.addFlowNode('action', stmt.getText());
+      const id = this.writer.addFlowNode('action', this.compact(stmt.getText()) + " return", {
+        sourceText: stmt.getText(),
+        nodeKind: 'return',
+      });
       return { entry: id, exits: [] };
     }
 
@@ -80,16 +140,22 @@ export class StatementVisitor {
       return this.visitStatements((stmt as Block).getStatements());
     }
 
-    return this.visitAction(this.compact(stmt.getText()));
+    return this.visitAction(this.compact(stmt.getText()), stmt.getText());
   }
 
-  visitAction(label: string): BuildResult {
-    const id = this.writer.addFlowNode('action', this.compact(label));
+  visitAction(label: string, sourceText?: string): BuildResult {
+    const id = this.writer.addFlowNode('action', this.compact(label) + " action", {
+      sourceText,
+      nodeKind: 'action',
+    });
     return { entry: id, exits: [id] };
   }
 
   visitIf(stmt: IfStatement): BuildResult {
-    const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()));
+    const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()) + " if", {
+      sourceText: stmt.getText(),
+      nodeKind: 'decision',
+    });
 
     const thenResult = this.visitBranch(stmt.getThenStatement());
     const elseStmt = stmt.getElseStatement();
@@ -117,14 +183,17 @@ export class StatementVisitor {
   }
 
   visitWhile(stmt: WhileStatement): BuildResult {
-    const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()));
+    const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()) + " while", {
+      sourceText: stmt.getText(),
+      nodeKind: 'decision',
+    });
 
     const body = this.visitBranch(stmt.getStatement());
 
     if (body.entry) {
       this.writer.addEdge(decisionId, body.entry, 'yes');
       for (const exit of body.exits) {
-        this.writer.addEdge(exit, decisionId);
+        this.writer.addEdge(exit, decisionId, '', 'dashed');
       }
     } else {
       this.writer.addEdge(decisionId, decisionId, 'yes');
@@ -141,12 +210,15 @@ export class StatementVisitor {
 
     const initializer = stmt.getInitializer();
     if (initializer) {
-      firstEntry = this.writer.addFlowNode('action', this.compact(initializer.getText()));
+      firstEntry = this.writer.addFlowNode('action', this.compact(initializer.getText()) + " for", {
+        sourceText: stmt.getText(),
+        nodeKind: 'action',
+      });
     }
 
     const decisionId = this.writer.addFlowNode(
       'decision',
-      this.compact(stmt.getCondition()?.getText() ?? 'for'),
+      this.compact(stmt.getCondition()?.getText() ?? 'for') + " for",
     );
 
     if (firstEntry) {
@@ -160,7 +232,10 @@ export class StatementVisitor {
 
     let incrementId: string | undefined;
     if (incrementor) {
-      incrementId = this.writer.addFlowNode('action', this.compact(incrementor.getText()));
+      incrementId = this.writer.addFlowNode('action', this.compact(incrementor.getText()) + " for"  , {
+        sourceText: stmt.getText(),
+        nodeKind: 'action',
+      });
     }
 
     if (body.entry) {

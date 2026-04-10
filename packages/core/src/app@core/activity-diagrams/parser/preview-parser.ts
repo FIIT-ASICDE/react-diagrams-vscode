@@ -1,12 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { Node, Project, SyntaxKind } from "ts-morph";
+import { Project } from "ts-morph";
 import { DiagramBuilder } from "../../../@react-activity-diagrams";
 import { Edge, Node as Nds } from "@xyflow/react";
-/**
- * Resolve a tsconfig/jsconfig near the provided root so ts-morph can parse with
- * project-aware compiler settings when available.
- */
+import { getPreviewStatements } from "./preview-source";
+import { buildClassMembersPreviewGraph } from "./preview-graph";
+
 function findConfigFile(rootDir: string): string | undefined {
 	const candidates = [
 		path.join(rootDir, "tsconfig.json"),
@@ -22,10 +21,6 @@ function findConfigFile(rootDir: string): string | undefined {
 	return undefined;
 }
 
-/**
- * Create a ts-morph project instance. If there is no config file, we still
- * create a project with default settings so parsing can proceed.
- */
 function createProject(rootDir: string): Project {
 	const configFile = findConfigFile(rootDir);
 
@@ -43,20 +38,33 @@ function createProject(rootDir: string): Project {
 	});
 }
 
-// Parse the provided source text as a temporary file in a ts-morph project.
-// Use custom diagram builder to convert the source file into a graph of nodes and edges representing the activity diagram.
-export async function parseActivityComponent(sourceText: string, rootDir = ".", tempFileName = "__activity_temp__.tsx"): Promise<{nodes: Nds[], edges: Edge[]}> {
+export async function parseActivityPreview(sourceText: string, rootDir = ".", tempFileName = "__activity_preview__.tsx"): Promise<{nodes: Nds[], edges: Edge[]}> {
 	const project = createProject(rootDir);
 	const sourceFile = project.createSourceFile(tempFileName, sourceText, { overwrite: true });
 	const diagramBuilder = new DiagramBuilder();
 
 	try {
-		const graph = await diagramBuilder.build(sourceFile);
-		return graph;
+		const classMembersGraph = buildClassMembersPreviewGraph(sourceFile);
+		if (classMembersGraph) {
+			return classMembersGraph;
+		}
+
+		const previewStatements = getPreviewStatements(sourceFile);
+		if (previewStatements) {
+			return await diagramBuilder.buildStatements(previewStatements);
+		}
+
+		return await diagramBuilder.build(sourceFile);
+	}
+	catch {
+		return {
+			nodes: [
+				{ id: "preview-1", position: { x: 0, y: 0 }, data: { label: sourceText.slice(0, 80) || "Preview" } },
+			],
+			edges: [],
+		};
 	}
 	finally {
 		sourceFile.delete();
 	}
 }
-
-export { parseActivityPreview } from "./preview-parser";

@@ -2,7 +2,7 @@ import * as path from "path";
 import { Disposable, TextDocument, TextEditor, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
 import { getNonce } from "../app@utils/crypto";
 import { getUri } from "../app@utils/urls";
-import { parseActivityComponent } from "@react-diagrams/core";
+import { generateActivitySkeletonFromGraph, parseActivityComponent, parseActivityPreview } from "@react-diagrams/core";
 import { Node, Edge } from "@xyflow/react";
 export class ComponentActivityPanel {
 	public static readonly WEBVIEW_DIR = "webview-dist/state";
@@ -139,6 +139,43 @@ export class ComponentActivityPanel {
 		});
 	}
 
+	private async generateSkeletonFromDiagram(nodes: Node[], edges: Edge[]) {
+		if (!nodes?.length) {
+			window.showWarningMessage("Cannot generate skeleton: the activity diagram has no nodes.");
+			return;
+		}
+
+		const content = generateActivitySkeletonFromGraph(nodes, edges);
+		const generatedDocument = await workspace.openTextDocument({
+			language: "typescript",
+			content,
+		});
+
+		await window.showTextDocument(generatedDocument, ViewColumn.Beside, true);
+	}
+
+	private async generateNodePreview(sourceText: string, title: string) {
+		if (!sourceText.trim()) {
+			this.postMessage("code/nodePreviewError", { message: "This node has no source text to preview." });
+			return;
+		}
+
+		try {
+			const preview = await parseActivityPreview(sourceText, this.lastKnownFileDocument?.uri.fsPath ?? ".");
+			this.postMessage("code/nodePreviewData", {
+				title,
+				sourceText,
+				nodes: preview.nodes,
+				edges: preview.edges,
+			});
+		}
+		catch (error) {
+			this.postMessage("code/nodePreviewError", {
+				message: error instanceof Error ? error.message : "Could not build a preview for this node.",
+			});
+		}
+	}
+
 	private getWebviewContent(webview: Webview, extensionUri: Uri) {
 		const stylesUri = getUri(webview, extensionUri, [ComponentActivityPanel.WEBVIEW_DIR, "assets", "index.css"]);
 		const scriptUri = getUri(webview, extensionUri, [ComponentActivityPanel.WEBVIEW_DIR, "assets", "index.js"]);
@@ -175,6 +212,20 @@ export class ComponentActivityPanel {
 			case "code/request":
 				void this.publishActiveEditorCode();
 				return;
+
+			case "code/generateSkeleton": {
+				const nodes = Array.isArray(message.nodes) ? message.nodes as Node[] : [];
+				const edges = Array.isArray(message.edges) ? message.edges as Edge[] : [];
+				void this.generateSkeletonFromDiagram(nodes, edges);
+				return;
+			}
+
+			case "code/nodePreview": {
+				const sourceText = typeof message.sourceText === "string" ? message.sourceText : "";
+				const title = typeof message.title === "string" ? message.title : "Node";
+				void this.generateNodePreview(sourceText, title);
+				return;
+			}
 
 			case "hello":
 				window.showInformationMessage(text);
