@@ -1,10 +1,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { Project } from "ts-morph";
+import { Project, SyntaxKind, type ClassDeclaration } from "ts-morph";
 import { DiagramBuilder } from "../../../@react-activity-diagrams";
 import { Edge, Node as Nds } from "@xyflow/react";
 import { getPreviewStatements } from "./preview-source";
-import { buildClassMembersPreviewGraph } from "./preview-graph";
 
 function findConfigFile(rootDir: string): string | undefined {
 	const candidates = [
@@ -38,15 +37,71 @@ function createProject(rootDir: string): Project {
 	});
 }
 
+function classMembersToSyntheticSource(classDeclaration: ClassDeclaration): string | undefined {
+	const chunks: string[] = [];
+
+	for (const member of classDeclaration.getMembers()) {
+		if (member.getKind() === SyntaxKind.MethodDeclaration) {
+			const methodNode = member.asKind(SyntaxKind.MethodDeclaration);
+			const methodName = methodNode?.getName() ?? "method";
+			const bodyText = methodNode?.getBodyText();
+			if (bodyText) {
+				chunks.push(`function ${methodName}() {\n${bodyText}\n}`);
+			}
+		}
+
+		if (member.getKind() === SyntaxKind.Constructor) {
+			const ctorNode = member.asKind(SyntaxKind.Constructor);
+			const bodyText = ctorNode?.getBodyText();
+			if (bodyText) {
+				chunks.push(`function constructorMember() {\n${bodyText}\n}`);
+			}
+		}
+
+		if (member.getKind() === SyntaxKind.GetAccessor) {
+			const getNode = member.asKind(SyntaxKind.GetAccessor);
+			const accessorName = getNode?.getName() ?? "getter";
+			const bodyText = getNode?.getBodyText();
+			if (bodyText) {
+				chunks.push(`function get_${accessorName}() {\n${bodyText}\n}`);
+			}
+		}
+
+		if (member.getKind() === SyntaxKind.SetAccessor) {
+			const setNode = member.asKind(SyntaxKind.SetAccessor);
+			const accessorName = setNode?.getName() ?? "setter";
+			const bodyText = setNode?.getBodyText();
+			if (bodyText) {
+				chunks.push(`function set_${accessorName}() {\n${bodyText}\n}`);
+			}
+		}
+	}
+
+	if (!chunks.length) {
+		return undefined;
+	}
+
+	return chunks.join("\n\n");
+}
+
 export async function parseActivityPreview(sourceText: string, rootDir = ".", tempFileName = "__activity_preview__.tsx"): Promise<{nodes: Nds[], edges: Edge[]}> {
 	const project = createProject(rootDir);
 	const sourceFile = project.createSourceFile(tempFileName, sourceText, { overwrite: true });
 	const diagramBuilder = new DiagramBuilder();
 
 	try {
-		const classMembersGraph = buildClassMembersPreviewGraph(sourceFile);
-		if (classMembersGraph) {
-			return classMembersGraph;
+		const classDeclaration = sourceFile.getClasses()[0];
+		if (classDeclaration) {
+			const syntheticSource = classMembersToSyntheticSource(classDeclaration);
+			if (syntheticSource) {
+				const classPreviewFile = project.createSourceFile("__activity_class_preview__.ts", syntheticSource, { overwrite: true });
+				try {
+					return await diagramBuilder.build(classPreviewFile);
+				}
+				finally {
+					classPreviewFile.delete();
+				}
+			}
 		}
 
 		const previewStatements = getPreviewStatements(sourceFile);

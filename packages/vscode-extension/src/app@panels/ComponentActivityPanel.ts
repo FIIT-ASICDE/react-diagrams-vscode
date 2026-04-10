@@ -154,27 +154,26 @@ export class ComponentActivityPanel {
 		await window.showTextDocument(generatedDocument, ViewColumn.Beside, true);
 	}
 
-	private async generateNodePreview(sourceText: string, title: string) {
-		if (!sourceText.trim()) {
-			this.postMessage("code/nodePreviewError", { message: "This node has no source text to preview." });
-			return;
-		}
+	private async buildPreviewFromSource(sourceText: string, title: string) {
+		const activeEditor = this.getBestEditorForCode();
+		const rootDir = activeEditor ? path.dirname(activeEditor.document.uri.fsPath) : ".";
 
 		try {
-			const preview = await parseActivityPreview(sourceText, this.lastKnownFileDocument?.uri.fsPath ?? ".");
+			const previewGraph = await parseActivityPreview(sourceText, rootDir);
 			this.postMessage("code/nodePreviewData", {
 				title,
 				sourceText,
-				nodes: preview.nodes,
-				edges: preview.edges,
+				nodes: previewGraph.nodes,
+				edges: previewGraph.edges,
 			});
 		}
 		catch (error) {
-			this.postMessage("code/nodePreviewError", {
-				message: error instanceof Error ? error.message : "Could not build a preview for this node.",
-			});
+			const message = error instanceof Error ? error.message : "Unable to build preview graph.";
+			this.postMessage("code/nodePreviewError", { message });
 		}
 	}
+
+	
 
 	private getWebviewContent(webview: Webview, extensionUri: Uri) {
 		const stylesUri = getUri(webview, extensionUri, [ComponentActivityPanel.WEBVIEW_DIR, "assets", "index.css"]);
@@ -222,10 +221,18 @@ export class ComponentActivityPanel {
 
 			case "code/nodePreview": {
 				const sourceText = typeof message.sourceText === "string" ? message.sourceText : "";
-				const title = typeof message.title === "string" ? message.title : "Node";
-				void this.generateNodePreview(sourceText, title);
+				const title = typeof message.title === "string" && message.title.trim().length > 0 ? message.title : "Node";
+
+				if (!sourceText.trim()) {
+					this.postMessage("code/nodePreviewError", { message: "Node does not contain previewable source." });
+					return;
+				}
+
+				void this.buildPreviewFromSource(sourceText, title);
 				return;
 			}
+
+			
 
 			case "hello":
 				window.showInformationMessage(text);

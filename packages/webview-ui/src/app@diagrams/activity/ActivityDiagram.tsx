@@ -39,6 +39,7 @@ const customNode = {
 	merge: nodeTypes.merge,
 	initial: nodeTypes.initial,
 	end: nodeTypes.end,
+	textPreview: nodeTypes.textPreview,
 };
 
 const customEdge = {
@@ -66,10 +67,13 @@ export default function ActivityDiagram() {
 	const currentPreview = inPreview ? previewStack[previewStack.length - 1] : null;
 	const displayedNodes = currentPreview?.nodes ?? nodes;
 	const displayedEdges = currentPreview?.edges ?? edges;
+	const diagramNodes = currentPreview?.nodes ?? nodes;
+	const diagramEdges = currentPreview?.edges ?? edges;
 
-	const createNode = useCallback((type: ActivityNodeType): Node => {
+	const createNode = useCallback((type: ActivityNodeType, previewMode = false): Node => {
 		const currentIndex = nodeCounter.current++;
-		const id = `${type}-${currentIndex}`;
+		const idPrefix = previewMode ? 'preview' : type;
+		const id = `${idPrefix}-${currentIndex}`;
 
 		const defaultLabelByType: Record<ActivityNodeType, string> = {
 			start: 'Start',
@@ -89,22 +93,75 @@ export default function ActivityDiagram() {
 	}, []);
 
 	const addNode = useCallback((type: ActivityNodeType) => {
+		if (inPreview) {
+			setPreviewStack((stackSnapshot) => {
+				if (stackSnapshot.length === 0) {
+					return stackSnapshot;
+				}
+
+				const lastIndex = stackSnapshot.length - 1;
+				const lastPreview = stackSnapshot[lastIndex];
+
+				return [
+					...stackSnapshot.slice(0, lastIndex),
+					{
+						...lastPreview,
+						nodes: [...lastPreview.nodes, createNode(type, true)],
+					},
+				];
+			});
+			return;
+		}
+
 		setNodes((snapshot) => [...snapshot, createNode(type)]);
-	}, [createNode]);
+	}, [createNode, inPreview]);
 
 	const generateSkeleton = useCallback(() => {
-		vscode.postMessage('code/generateSkeleton', { nodes, edges });
-	}, [nodes, edges]);
+		vscode.postMessage('code/generateSkeleton', { nodes: diagramNodes, edges: diagramEdges });
+	}, [diagramNodes, diagramEdges]);
 
 	const openNodePreview = useCallback((node: Node) => {
 		const sourceText = String((node.data as { sourceText?: unknown } | undefined)?.sourceText ?? '').trim();
+		const label = String((node.data as { label?: unknown } | undefined)?.label ?? '').trim();
 		const nodeType = String(node.type ?? 'action');
+		const isTruncatedLabel = label.endsWith('...');
 
-		if (nodeType !== 'expandable') {
+		if (nodeType !== 'expandable' && !(isTruncatedLabel && sourceText)) {
 			return;
 		}
 
 		if (!sourceText) {
+			return;
+		}
+
+		if (nodeType !== 'expandable') {
+			const lines = sourceText.split(/\r?\n/);
+			const longestLineLength = lines.reduce((max, line) => Math.max(max, line.length), 0);
+			const previewWidth = Math.min(1100, Math.max(420, longestLineLength * 7 + 60));
+			const previewHeight = Math.min(720, Math.max(220, lines.length * 20 + 60));
+
+			setPreviewStack((stackSnapshot) => [
+				...stackSnapshot,
+				{
+					title: label || 'Full text preview',
+					sourceText,
+					nodes: [
+						{
+							id: `text-preview-${Date.now()}`,
+							type: 'textPreview',
+							position: { x: 0, y: 0 },
+							draggable: true,
+							data: {
+								label: sourceText,
+								previewWidth,
+								previewHeight,
+							},
+						},
+					],
+					edges: [],
+				},
+			]);
+			setFitViewRevision((revision) => revision + 1);
 			return;
 		}
 
@@ -216,6 +273,19 @@ export default function ActivityDiagram() {
 	const onEdgesChange = useCallback(
 		(changes) => {
 			if (inPreview) {
+				setPreviewStack((stackSnapshot) => {
+					if (stackSnapshot.length === 0) {
+						return stackSnapshot;
+					}
+
+					const lastIndex = stackSnapshot.length - 1;
+					const lastPreview = stackSnapshot[lastIndex];
+
+					return [
+						...stackSnapshot.slice(0, lastIndex),
+						{ ...lastPreview, edges: applyEdgeChanges(changes, lastPreview.edges) },
+					];
+				});
 				return;
 			}
 			setEdges((edgesSnapshot) => applyEdgeChanges(changes, edgesSnapshot));
@@ -226,6 +296,19 @@ export default function ActivityDiagram() {
 	const onConnect = useCallback(
 		(params) => {
 			if (inPreview) {
+				setPreviewStack((stackSnapshot) => {
+					if (stackSnapshot.length === 0) {
+						return stackSnapshot;
+					}
+
+					const lastIndex = stackSnapshot.length - 1;
+					const lastPreview = stackSnapshot[lastIndex];
+
+					return [
+						...stackSnapshot.slice(0, lastIndex),
+						{ ...lastPreview, edges: addEdge(params, lastPreview.edges) },
+					];
+				});
 				return;
 			}
 			setEdges((edgesSnapshot) => addEdge(params, edgesSnapshot));

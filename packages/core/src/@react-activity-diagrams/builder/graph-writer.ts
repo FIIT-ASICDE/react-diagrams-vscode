@@ -24,18 +24,19 @@ export class GraphWriter {
     return id;
   }
 
-  addEdge(source: string, target: string, label?: string, type?: string): void {
+  addEdge(source: string, target: string, label?: string, type?: string, data?: Record<string, unknown>): void {
     const isBackEdge = type === 'dashed';
 
     this.edges.push({
       id: `edge-${this.edges.length}-${source}-${target}`,
       source,
       target,
-      sourceHandle: isBackEdge ? 'source-right' : 'source-bottom',
+      sourceHandle: isBackEdge ? 'source-left' : 'source-bottom',
       targetHandle: isBackEdge ? 'target-left' : 'target-top',
       label: label,
       type: isBackEdge ? 'back' : 'smoothstep',
       style: isBackEdge ? { strokeDasharray: '6 4' } : undefined,
+      data,
     });
   }
 }

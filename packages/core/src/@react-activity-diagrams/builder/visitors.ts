@@ -5,6 +5,8 @@ import {
   IfStatement,
   WhileStatement,
   ForStatement,
+  ForInStatement,
+  ForOfStatement,
   ExpressionStatement,
   VariableStatement,
   Block,
@@ -18,29 +20,6 @@ export type BuildResult = {
 
 export class StatementVisitor {
   constructor(private writer: GraphWriter) {}
-
-  private preferredWidthContext?: number;
-
-  private withPreferredWidth<T>(preferredWidth: number | undefined, build: () => T): T {
-    const previousWidth = this.preferredWidthContext;
-    this.preferredWidthContext = preferredWidth;
-    try {
-      return build();
-    } finally {
-      this.preferredWidthContext = previousWidth;
-    }
-  }
-
-  private withNodeLayoutData<T extends Record<string, unknown>>(data: T): T {
-    if (!this.preferredWidthContext) {
-      return data;
-    }
-
-    return {
-      ...data,
-      preferredWidth: this.preferredWidthContext,
-    };
-  }
 
   private getExpandableMeta(stmt: Statement): { label: string; nodeKind: 'function' | 'class' | 'interface' | 'type' } | undefined {
     if (stmt.getKind() === SyntaxKind.FunctionDeclaration) {
@@ -96,6 +75,51 @@ export class StatementVisitor {
     return cleaned.length > 40 ? `${cleaned.slice(0, 37)}...` : cleaned;
   }
 
+  private isDecisionKind(kind: SyntaxKind): boolean {
+    return (
+      kind === SyntaxKind.IfStatement ||
+      kind === SyntaxKind.WhileStatement ||
+      kind === SyntaxKind.ForStatement ||
+      kind === SyntaxKind.ForInStatement ||
+      kind === SyntaxKind.ForOfStatement
+    );
+  }
+
+  private countDecisionsInBranch(node: MorphNode): number {
+    const isDecisionNode = (candidate: MorphNode) => this.isDecisionKind(candidate.getKind());
+    const decisions: MorphNode[] = [];
+
+    if (isDecisionNode(node)) {
+      decisions.push(node);
+    }
+
+    decisions.push(...node.getDescendants().filter(isDecisionNode));
+
+    let maxDepth = 0;
+
+    for (const decision of decisions) {
+      let depth = 0;
+      let current: MorphNode | undefined = decision;
+
+      while (current && current !== node) {
+        if (isDecisionNode(current)) {
+          depth += 1;
+        }
+        current = current.getParent();
+      }
+
+      if (current === node && isDecisionNode(current)) {
+        depth += 1;
+      }
+
+      if (depth > maxDepth) {
+        maxDepth = depth;
+      }
+    }
+
+    return maxDepth;
+  }
+
   visitStatements(statements: Statement[]): BuildResult {
     let entry: string | undefined;
     let pendingExits: string[] = [];
@@ -130,10 +154,8 @@ export class StatementVisitor {
     const expandableMeta = this.getExpandableMeta(stmt);
     if (expandableMeta) {
       const id = this.writer.addFlowNode('expandable', this.compact(expandableMeta.label), {
-        ...this.withNodeLayoutData({
-          sourceText: stmt.getText(),
-          nodeKind: expandableMeta.nodeKind,
-        }),
+        sourceText: stmt.getText(),
+        nodeKind: expandableMeta.nodeKind,
       });
       return { entry: id, exits: [id] };
     }
@@ -142,13 +164,11 @@ export class StatementVisitor {
       return this.visitAction((stmt as ExpressionStatement).getExpression().getText(), stmt.getText());
     }
     if (stmt.getKind() === SyntaxKind.ReturnStatement) {
-      const id = this.writer.addFlowNode('action', this.compact(stmt.getText()) + " return", {
-        ...this.withNodeLayoutData({
-          sourceText: stmt.getText(),
-          nodeKind: 'return',
-        }),
+      const id = this.writer.addFlowNode('action', this.compact(stmt.getText()), {
+        sourceText: stmt.getText(),
+        nodeKind: 'return',
       });
-      return { entry: id, exits: [] };
+      return { entry: id, exits: [id] };
     }
 
     if (stmt.getKind() === SyntaxKind.IfStatement) {
@@ -163,6 +183,14 @@ export class StatementVisitor {
       return this.visitFor(stmt as ForStatement);
     }
 
+    if (stmt.getKind() === SyntaxKind.ForOfStatement) {
+      return this.visitForOf(stmt as ForOfStatement);
+    }
+
+    if (stmt.getKind() === SyntaxKind.ForInStatement) {
+      return this.visitForIn(stmt as ForInStatement);
+    }
+
     if (stmt.getKind() === SyntaxKind.Block) {
       return this.visitStatements((stmt as Block).getStatements());
     }
@@ -171,27 +199,21 @@ export class StatementVisitor {
   }
 
   visitAction(label: string, sourceText?: string): BuildResult {
-    const id = this.writer.addFlowNode('action', this.compact(label) + " action", {
-      ...this.withNodeLayoutData({
-        sourceText,
-        nodeKind: 'action',
-      }),
+    const id = this.writer.addFlowNode('action', this.compact(label), {
+      sourceText,
+      nodeKind: 'action',
     });
     return { entry: id, exits: [id] };
   }
 
   visitIf(stmt: IfStatement): BuildResult {
     const elseStmt = stmt.getElseStatement();
-    const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()) + " if", {
-      ...this.withNodeLayoutData({
-        sourceText: stmt.getText(),
-        nodeKind: 'decision',
-      }),
+    const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()), {
+      sourceText: stmt.getText(),
+      nodeKind: 'decision',
     });
 
-    const thenResult = elseStmt
-      ? this.visitBranch(stmt.getThenStatement())
-      : this.withPreferredWidth(500, () => this.visitBranch(stmt.getThenStatement()));
+    const thenResult = this.visitBranch(stmt.getThenStatement());
     const elseResult = elseStmt
       ? this.visitBranch(elseStmt)
       : undefined;
@@ -216,22 +238,22 @@ export class StatementVisitor {
   }
 
   visitWhile(stmt: WhileStatement): BuildResult {
-    const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()) + " while", {
-      ...this.withNodeLayoutData({
-        sourceText: stmt.getText(),
-        nodeKind: 'decision',
-      }),
+    const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()), {
+      sourceText: stmt.getText(),
+      nodeKind: 'decision',
     });
 
-    const body = this.visitBranch(stmt.getStatement());
+    const loopBranch = stmt.getStatement();
+    const innerDecisionCount = this.countDecisionsInBranch(loopBranch);
+    const body = this.visitBranch(loopBranch);
 
     if (body.entry) {
       this.writer.addEdge(decisionId, body.entry, 'yes');
       for (const exit of body.exits) {
-        this.writer.addEdge(exit, decisionId, '', 'dashed');
+        this.writer.addEdge(exit, decisionId, '', 'dashed', { innerDecisionCount });
       }
     } else {
-      this.writer.addEdge(decisionId, decisionId, 'yes');
+      this.writer.addEdge(decisionId, decisionId, 'yes', 'dashed', { innerDecisionCount });
     }
 
     const afterId = this.writer.addFlowNode('merge', '');
@@ -245,21 +267,19 @@ export class StatementVisitor {
 
     const initializer = stmt.getInitializer();
     if (initializer) {
-      firstEntry = this.writer.addFlowNode('action', this.compact(initializer.getText()) + " for", {
-        ...this.withNodeLayoutData({
-          sourceText: stmt.getText(),
-          nodeKind: 'action',
-        }),
+      firstEntry = this.writer.addFlowNode('action', this.compact(initializer.getText()), {
+        sourceText: stmt.getText(),
+        nodeKind: 'action',
       });
     }
 
     const decisionId = this.writer.addFlowNode(
       'decision',
       this.compact(stmt.getCondition()?.getText() ?? 'for') + " for",
-      this.withNodeLayoutData({
+      {
         sourceText: stmt.getText(),
         nodeKind: 'decision',
-      }),
+      },
     );
 
     if (firstEntry) {
@@ -268,16 +288,16 @@ export class StatementVisitor {
       firstEntry = decisionId;
     }
 
-    const body = this.visitBranch(stmt.getStatement());
+    const loopBranch = stmt.getStatement();
+    const innerDecisionCount = this.countDecisionsInBranch(loopBranch);
+    const body = this.visitBranch(loopBranch);
     const incrementor = stmt.getIncrementor();
 
     let incrementId: string | undefined;
     if (incrementor) {
-      incrementId = this.writer.addFlowNode('action', this.compact(incrementor.getText()) + " for"  , {
-        ...this.withNodeLayoutData({
-          sourceText: stmt.getText(),
-          nodeKind: 'action',
-        }),
+      incrementId = this.writer.addFlowNode('action', this.compact(incrementor.getText()), {
+        sourceText: stmt.getText(),
+        nodeKind: 'action',
       });
     }
 
@@ -285,21 +305,79 @@ export class StatementVisitor {
       this.writer.addEdge(decisionId, body.entry, 'yes');
       for (const exit of body.exits) {
         if (incrementId) this.writer.addEdge(exit, incrementId);
-        else this.writer.addEdge(exit, decisionId);
+        else this.writer.addEdge(exit, decisionId, '', 'dashed', { innerDecisionCount });
       }
     } else {
       if (incrementId) this.writer.addEdge(decisionId, incrementId, 'yes');
-      else this.writer.addEdge(decisionId, decisionId, 'yes');
+      else this.writer.addEdge(decisionId, decisionId, 'yes', 'dashed', { innerDecisionCount });
     }
 
     if (incrementId) {
-      this.writer.addEdge(incrementId, decisionId);
+      this.writer.addEdge(incrementId, decisionId, '', 'dashed', { innerDecisionCount });
     }
 
     const afterId = this.writer.addFlowNode('merge', '');
     this.writer.addEdge(decisionId, afterId, 'no');
 
     return { entry: firstEntry, exits: [afterId] };
+  }
+
+  visitForOf(stmt: ForOfStatement): BuildResult {
+    const decisionId = this.writer.addFlowNode(
+      'decision',
+      this.compact(stmt.getExpression().getText()) + ' for',
+      {
+        sourceText: stmt.getText(),
+        nodeKind: 'decision',
+      },
+    );
+
+    const loopBranch = stmt.getStatement();
+    const innerDecisionCount = this.countDecisionsInBranch(loopBranch);
+    const body = this.visitBranch(loopBranch);
+
+    if (body.entry) {
+      this.writer.addEdge(decisionId, body.entry, 'yes');
+      for (const exit of body.exits) {
+        this.writer.addEdge(exit, decisionId, '', 'dashed', { innerDecisionCount });
+      }
+    } else {
+      this.writer.addEdge(decisionId, decisionId, 'yes', 'dashed', { innerDecisionCount });
+    }
+
+    const afterId = this.writer.addFlowNode('merge', '');
+    this.writer.addEdge(decisionId, afterId, 'no');
+
+    return { entry: decisionId, exits: [afterId] };
+  }
+
+  visitForIn(stmt: ForInStatement): BuildResult {
+    const decisionId = this.writer.addFlowNode(
+      'decision',
+      this.compact(stmt.getExpression().getText()) + ' for',
+      {
+        sourceText: stmt.getText(),
+        nodeKind: 'decision',
+      },
+    );
+
+    const loopBranch = stmt.getStatement();
+    const innerDecisionCount = this.countDecisionsInBranch(loopBranch);
+    const body = this.visitBranch(loopBranch);
+
+    if (body.entry) {
+      this.writer.addEdge(decisionId, body.entry, 'yes');
+      for (const exit of body.exits) {
+        this.writer.addEdge(exit, decisionId, '', 'dashed', { innerDecisionCount });
+      }
+    } else {
+      this.writer.addEdge(decisionId, decisionId, 'yes', 'dashed', { innerDecisionCount });
+    }
+
+    const afterId = this.writer.addFlowNode('merge', '');
+    this.writer.addEdge(decisionId, afterId, 'no');
+
+    return { entry: decisionId, exits: [afterId] };
   }
 
   visitBranch(node: MorphNode): BuildResult {

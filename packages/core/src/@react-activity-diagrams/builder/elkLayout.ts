@@ -13,34 +13,20 @@ export interface LayoutResult {
 
 const elkBaseOptions: ElkLayoutOptions = {
   'elk.algorithm': 'layered',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '50',
-  'elk.spacing.nodeNode': '230',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '70',
   'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
   'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+  'elk.layered.nodePlacement.favorStraightEdges': 'true',
+  'elk.layered.nodePlacement.bk.fixedAlignment': 'BALANCED',
   'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
   'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
   'elk.layered.feedbackEdges': 'true',
-  'elk.edgeRouting': 'POLYLINE',
+  'elk.edgeRouting': 'ORTHOGONAL',
 };
 
 function estimateNodeSize(node: Node): { width: number; height: number } {
   const nodeType = String(node.type ?? 'action');
-  const preferredWidthRaw = (node.data as { preferredWidth?: unknown } | undefined)?.preferredWidth;
-  const preferredWidth = typeof preferredWidthRaw === 'number' ? preferredWidthRaw : 200;
-
-  if ( nodeType === 'end' || nodeType === 'merge' || nodeType === 'initial') {
-    return { width: 20, height: 56 };
-  }
-
-  return { width: preferredWidth, height: 56 };
-}
-
-function withWidthLabel(data: Record<string, unknown>, width: number): Record<string, unknown> {
-  const baseLabel = String(data.label ?? '').replace(/\s\[w:\d+\]$/, '');
-  return {
-    ...data,
-    label: `${baseLabel} [w:${width}]`,
-  };
+  return { width: 500, height: 56 };
 }
 
 /**
@@ -80,18 +66,12 @@ export async function applyElkLayout(
 
   const layoutedGraph = await elk.layout(graph);
   const layoutedChildren = layoutedGraph.children ?? [];
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
 
   const layoutedNodes: Node[] = layoutedChildren.map((elkNode) => ({
     id: elkNode.id,
     position: { x: elkNode.x ?? 0, y: elkNode.y ?? 0 },
-    data: (() => {
-      const originalNode = nodeById.get(elkNode.id);
-      const originalData = (originalNode?.data ?? {}) as Record<string, unknown>;
-      const width = estimateNodeSize(originalNode ?? ({ data: {} } as Node)).width;
-      return withWidthLabel(originalData, width);
-    })(),
-    type: nodeById.get(elkNode.id)?.type,
+    data: nodes.find((n) => n.id === elkNode.id)?.data ?? {},
+    type: nodes.find((n) => n.id === elkNode.id)?.type,
     draggable: true,
     sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
     targetPosition: isHorizontal ? Position.Left : Position.Top,

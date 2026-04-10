@@ -3,7 +3,6 @@ export type FlowNodeData = {
 	sourceText?: string;
 	nodeKind?: string;
 	hasFalseBranch?: boolean;
-	preferredWidth?: number;
 };
 
 export type FlowGraph = {

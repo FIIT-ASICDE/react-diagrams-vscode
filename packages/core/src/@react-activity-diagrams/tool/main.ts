@@ -46,7 +46,17 @@ function normalizeNodes(nodes: Node[]): NormalizedNode[] {
 	return nodes.map((node) => ({
 		id: String(node.id),
 		type: normalizeNodeType(node.type),
-		label: normalizeLabel((node.data as { label?: unknown } | undefined)?.label),
+		label: (() => {
+			const data = (node.data as { label?: unknown; sourceText?: unknown } | undefined) ?? {};
+			const label = normalizeLabel(data.label);
+			const sourceText = normalizeLabel(data.sourceText);
+
+			if (label.endsWith("...") && sourceText) {
+				return sourceText;
+			}
+
+			return label;
+		})(),
 	}));
 }
 
