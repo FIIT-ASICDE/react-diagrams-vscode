@@ -16,6 +16,10 @@
       {
         "command": "vs-code-ext.componentState",
         "title": "React Component State"
+      },
+      {
+        "command": "vs-code-ext.componentActivity",
+        "title": "React Component Activity"
       }
     ]
   },

@@ -1,10 +1,15 @@
 import { commands, ExtensionContext, ExtensionMode, RelativePattern, window, workspace } from "vscode";
+import { ComponentActivityPanel } from "./app@panels/ComponentActivityPanel";
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
 import { normalizeFilePath } from "@react-diagrams/core";
 
 export function activate(context: ExtensionContext) {
 	const showComponentStateDiagram = commands.registerCommand("vs-code-ext.componentState", () => {
 		ComponentStatePanel.render(context.extensionUri);
+	});
+
+	const showActivityCommand = commands.registerCommand("vs-code-ext.componentActivity", () => {
+		ComponentActivityPanel.render(context.extensionUri);
 	});
 
 	const refreshCurrentPanelOnSave = workspace.onDidSaveTextDocument((document) => {
@@ -26,7 +31,7 @@ export function activate(context: ExtensionContext) {
 
 	const autoRestartInDev = setupAutoRestartInDevelopment(context);
 
-	context.subscriptions.push(showComponentStateDiagram, refreshCurrentPanelOnSave, autoRestartInDev);
+	context.subscriptions.push(showComponentStateDiagram, refreshCurrentPanelOnSave, showActivityCommand, autoRestartInDev);
 }
 
 function setupAutoRestartInDevelopment(context: ExtensionContext) {

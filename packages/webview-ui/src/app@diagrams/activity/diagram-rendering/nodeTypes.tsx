@@ -1,0 +1,234 @@
+import React, { memo } from 'react';
+import { Handle, Position } from '@xyflow/react';
+
+type NodeProps = {
+  data: {
+    color: string;
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+    label?: string;
+    [key: string]: any;
+  };
+  isConnectable: boolean;
+};
+
+const nodeStyles = {
+  shell: {
+    width: 200,
+    position: 'relative' as const,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxSizing: 'border-box' as const,
+  },
+  action: {
+    width: 200,
+    padding: '10px 14px',
+    background: '#1976d2',
+    borderRadius: 8,
+    border: '2px solid #1565c0',
+    color: '#fff',
+    textAlign: 'center' as const,
+    boxSizing: 'border-box' as const,
+  },
+  expandable: {
+    width: 200,
+    padding: '10px 14px',
+    background: '#00897b',
+    borderRadius: 8,
+    border: '2px solid #00695c',
+    color: '#fff',
+    textAlign: 'center' as const,
+    boxSizing: 'border-box' as const,
+  },
+  decision: {
+    width: 150,
+    height: 80,
+    padding: 0,
+    background: '#fffde7',
+    border: '2px dashed #fbc02d',
+    color: '#333',
+    textAlign: 'center' as const,
+    boxSizing: 'border-box' as const,
+    clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  merge: {
+    width: 50,
+    height: 50,
+    padding: 0,
+    background: '#333',
+    border: '2px solid #ff9800',
+    color: '#fff',
+    textAlign: 'center' as const,
+    boxSizing: 'border-box' as const,
+    clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  initial: {
+    width: 50,
+    height: 50,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  final: {
+    width: 50,
+    height: 50,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textPreview: {
+    width: 700,
+    minHeight: 220,
+    padding: '14px 16px',
+    background: '#1f2937',
+    borderRadius: 10,
+    border: '2px solid #3b82f6',
+    color: '#f9fafb',
+    textAlign: 'left' as const,
+    boxSizing: 'border-box' as const,
+    whiteSpace: 'pre-wrap' as const,
+    overflowWrap: 'anywhere' as const,
+    lineHeight: 1.4,
+  },
+} as const;
+
+function NodeShell({ children }: { children: React.ReactNode }) {
+  return <div style={nodeStyles.shell}>{children}</div>;
+}
+
+function commonTargetHandles(isConnectable: boolean, sideInset = 0) {
+  return (
+    <>
+      <Handle id="target-top" type="target" position={Position.Top} isConnectable={isConnectable} />
+      <Handle
+        id="target-left"
+        type="target"
+        position={Position.Left}
+        isConnectable={isConnectable}
+        style={{ opacity: 0, left: sideInset }}
+      />
+    </>
+  );
+}
+
+function commonSourceHandles(isConnectable: boolean, sideInset = 0) {
+  return (
+    <>
+      <Handle id="source-bottom" type="source" position={Position.Bottom} isConnectable={isConnectable} />
+      <Handle
+        id="source-left"
+        type="source"
+        position={Position.Left}
+        isConnectable={isConnectable}
+        style={{ opacity: 0, left: sideInset }}
+      />
+      <Handle
+        id="source-right"
+        type="source"
+        position={Position.Right}
+        isConnectable={isConnectable}
+        style={{ opacity: 0, right: sideInset }}
+      />
+    </>
+  );
+}
+
+// Action Node
+const ActionNode = memo(({ data, isConnectable }: NodeProps) => (
+  <NodeShell>
+    {commonTargetHandles(isConnectable, 0)}
+    <div style={{ ...nodeStyles.action, background: data.color ?? nodeStyles.action.background }}>
+      {data.label || 'Action'}
+    </div>
+    {commonSourceHandles(isConnectable, 0)}
+  </NodeShell>
+));
+
+  // Expandable Node
+  const ExpandableNode = memo(({ data, isConnectable }: NodeProps) => (
+    <NodeShell>
+      {commonTargetHandles(isConnectable, 0)}
+      <div style={{ ...nodeStyles.expandable, background: data.color ?? nodeStyles.expandable.background }}>
+        {data.label || 'Expandable'}
+      </div>
+      {commonSourceHandles(isConnectable, 0)}
+    </NodeShell>
+  ));
+
+// Merge Node
+const MergeNode = memo(({ data, isConnectable }: NodeProps) => (
+  <NodeShell>
+    {commonTargetHandles(isConnectable, 75)}
+    <div style={{ ...nodeStyles.merge, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {data.label || 'Merge'}
+    </div>
+    {commonSourceHandles(isConnectable, 75)}
+  </NodeShell>
+));
+
+// Decision Node
+const DecisionNode = memo(({ data, isConnectable }: NodeProps) => (
+  <NodeShell>
+    {commonTargetHandles(isConnectable, 25)}
+    <div style={{ ...nodeStyles.decision }}>
+      {data.label || 'Decision'}
+    </div>
+    {commonSourceHandles(isConnectable, 25)}
+  </NodeShell>
+));
+
+// Initial Node
+const InitialNode = memo(({ data, isConnectable }: NodeProps) => (
+  <NodeShell>
+    {commonTargetHandles(isConnectable, 75)}
+    <div style={{ ...nodeStyles.initial }}>
+      <div style={{ width: 40, height: 40, background: '#388e3c', borderRadius: '50%', border: '2px solid #1b5e20' }} />
+    </div>
+    {commonSourceHandles(isConnectable, 75)}
+  </NodeShell>
+));
+
+// Final Node
+const FinalNode = memo(({ data, isConnectable }: NodeProps) => (
+  <NodeShell>
+    {commonTargetHandles(isConnectable, 75)}
+    <div style={{ ...nodeStyles.final }}>
+      <div style={{ width: 40, height: 40, background: '#fff', borderRadius: '50%', border: '2px solid #d32f2f' }} />
+    </div>
+    {commonSourceHandles(isConnectable, 75)}
+  </NodeShell>
+));
+
+// Text Preview Node
+const TextPreviewNode = memo(({ data, isConnectable }: NodeProps) => (
+  <NodeShell>
+    {commonTargetHandles(isConnectable, 0)}
+    <div
+      style={{
+        ...nodeStyles.textPreview,
+        width: typeof data.previewWidth === 'number' ? data.previewWidth : nodeStyles.textPreview.width,
+        minHeight: typeof data.previewHeight === 'number' ? data.previewHeight : nodeStyles.textPreview.minHeight,
+      }}
+    >
+      {data.label || 'Preview'}
+    </div>
+    {commonSourceHandles(isConnectable, 0)}
+  </NodeShell>
+));
+
+// Export as nodeTypes object for use in React Flow
+export const nodeTypes = {
+  action: ActionNode,
+  expandable: ExpandableNode,
+  merge: MergeNode,
+  decision: DecisionNode,
+  initial: InitialNode,
+  end: FinalNode,
+  textPreview: TextPreviewNode,
+};

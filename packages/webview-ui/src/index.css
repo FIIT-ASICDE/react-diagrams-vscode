@@ -3,7 +3,7 @@
 @import "shadcn/tailwind.css";
 /* @import "@fontsource-variable/inter"; */
 
-@import "./App.sass";
+@import "./app/App.sass";
 
 @layer base {
 	@import "@xyflow/react/dist/style.css";
