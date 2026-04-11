@@ -11,7 +11,7 @@ export default function DiagramNavigator({ stackTitles, onNavigateTo }: DiagramN
 	return (
 		<div className="rounded border border-[var(--vscode-widget-border)] bg-[var(--vscode-editor-background)] p-2 text-xs text-[var(--vscode-foreground)]">
 			<div className="mb-2 flex items-center justify-between">
-				<span className="font-medium">Diagram Navigator</span>
+				<span className="font-medium">Navigation</span>
 				<div className="flex items-center gap-1">
 					<VSCodeButton appearance="secondary" disabled={!inPreview} onClick={() => onNavigateTo(stackTitles.length - 2)}>
 						Back

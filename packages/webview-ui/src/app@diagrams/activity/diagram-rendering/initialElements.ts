@@ -1,4 +1,4 @@
-import { Position, MarkerType } from '@xyflow/react';
+import { Position, MarkerType, type Edge, type Node } from '@xyflow/react';
 
 // this helper function returns the intersection point
 // of the line between the center of the intersectionNode and the target node
@@ -71,8 +71,8 @@ export function getEdgeParams(source, target) {
 }
 
 export function initialElements() {
-  const nodes = [];
-  const edges = [];
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
   const center = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 
   nodes.push({ id: 'target', data: { label: 'Target' }, position: center });

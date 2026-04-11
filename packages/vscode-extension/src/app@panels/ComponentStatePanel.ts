@@ -1,7 +1,6 @@
-import { Disposable, TextDocument, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
+import { Disposable, TextDocument, Webview, WebviewPanel, window, Uri, ViewColumn } from "vscode";
 import { getNonce } from "../app@utils/crypto";
 import { getUri } from "../app@utils/urls";
-import { normalizeFilePath } from "@react-diagrams/core";
 import { basename, extname } from "path";
 import { componentStateCache, getRootPath } from "../app@utils/cache";
 
@@ -205,7 +204,7 @@ export class ComponentStatePanel {
 	 * @param context A reference to the extension context
 	 */
 	private webviewMessageListener(message: any) {
-		const { type, data } = message;
+		const { type } = message;
 
 		switch (type) {
 			case "refresh":

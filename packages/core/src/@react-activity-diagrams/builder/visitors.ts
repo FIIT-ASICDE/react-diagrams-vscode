@@ -7,6 +7,8 @@ import {
   ForStatement,
   ForInStatement,
   ForOfStatement,
+  TryStatement,
+  SwitchStatement,
   ExpressionStatement,
   VariableStatement,
   Block,
@@ -30,16 +32,6 @@ export class StatementVisitor {
     if (stmt.getKind() === SyntaxKind.ClassDeclaration) {
       const name = stmt.asKind(SyntaxKind.ClassDeclaration)?.getName() ?? 'anonymous';
       return { label: `class ${name}`, nodeKind: 'class' };
-    }
-
-    if (stmt.getKind() === SyntaxKind.InterfaceDeclaration) {
-      const name = stmt.asKind(SyntaxKind.InterfaceDeclaration)?.getName() ?? 'anonymous';
-      return { label: `interface ${name}`, nodeKind: 'interface' };
-    }
-
-    if (stmt.getKind() === SyntaxKind.TypeAliasDeclaration) {
-      const name = stmt.asKind(SyntaxKind.TypeAliasDeclaration)?.getName() ?? 'anonymous';
-      return { label: `type ${name}`, nodeKind: 'type' };
     }
 
     if (stmt.getKind() === SyntaxKind.VariableStatement) {
@@ -85,7 +77,9 @@ export class StatementVisitor {
       kind === SyntaxKind.WhileStatement ||
       kind === SyntaxKind.ForStatement ||
       kind === SyntaxKind.ForInStatement ||
-      kind === SyntaxKind.ForOfStatement
+      kind === SyntaxKind.ForOfStatement ||
+      kind === SyntaxKind.TryStatement ||
+      kind === SyntaxKind.SwitchStatement
     );
   }
 
@@ -193,6 +187,14 @@ export class StatementVisitor {
 
     if (stmt.getKind() === SyntaxKind.ForInStatement) {
       return this.visitForIn(stmt as ForInStatement);
+    }
+
+    if (stmt.getKind() === SyntaxKind.TryStatement) {
+      return this.visitTry(stmt as TryStatement);
+    }
+
+    if (stmt.getKind() === SyntaxKind.SwitchStatement) {
+      return this.visitSwitch(stmt as SwitchStatement);
     }
 
     if (stmt.getKind() === SyntaxKind.Block) {
@@ -382,6 +384,99 @@ export class StatementVisitor {
     this.writer.addEdge(decisionId, afterId, 'no');
 
     return { entry: decisionId, exits: [afterId] };
+  }
+
+  visitTry(stmt: TryStatement): BuildResult {
+    const decisionId = this.writer.addFlowNode('decision', 'try', {
+      sourceText: stmt.getText(),
+      nodeKind: 'decision',
+    });
+
+    const mergeId = this.writer.addFlowNode('merge', '');
+    const finallyBlock = stmt.getFinallyBlock();
+    const finallyResult = finallyBlock ? this.visitBranch(finallyBlock) : undefined;
+    const finalTarget = finallyResult?.entry ?? mergeId;
+
+    const tryResult = this.visitBranch(stmt.getTryBlock());
+    if (tryResult.entry) {
+      this.writer.addEdge(decisionId, tryResult.entry, 'try');
+      for (const exit of tryResult.exits) {
+        this.writer.addEdge(exit, finalTarget);
+      }
+    } else {
+      this.writer.addEdge(decisionId, finalTarget, 'try');
+    }
+
+    const catchClause = stmt.getCatchClause();
+    if (catchClause) {
+      const catchResult = this.visitBranch(catchClause.getBlock());
+      if (catchResult.entry) {
+        this.writer.addEdge(decisionId, catchResult.entry, 'catch');
+        for (const exit of catchResult.exits) {
+          this.writer.addEdge(exit, finalTarget);
+        }
+      } else {
+        this.writer.addEdge(decisionId, finalTarget, 'catch');
+      }
+    }
+
+    if (finallyResult?.entry) {
+      for (const exit of finallyResult.exits) {
+        this.writer.addEdge(exit, mergeId);
+      }
+    }
+
+    return { entry: decisionId, exits: [mergeId] };
+  }
+
+  visitSwitch(stmt: SwitchStatement): BuildResult {
+    const expressionText = stmt.getExpression().getText();
+    const decisionId = this.writer.addFlowNode('decision', this.compact(expressionText), {
+      sourceText: expressionText,
+      nodeKind: 'decision',
+    });
+
+    const mergeId = this.writer.addFlowNode('merge', '');
+    const clauses = stmt.getCaseBlock().getClauses();
+    let pendingLabels: string[] = [];
+
+    for (const clause of clauses) {
+      const caseClause = clause.asKind(SyntaxKind.CaseClause);
+      const label = caseClause
+        ? `case ${this.compact(caseClause.getExpression().getText())}`
+        : 'default';
+
+      pendingLabels.push(label);
+
+      const statements = clause.getStatements();
+      if (statements.length === 0) {
+        continue;
+      }
+
+      const body = this.visitStatements(statements);
+
+      if (body.entry) {
+        for (const branchLabel of pendingLabels) {
+          this.writer.addEdge(decisionId, body.entry, branchLabel);
+        }
+
+        for (const exit of body.exits) {
+          this.writer.addEdge(exit, mergeId);
+        }
+      } else {
+        for (const branchLabel of pendingLabels) {
+          this.writer.addEdge(decisionId, mergeId, branchLabel);
+        }
+      }
+
+      pendingLabels = [];
+    }
+
+    for (const branchLabel of pendingLabels) {
+      this.writer.addEdge(decisionId, mergeId, branchLabel);
+    }
+
+    return { entry: decisionId, exits: [mergeId] };
   }
 
   visitBranch(node: MorphNode): BuildResult {
