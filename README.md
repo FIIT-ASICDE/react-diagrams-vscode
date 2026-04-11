@@ -14,7 +14,8 @@ This repository is organized as an npm workspace monorepo.
 3. From the monorepo root, run `npm i`.
 3. Next `npm run build`.
 4. Open new terminal `npm run watch:dev` while developing so the changes are reflected.
-5. Press F11 (Run > Start Debugging) and Debug Anyway if necessary...
+   - Note that the "hotreload" is far from perfect and is recommended to reopen the Extension-related panels after each reload.
+6. Press F11 (Run > Start Debugging) and Debug Anyway if necessary...
 
 ## Common commands
 

@@ -1,10 +1,10 @@
 import { VSCodePanels, VSCodePanelTab, VSCodePanelView } from '@vscode/webview-ui-toolkit/react';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import StateDiagram from './app@diagrams/state/StateDiagram';
-import Tests from './app@components/Tests';
-import Debug from './app@components/Debug';
+import StateDiagram from '@/app@diagrams/state/StateDiagram';
+import Tests from '@/app@components/Tests';
+import Debug from '@/app@components/Debug';
 import type { Message } from '@react-diagrams/core/app@vscode';
-import { vscode, type UpdatePayload } from './app@vscode/api';
+import { vscode, type UpdatePayload } from '@/app@vscode/api';
 
 function App() {
 	const [updatePayload, setUpdatePayload] = useState<UpdatePayload>(() => (vscode.getState() as UpdatePayload) ?? {});
