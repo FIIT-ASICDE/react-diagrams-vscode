@@ -23,20 +23,20 @@ const nodeStyles = {
   action: {
     width: 200,
     padding: '10px 14px',
-    background: '#1976d2',
+    background: '#f3f4f6',
     borderRadius: 8,
-    border: '2px solid #1565c0',
-    color: '#fff',
+    border: '2px solid #111111',
+    color: '#1f2937',
     textAlign: 'center' as const,
     boxSizing: 'border-box' as const,
   },
   expandable: {
     width: 200,
     padding: '10px 14px',
-    background: '#00897b',
+    background: '#e5e7eb',
     borderRadius: 8,
-    border: '2px solid #00695c',
-    color: '#fff',
+    border: '2px solid #111111',
+    color: '#0f172a',
     textAlign: 'center' as const,
     boxSizing: 'border-box' as const,
   },
@@ -44,9 +44,9 @@ const nodeStyles = {
     width: 150,
     height: 80,
     padding: 0,
-    background: '#fffde7',
-    border: '2px dashed #fbc02d',
-    color: '#333',
+    background: '#f3f4f6',
+    border: '2px solid #111111',
+    color: '#1f2937',
     textAlign: 'center' as const,
     boxSizing: 'border-box' as const,
     clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
@@ -58,9 +58,9 @@ const nodeStyles = {
     width: 50,
     height: 50,
     padding: 0,
-    background: '#333',
-    border: '2px solid #ff9800',
-    color: '#fff',
+    background: '#d1d5db',
+    border: '2px solid #111111',
+    color: '#1f2937',
     textAlign: 'center' as const,
     boxSizing: 'border-box' as const,
     clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
@@ -86,10 +86,10 @@ const nodeStyles = {
     width: 700,
     minHeight: 220,
     padding: '14px 16px',
-    background: '#1f2937',
+    background: '#f3f4f6',
     borderRadius: 10,
-    border: '2px solid #3b82f6',
-    color: '#f9fafb',
+    border: '2px solid #111111',
+    color: '#0f172a',
     textAlign: 'left' as const,
     boxSizing: 'border-box' as const,
     whiteSpace: 'pre-wrap' as const,
@@ -188,7 +188,7 @@ const InitialNode = memo(({ data, isConnectable }: NodeProps) => (
   <NodeShell>
     {commonTargetHandles(isConnectable, 75)}
     <div style={{ ...nodeStyles.initial }}>
-      <div style={{ width: 40, height: 40, background: '#388e3c', borderRadius: '50%', border: '2px solid #1b5e20' }} />
+      <div style={{ width: 40, height: 40, background: '#111111', borderRadius: '50%', border: '2px solid #111111' }} />
     </div>
     {commonSourceHandles(isConnectable, 75)}
   </NodeShell>
@@ -199,7 +199,7 @@ const FinalNode = memo(({ data, isConnectable }: NodeProps) => (
   <NodeShell>
     {commonTargetHandles(isConnectable, 75)}
     <div style={{ ...nodeStyles.final }}>
-      <div style={{ width: 40, height: 40, background: '#fff', borderRadius: '50%', border: '2px solid #d32f2f' }} />
+      <div style={{ width: 40, height: 40, background: '#f3f4f6', borderRadius: '50%', border: '2px solid #111111' }} />
     </div>
     {commonSourceHandles(isConnectable, 75)}
   </NodeShell>
