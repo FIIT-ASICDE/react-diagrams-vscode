@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ReactFlow, Background, addEdge, applyEdgeChanges, applyNodeChanges, type Node, type Edge } from '@xyflow/react';
+import { ReactFlow, Background, addEdge, applyEdgeChanges, applyNodeChanges, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { VSCodeButton } from '@vscode/webview-ui-toolkit/react';
 import { vscode } from '../../app@vscode/api';
@@ -61,7 +61,7 @@ export default function ActivityDiagram() {
 	const [previewStack, setPreviewStack] = useState<Array<{ title: string; sourceText?: string; nodes: Node[]; edges: Edge[] }>>([]);
 	const [fitViewRevision, setFitViewRevision] = useState(0);
 	const nodeCounter = useRef(1);
-	const reactFlowRef = useRef<{ fitView: (options?: { padding?: number; duration?: number }) => void } | null>(null);
+	const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
 
 	const inPreview = previewStack.length > 0;
 	const currentPreview = inPreview ? previewStack[previewStack.length - 1] : null;
@@ -69,6 +69,28 @@ export default function ActivityDiagram() {
 	const displayedEdges = currentPreview?.edges ?? edges;
 	const diagramNodes = currentPreview?.nodes ?? nodes;
 	const diagramEdges = currentPreview?.edges ?? edges;
+
+	const getStartNodes = useCallback((candidates: Node[]) => {
+		const byType = candidates.filter((node) => node.type === 'initial' || node.type === 'start');
+		if (byType.length > 0) {
+			return byType;
+		}
+
+		const byLabel = candidates.filter((node) => String((node.data as { label?: unknown } | undefined)?.label ?? '').toLowerCase().startsWith('start'));
+		if (byLabel.length > 0) {
+			return byLabel;
+		}
+
+		const fallback = [...candidates].sort((left, right) => {
+			if (left.position.y !== right.position.y) {
+				return left.position.y - right.position.y;
+			}
+			return left.position.x - right.position.x;
+		})[0];
+
+		return fallback ? [fallback] : [];
+
+	}, []);
 
 	const createNode = useCallback((type: ActivityNodeType, previewMode = false): Node => {
 		const currentIndex = nodeCounter.current++;
@@ -242,9 +264,20 @@ export default function ActivityDiagram() {
 		}
 
 		requestAnimationFrame(() => {
-			reactFlowRef.current?.fitView({ padding: 0.22, duration: 250 });
+			const viewportOffsetY = -150;
+			const startNodes = getStartNodes(displayedNodes);
+			if (startNodes.length === 0) {
+				return;
+			}
+
+			void reactFlowRef.current?.fitView({
+				nodes: startNodes,
+				padding: 0,
+				maxZoom: 0.85,
+				duration: 500,
+			})
 		});
-	}, [fitViewRevision, displayedNodes.length]);
+	}, [fitViewRevision, getStartNodes, inPreview]);
 
 	const onNodesChange = useCallback(
 		(changes) => {
@@ -332,10 +365,12 @@ export default function ActivityDiagram() {
 	const navigateTo = useCallback((stackIndex: number) => {
 		if (stackIndex < 0) {
 			setPreviewStack([]);
+			setFitViewRevision((revision) => revision + 1);
 			return;
 		}
 
 		setPreviewStack((stackSnapshot) => stackSnapshot.slice(0, stackIndex + 1));
+		setFitViewRevision((revision) => revision + 1);
 	}, []);
 
 	const applyRename = useCallback(() => {
@@ -400,7 +435,6 @@ export default function ActivityDiagram() {
 				style={{ background: '#eef0f3' }}
 				onInit={(instance) => {
 					reactFlowRef.current = instance;
-					requestAnimationFrame(() => instance.fitView({ padding: 0.22, duration: 250 }));
 				}}
 				onNodesChange={onNodesChange}
 				onEdgesChange={onEdgesChange}

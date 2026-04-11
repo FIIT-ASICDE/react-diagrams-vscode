@@ -44,26 +44,30 @@ export class StatementVisitor {
 
     if (stmt.getKind() === SyntaxKind.VariableStatement) {
       const variableStmt = stmt as VariableStatement;
-      const declaration = variableStmt.getDeclarations()[0];
-      const initializer = declaration?.getInitializer();
+      for (const declaration of variableStmt.getDeclarations()) {
+        const initializer = declaration.getInitializer();
+        if (!initializer) {
+          continue;
+        }
 
-      if (!initializer) {
-        return undefined;
-      }
+        const hasFunctionInitializer =
+          initializer.getKind() === SyntaxKind.ArrowFunction ||
+          initializer.getKind() === SyntaxKind.FunctionExpression ||
+          initializer.getDescendantsOfKind(SyntaxKind.ArrowFunction).length > 0 ||
+          initializer.getDescendantsOfKind(SyntaxKind.FunctionExpression).length > 0;
+        const hasClassInitializer =
+          initializer.getKind() === SyntaxKind.ClassExpression ||
+          initializer.getDescendantsOfKind(SyntaxKind.ClassExpression).length > 0;
 
-      const hasFunctionInitializer =
-        initializer.getDescendantsOfKind(SyntaxKind.ArrowFunction).length > 0 ||
-        initializer.getDescendantsOfKind(SyntaxKind.FunctionExpression).length > 0;
-      const hasClassInitializer = initializer.getDescendantsOfKind(SyntaxKind.ClassExpression).length > 0;
+        if (hasFunctionInitializer) {
+          const name = declaration.getName() ?? 'anonymous';
+          return { label: `function ${name}()`, nodeKind: 'function' };
+        }
 
-      if (hasFunctionInitializer) {
-        const name = declaration?.getName() ?? 'anonymous';
-        return { label: `function ${name}()`, nodeKind: 'function' };
-      }
-
-      if (hasClassInitializer) {
-        const name = declaration?.getName() ?? 'anonymous';
-        return { label: `class ${name}`, nodeKind: 'class' };
+        if (hasClassInitializer) {
+          const name = declaration.getName() ?? 'anonymous';
+          return { label: `class ${name}`, nodeKind: 'class' };
+        }
       }
     }
 
