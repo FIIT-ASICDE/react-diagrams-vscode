@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:compiler": "vite build --mode compiler",
     "build:debug": "vite --debug plugin-transform build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "watch": "vite build --watch"
+    "watch": "vite build --watch --mode fast",
+    "watch:full": "vite build --watch"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -36,6 +38,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/vscode-webview": "^1.57.5",
     "@vitejs/plugin-react": "^5.1.1",
+    "@vitejs/plugin-react-swc": "^4.3.0",
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
