@@ -169,7 +169,29 @@ export class ComponentActivityPanel {
 		}
 		catch (error) {
 			const message = error instanceof Error ? error.message : "Unable to build preview graph.";
-			this.postMessage("code/nodePreviewError", { message });
+			const lines = sourceText.split(/\r?\n/);
+			const longestLineLength = lines.reduce((max, line) => Math.max(max, line.length), 0);
+			const previewWidth = Math.min(1100, Math.max(420, longestLineLength * 7 + 60));
+			const previewHeight = Math.min(720, Math.max(220, lines.length * 20 + 60));
+
+			this.postMessage("code/nodePreviewData", {
+				title: `${title} (fallback)`,
+				sourceText: `${message}\n\n${sourceText}`,
+				nodes: [
+					{
+						id: `preview-fallback-${Date.now()}`,
+						type: "textPreview",
+						position: { x: 0, y: 0 },
+						draggable: true,
+						data: {
+							label: `${message}\n\n${sourceText}`,
+							previewWidth,
+							previewHeight,
+						},
+					},
+				],
+				edges: [],
+			});
 		}
 	}
 
@@ -203,6 +225,9 @@ export class ComponentActivityPanel {
 	private webviewMessageListener(message: any) {
 		const type = message.type;
 		const text = message.text;
+		const payload = (message && typeof message.data === "object" && message.data !== null)
+			? message.data
+			: message;
 
 		switch (type) {
 			case "diagram/requestType":
@@ -214,18 +239,35 @@ export class ComponentActivityPanel {
 				return;
 
 			case "code/generateSkeleton": {
-				const nodes = Array.isArray(message.nodes) ? message.nodes as Node[] : [];
-				const edges = Array.isArray(message.edges) ? message.edges as Edge[] : [];
+				const nodes = Array.isArray(payload.nodes) ? payload.nodes as Node[] : [];
+				const edges = Array.isArray(payload.edges) ? payload.edges as Edge[] : [];
 				void this.generateSkeletonFromDiagram(nodes, edges);
 				return;
 			}
 
 			case "code/nodePreview": {
-				const sourceText = typeof message.sourceText === "string" ? message.sourceText : "";
-				const title = typeof message.title === "string" && message.title.trim().length > 0 ? message.title : "Node";
+				const sourceText = typeof payload.sourceText === "string" ? payload.sourceText : "";
+				const title = typeof payload.title === "string" && payload.title.trim().length > 0 ? payload.title : "Node";
 
 				if (!sourceText.trim()) {
-					this.postMessage("code/nodePreviewError", { message: "Node does not contain previewable source." });
+					this.postMessage("code/nodePreviewData", {
+						title: `${title} (fallback)`,
+						sourceText: "Node does not contain previewable source.",
+						nodes: [
+							{
+								id: `preview-empty-${Date.now()}`,
+								type: "textPreview",
+								position: { x: 0, y: 0 },
+								draggable: true,
+								data: {
+									label: "Node does not contain previewable source.",
+									previewWidth: 520,
+									previewHeight: 240,
+								},
+							},
+						],
+						edges: [],
+					});
 					return;
 				}
 

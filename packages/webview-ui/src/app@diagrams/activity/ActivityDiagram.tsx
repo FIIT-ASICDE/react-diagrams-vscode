@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ReactFlow, addEdge, applyEdgeChanges, applyNodeChanges, type Node, type Edge } from '@xyflow/react';
+import { ReactFlow, Background, addEdge, applyEdgeChanges, applyNodeChanges, type Node, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { VSCodeButton } from '@vscode/webview-ui-toolkit/react';
 import { vscode } from '../../app@vscode/api';
@@ -397,6 +397,7 @@ export default function ActivityDiagram() {
 			<ReactFlow
 				nodes={displayedNodes}
 				edges={displayedEdges}
+				style={{ background: '#eef0f3' }}
 				onInit={(instance) => {
 					reactFlowRef.current = instance;
 					requestAnimationFrame(() => instance.fitView({ padding: 0.22, duration: 250 }));
@@ -409,7 +410,9 @@ export default function ActivityDiagram() {
 				nodeTypes={customNode}
 				edgeTypes={customEdge}
 				fitView
-			/>
+			>
+				<Background gap={18} size={1} color="#cfd4dc" />
+			</ReactFlow>
 		</div>
 	);
 }

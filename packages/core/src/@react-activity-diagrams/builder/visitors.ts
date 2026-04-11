@@ -209,7 +209,7 @@ export class StatementVisitor {
   visitIf(stmt: IfStatement): BuildResult {
     const elseStmt = stmt.getElseStatement();
     const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()), {
-      sourceText: stmt.getText(),
+      sourceText: stmt.getExpression().getText(),
       nodeKind: 'decision',
     });
 
@@ -239,7 +239,7 @@ export class StatementVisitor {
 
   visitWhile(stmt: WhileStatement): BuildResult {
     const decisionId = this.writer.addFlowNode('decision', this.compact(stmt.getExpression().getText()), {
-      sourceText: stmt.getText(),
+      sourceText: stmt.getExpression().getText(),
       nodeKind: 'decision',
     });
 
@@ -275,9 +275,9 @@ export class StatementVisitor {
 
     const decisionId = this.writer.addFlowNode(
       'decision',
-      this.compact(stmt.getCondition()?.getText() ?? 'for') + " for",
+      this.compact(stmt.getCondition()?.getText() ?? 'for'),
       {
-        sourceText: stmt.getText(),
+        sourceText: stmt.getCondition()?.getText() ?? 'for',
         nodeKind: 'decision',
       },
     );
@@ -325,9 +325,9 @@ export class StatementVisitor {
   visitForOf(stmt: ForOfStatement): BuildResult {
     const decisionId = this.writer.addFlowNode(
       'decision',
-      this.compact(stmt.getExpression().getText()) + ' for',
+      this.compact(stmt.getExpression().getText()),
       {
-        sourceText: stmt.getText(),
+        sourceText: stmt.getExpression().getText(),
         nodeKind: 'decision',
       },
     );
@@ -354,9 +354,9 @@ export class StatementVisitor {
   visitForIn(stmt: ForInStatement): BuildResult {
     const decisionId = this.writer.addFlowNode(
       'decision',
-      this.compact(stmt.getExpression().getText()) + ' for',
+      this.compact(stmt.getExpression().getText()),
       {
-        sourceText: stmt.getText(),
+        sourceText: stmt.getExpression().getText(),
         nodeKind: 'decision',
       },
     );

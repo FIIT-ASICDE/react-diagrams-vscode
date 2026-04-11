@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { Project, SyntaxKind, type ClassDeclaration } from "ts-morph";
+import { Project, SyntaxKind, type ClassDeclaration, type SourceFile } from "ts-morph";
 import { DiagramBuilder } from "../../../@react-activity-diagrams";
 import { Edge, Node as Nds } from "@xyflow/react";
 import { getPreviewStatements } from "./preview-source";
@@ -84,6 +84,17 @@ function classMembersToSyntheticSource(classDeclaration: ClassDeclaration): stri
 	return chunks.join("\n\n");
 }
 
+function safeDeleteSourceFile(sourceFile: SourceFile) {
+	try {
+		if (!sourceFile.wasForgotten()) {
+			sourceFile.delete();
+		}
+	}
+	catch {
+		// Ignore cleanup failures to avoid turning successful preview parsing into an error.
+	}
+}
+
 export async function parseActivityPreview(sourceText: string, rootDir = ".", tempFileName = "__activity_preview__.tsx"): Promise<{nodes: Nds[], edges: Edge[]}> {
 	const project = createProject(rootDir);
 	const sourceFile = project.createSourceFile(tempFileName, sourceText, { overwrite: true });
@@ -99,7 +110,7 @@ export async function parseActivityPreview(sourceText: string, rootDir = ".", te
 					return await diagramBuilder.build(classPreviewFile);
 				}
 				finally {
-					classPreviewFile.delete();
+					safeDeleteSourceFile(classPreviewFile);
 				}
 			}
 		}
@@ -120,6 +131,6 @@ export async function parseActivityPreview(sourceText: string, rootDir = ".", te
 		};
 	}
 	finally {
-		sourceFile.delete();
+		safeDeleteSourceFile(sourceFile);
 	}
 }
