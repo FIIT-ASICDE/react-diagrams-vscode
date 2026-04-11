@@ -140,7 +140,7 @@ async function toFlow(model?: StateDiagramModel) {
 			? Math.max(LAYOUT.stateGroupMinHeight, tallestMutator + (LAYOUT.stateGroupPaddingY * 2) + LAYOUT.stateGroupHeaderOffsetY)
 			: LAYOUT.stateGroupMinHeight;
 
-		const stateGroupId = stateVariable.id;
+		const stateGroupId = `state-group:${stateVariable.id}`;
 		nodes.push({
 			id: stateGroupId,
 			type: 'labeledGroupNode',
@@ -204,24 +204,29 @@ async function toFlow(model?: StateDiagramModel) {
 			});
 
 			const nodeIdMap = new Map<Id, string>();
-			for (const graphNode of mutatorLayout.layoutedNodes) {
-				const flowNodeId = `${mutatorGroupId}-${graphNode.id}`;
+			const layoutedNodesById = new Map(mutatorLayout.layoutedNodes.map((node) => [node.id, node]));
+			for (const graphNode of mutatorLayout.mutator.nodes) {
+				const flowNodeId = `${mutatorGroupId}:node:${graphNode.id}`;
 				nodeIdMap.set(graphNode.id, flowNodeId);
-				const { x, y, width, height } = graphNode;
-		
+				const layoutedNode = layoutedNodesById.get(graphNode.id);
+				const nodeX = layoutedNode?.x ?? 0;
+				const nodeY = layoutedNode?.y ?? 0;
+				const nodeWidth = layoutedNode?.width ?? LAYOUT.graphNodeWidth;
+				const nodeHeight = layoutedNode?.height ?? LAYOUT.graphNodeHeight;
+
 				nodes.push({
 					id: flowNodeId,
 					position: {
-						x: LAYOUT.mutatorGroupPaddingX + x,
-						y: LAYOUT.mutatorGroupHeaderOffsetY + LAYOUT.mutatorGroupPaddingY + y,
+						x: LAYOUT.mutatorGroupPaddingX + nodeX,
+						y: LAYOUT.mutatorGroupHeaderOffsetY + LAYOUT.mutatorGroupPaddingY + nodeY,
 					},
 					parentId: mutatorGroupId,
 					extent: 'parent',
 					data: { label: asNodeLabel(graphNode) },
 					targetPosition: Position.Top,
 					sourcePosition: Position.Bottom,
-					width,
-					height,
+					width: nodeWidth,
+					height: nodeHeight,
 					style: {
 						borderRadius: 8,
 						border: graphNode.nodeType === 'state-update'
@@ -237,17 +242,15 @@ async function toFlow(model?: StateDiagramModel) {
 				});
 			}
 
-			for (const { id, ...transition } of mutatorLayout.transitions) {
+			for (const transition of mutatorLayout.mutator.transitions) {
 				const source = nodeIdMap.get(transition.fromNodeId);
 				const target = nodeIdMap.get(transition.toNodeId);
-
-				console.debug(source == transition.fromNodeId, source, transition.toNodeId, transition)
 
 				if (!source || !target)
 					continue;
 
 				edges.push({
-					id,
+					id: `${mutatorGroupId}:edge:${transition.id}`,
 					source,
 					target,
 					label: transition.label,
