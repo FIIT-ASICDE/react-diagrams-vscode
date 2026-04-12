@@ -1,4 +1,4 @@
-import { commands, ExtensionContext, ExtensionMode, RelativePattern, window, workspace } from "vscode";
+import { commands, ExtensionContext, ExtensionMode, RelativePattern, Uri, window, workspace } from "vscode";
 import { ComponentActivityPanel } from "./app@panels/ComponentActivityPanel";
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
 import { normalizeFilePath } from "@react-diagrams/core";
@@ -42,7 +42,10 @@ function setupAutoRestartInDevelopment(context: ExtensionContext) {
 	const watcher = workspace.createFileSystemWatcher(extensionDistPattern, true, false, true);
 
 	let restartTimer;
-	const scheduleRestart = () => {
+	const scheduleRestart = (what: Uri) => {
+		if (what.fsPath.includes("webview"))
+			return; // don't restart on webview code changes, as they are loaded dynamically
+
 		if (restartTimer)
 			clearTimeout(restartTimer);
 

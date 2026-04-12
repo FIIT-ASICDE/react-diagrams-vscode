@@ -20,6 +20,7 @@ export default function IfElseChainComplex() {
     }
 
     setPhase("checking");
+    return "idk";
   };
 
   function handleProcess(value: number) {

@@ -28,10 +28,10 @@ import { codePosStr, createId, getAllCalls, getCodePos, getFuncName, normText } 
 import { truncate } from '../../utils';
 import { classifyStateUpdateKind } from './state-mutators';
 
-export function createFlowNode(kind: ControlFlowNodeKind, sourceFile: SourceFile, node: Node, label?: string): ControlFlowNode {
-	const pos = getCodePos(sourceFile, node);
+export function createFlowNode(kind: ControlFlowNodeKind, node: Node, mutator: StateMutatingFunction, label?: string/*, sourceFile: SourceFile*/): ControlFlowNode {
+	const pos = getCodePos(node);
 	return {
-		id: createId('flow', `${label ?? ''}:${kind}`, pos),
+		id: createId('flow', label ? `${mutator.id}-${label}:${kind}` : `${mutator.id}:${kind}`, pos),
 		nodeType: StateGraphNodeType.ControlFlow,
 		kind,
 		label,
@@ -40,7 +40,7 @@ export function createFlowNode(kind: ControlFlowNodeKind, sourceFile: SourceFile
 }
 
 export function createTransition(from: StateGraphNode, to: StateGraphNode, kind: StateTransitionKind, rawConditionText?: string): StateTransition {
-	const label = rawConditionText ? `[${kind}] ${truncate(rawConditionText, 60)}` : kind;
+	const label = rawConditionText ? `[${kind}] ${truncate(rawConditionText, 80)}` : kind;
 	return {
 		id: createId('transition', `${from.id}->${to.id}:${kind}`, from.pos),
 		fromNodeId: from.id,
@@ -51,8 +51,8 @@ export function createTransition(from: StateGraphNode, to: StateGraphNode, kind:
 	};
 }
 
-export function createOccurrenceUpdateNode(call: CallExpression, stateVariable: StateVariable, sourceFile: SourceFile): StateUpdate {
-	const pos = getCodePos(sourceFile, call);
+export function createOccurrenceUpdateNode(call: CallExpression, stateVariable: StateVariable/*, sourceFile: SourceFile*/): StateUpdate {
+	const pos = getCodePos(call);
 	const arg = call.getArguments()[0];
 	const expressionText = arg ? normText(arg) : undefined;
 	const kind = classifyStateUpdateKind(arg);
@@ -78,11 +78,11 @@ export class GraphBuilder {
 	private readonly updateNodesByPos: Map<string, StateUpdate> = new Map(); // cache to dedup updates
 
 	constructor(
-		private readonly sourceFile: SourceFile,
 		private readonly stateVariable: StateVariable,
 		private readonly mutator: StateMutatingFunction,
 		private readonly nodes: StateGraphNode[],
 		private readonly transitions: StateTransition[],
+		// private readonly sourceFile?: SourceFile,
 		
 	) {
 		for (const node of nodes) {
@@ -98,20 +98,20 @@ export class GraphBuilder {
 	}
 
 	private appendFlowNode(kind: ControlFlowNodeKind, node: Node, label?: string) {
-		const flowNode = createFlowNode(kind, this.sourceFile, node, label);
+		const flowNode = createFlowNode(kind, node, this.mutator, label);
 		this.nodes.push(flowNode);
 		return flowNode;
 	}
 
 	private appendUpdateNode(call: CallExpression) {
-		const pos = getCodePos(this.sourceFile, call);
+		const pos = getCodePos(call);
 		const key = codePosStr(pos);
 
 		const existing = this.updateNodesByPos.get(key);
 		if (existing)
 			return existing;
 
-		const created = createOccurrenceUpdateNode(call, this.stateVariable, this.sourceFile);
+		const created = createOccurrenceUpdateNode(call, this.stateVariable);
 		this.nodes.push(created);
 		this.updateNodesByPos.set(key, created);
 		return created;
@@ -127,14 +127,15 @@ export class GraphBuilder {
 			current = [{ from: updateNode, kind: StateTransitionKind.Normal }];
 		}
 
-		const exitNode = this.appendFlowNode(ControlFlowNodeKind.Exit, statement, 'return');
+		// const txt = statement.getExpression()?.getText(); 
+		const exitNode = this.appendFlowNode(ControlFlowNodeKind.Exit, statement, /*txt ? `return ${truncate(txt, 80)}` :*/ `return`);
 		this.connect(exitNode, current);
 		return [];
 	}
 
 	visitThrow(statement: ThrowStatement, incoming: OpenEdge[]) {
-		const throwText = statement.getExpression().getText();
-		const exitNode = this.appendFlowNode(ControlFlowNodeKind.Exit, statement, `throw ${truncate(throwText, 40)}`);
+		const txt = statement.getExpression().getText();
+		const exitNode = this.appendFlowNode(ControlFlowNodeKind.Exit, statement, `throw ${truncate(txt, 80)}`);
 		this.connect(exitNode, incoming);
 		return [];
 	}
@@ -146,19 +147,11 @@ export class GraphBuilder {
 
 		const thenIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Then, rawConditionText: conditionText }];
 		const thenBody = statement.getThenStatement();
-		const thenOpen = Node.isBlock(thenBody)
-			? this.visitBlock(thenBody, thenIncoming)
-			: this.visitStatement(thenBody as Statement, thenIncoming);
+		const thenOpen = this.visit(thenBody, thenIncoming)
 
 		const elseIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Else, rawConditionText: `!(${conditionText})` }];
 		const elseBody = statement.getElseStatement();
-		const elseOpen = !elseBody
-			? elseIncoming
-			: Node.isIfStatement(elseBody)
-				? this.visitIf(elseBody, elseIncoming)
-				: Node.isBlock(elseBody)
-					? this.visitBlock(elseBody, elseIncoming)
-					: this.visitStatement(elseBody as Statement, elseIncoming);
+		var elseOpen = !elseBody ? elseIncoming : Node.isIfStatement(elseBody) ? this.visitIf(elseBody, elseIncoming) : this.visit(elseBody, elseIncoming);
 
 		const allOpen = [...thenOpen, ...elseOpen];
 		if (!allOpen.length)
@@ -173,13 +166,13 @@ export class GraphBuilder {
 		const decisionNode = this.appendFlowNode(ControlFlowNodeKind.Decision, statement, 'try');
 		this.connect(decisionNode, incoming);
 
-		const tryOpen = this.visitBlock(statement.getTryBlock(), [{ from: decisionNode, kind: StateTransitionKind.Normal }]);
+		const tryOpen = this.visit(statement.getTryBlock(), [{ from: decisionNode, kind: StateTransitionKind.Normal }]);
 
 		const catchClause = statement.getCatchClause();
 		let catchOpen: OpenEdge[] = [];
 		if (catchClause) {
 			const catchParam = catchClause.getVariableDeclaration()?.getName() ?? 'error';
-			catchOpen = this.visitBlock(catchClause.getBlock(), [{
+			catchOpen = this.visit(catchClause.getBlock(), [{
 				from: decisionNode,
 				kind: StateTransitionKind.Catch,
 				rawConditionText: catchParam,
@@ -191,7 +184,7 @@ export class GraphBuilder {
 		if (finallyBlock) {
 			const toFinally = [...tryOpen, ...catchOpen];
 			const finallyIncoming = toFinally.length ? toFinally : [{ from: decisionNode, kind: StateTransitionKind.Finally }];
-			finalOpen = this.visitBlock(finallyBlock, finallyIncoming);
+			finalOpen = this.visit(finallyBlock, finallyIncoming);
 		}
 		else {
 			finalOpen = [...tryOpen, ...catchOpen];
@@ -205,21 +198,30 @@ export class GraphBuilder {
 		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
 	}
 
-	visitStatement(statement: Statement, incoming: OpenEdge[]) {
-		if (Node.isIfStatement(statement))
-			return this.visitIf(statement, incoming);
-
-		if (Node.isTryStatement(statement))
-			return this.visitTry(statement, incoming);
-
-		if (Node.isReturnStatement(statement))
-			return this.visitReturn(statement, incoming);
-
-		if (Node.isThrowStatement(statement))
-			return this.visitThrow(statement, incoming);
-
+	visit(what: Statement | Block, incoming: OpenEdge[]) {
 		let current = incoming;
-		const setterCalls = getAllCalls(statement, this.stateVariable.setterName);
+		if (Node.isBlock(what)) {
+			for (const statement of what.getStatements()) {
+				current = this.visit(statement, current);
+				if (!current.length)
+					return current;
+			}
+			return current;
+		}
+
+		if (Node.isIfStatement(what))
+			return this.visitIf(what, incoming);
+
+		if (Node.isTryStatement(what))
+			return this.visitTry(what, incoming);
+
+		if (Node.isReturnStatement(what))
+			return this.visitReturn(what, incoming);
+
+		if (Node.isThrowStatement(what))
+			return this.visitThrow(what, incoming);
+
+		const setterCalls = getAllCalls(what, this.stateVariable.setterName);
 		for (const call of setterCalls) {
 			const updateNode = this.appendUpdateNode(call);
 			this.connect(updateNode, current);
@@ -229,19 +231,9 @@ export class GraphBuilder {
 		return current;
 	}
 
-	visitBlock(block: Block, incoming: OpenEdge[]) {
-		let current = incoming;
-		for (const statement of block.getStatements()) {
-			current = this.visitStatement(statement, current);
-			if (!current.length)
-				return current;
-		}
-		return current;
-	}
-
 	build(body: Block) {
 		const entryNode = this.appendFlowNode(ControlFlowNodeKind.Entry, body, this.mutator.name);
-		const finalOpen = this.visitBlock(body, [{ from: entryNode, kind: StateTransitionKind.Normal }]);
+		const finalOpen = this.visit(body, [{ from: entryNode, kind: StateTransitionKind.Normal }]);
 		if (!finalOpen.length)
 			return;
 
@@ -250,7 +242,7 @@ export class GraphBuilder {
 	}
 }
 
-export function buildTransitionFlowGraph(sourceFile: SourceFile, mutatorBodies: Map<Id, Block>, stateVariables: StateVariable[]) {
+export function buildTransitionFlowGraph(mutatorBodies: Map<Id, Block>, stateVariables: StateVariable[]/*, sourceFile: SourceFile*/) {
 	for (const stateVariable of stateVariables) {
 		const mutators = [...(stateVariable.mutators ?? []), ...(stateVariable.inlineMutator ? [stateVariable.inlineMutator] : [])]; // remember obj instances are shared
 		for (const mutator of mutators) {
@@ -262,11 +254,11 @@ export function buildTransitionFlowGraph(sourceFile: SourceFile, mutatorBodies: 
 			mutator.transitions = [];
 
 			const builder = new GraphBuilder(
-				sourceFile,
 				stateVariable,
 				mutator,
 				mutator.nodes,
-				mutator.transitions
+				mutator.transitions,
+				// sourceFile
 			);
 
 			builder.build(body);

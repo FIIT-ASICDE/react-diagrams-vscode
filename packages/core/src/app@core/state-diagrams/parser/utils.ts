@@ -33,14 +33,14 @@ export function text2SrcFile(text: string, rootDir: Project | string = '.') {
 	return { project, sourceFile };
 }
 
-export function getCodePos(sourceFile: SourceFile, node: Node): CodePos {
-	return sourceFile.getLineAndColumnAtPos(node.getStart());
+export function getCodePos(node: Node, sourceFile?: SourceFile): CodePos {
+	return (sourceFile ?? node.getSourceFile()).getLineAndColumnAtPos(node.getStart());
 }
 
 export const codePosStr = ({line, column}: CodePos) => `${line}:${column}`;
 
 export function createId(what, name: string, pos: CodePos) {
-	return `${what?.toString()}:${name}:${codePosStr(pos)}`;
+	return `${what?.toString()}-${name}:${codePosStr(pos)}`;
 	// if (what == null)
 	// 	return 0;
 

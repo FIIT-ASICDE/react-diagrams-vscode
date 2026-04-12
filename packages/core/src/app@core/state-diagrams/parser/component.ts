@@ -11,10 +11,10 @@ export function getComponentName(component: SupportedComponentDeclaration) {
 	return parent?.getName() ?? 'default';
 }
 
-export function createComponentModel(sourceFile: SourceFile, component: SupportedComponentDeclaration): StateDiagramComponent {
+export function createComponentModel(component: SupportedComponentDeclaration, sourceFile?: SourceFile): StateDiagramComponent {
 	return {
 		name: getComponentName(component),
-		pos: getCodePos(sourceFile, component),
+		pos: getCodePos(component, sourceFile),
 		exportName: 'default',
 		declarationKind: getDeclarationKind(component),
 	};

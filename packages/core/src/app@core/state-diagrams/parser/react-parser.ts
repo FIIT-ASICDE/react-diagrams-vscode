@@ -79,12 +79,12 @@ export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): S
 			};
 		}
 
-		const stateVariables = collectStateVariables(sourceFile, component);
-		const mutatorBodies = populateStateUpdatesAndMutators(sourceFile, component, stateVariables);
-		buildTransitionFlowGraph(sourceFile, mutatorBodies, stateVariables);
+		const stateVariables = collectStateVariables(component, sourceFile);
+		const mutatorBodies = populateStateUpdatesAndMutators(component, stateVariables);
+		buildTransitionFlowGraph(mutatorBodies, stateVariables);
 
 		return {
-			component: createComponentModel(sourceFile, component),
+			component: createComponentModel(component, sourceFile),
 			stateVariables,
 		};
 	}

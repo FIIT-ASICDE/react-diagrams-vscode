@@ -42,11 +42,11 @@ export function classifyStateUpdateKind(argument?: Node): StateUpdateKind {
 	return StateUpdateKind.Expression;
 }
 
-export function createStateUpdate(stateVariable: StateVariable, callExpression: CallExpression, sourceFile: SourceFile) {
+export function createStateUpdate(stateVariable: StateVariable, callExpression: CallExpression/*, sourceFile: SourceFile*/) {
 	const arg = callExpression.getArguments()[0];
 	const expressionText = arg ? normText(arg) : undefined;
 	const kind = classifyStateUpdateKind(arg);
-	const pos = getCodePos(sourceFile, callExpression);
+	const pos = getCodePos(callExpression);
 
 	const update: StateUpdate = {
 		id: createId('update', `${stateVariable.name}:${kind}`, pos),
@@ -62,11 +62,11 @@ export function createStateUpdate(stateVariable: StateVariable, callExpression: 
 }
 
 /** Gets or creates the dedicated render-body mutator for top-level setter calls. */
-function getOrCreateInlineMutator(stateVariable: StateVariable, sourceFile: SourceFile, component: SupportedComponentDeclaration) {
+function getOrCreateInlineMutator(stateVariable: StateVariable, component: SupportedComponentDeclaration/*, sourceFile: SourceFile*/) {
 	if (stateVariable.inlineMutator)
 		return stateVariable.inlineMutator;
 
-	const pos = getCodePos(sourceFile, component);
+	const pos = getCodePos(component);
 	const mutator: StateMutatingFunction = {
 		id: createId('mutator', `${stateVariable.name}:<render-body>`, pos),
 		name: '<render-body>',
@@ -82,13 +82,12 @@ function getOrCreateInlineMutator(stateVariable: StateVariable, sourceFile: Sour
 }
 
 /** Gets or creates a mutator model for a specific state variable and function scope. */
-function getOrCreateMutator(stateVariable: StateVariable, sourceFile: SourceFile, component: SupportedComponentDeclaration, funcLike?: SupportedDeclaration) {
+function getOrCreateMutator(stateVariable: StateVariable, component: SupportedComponentDeclaration, funcLike?: SupportedDeclaration/*, sourceFile: SourceFile*/) {
 	stateVariable.mutators ??= [];
 
 	if (!funcLike)
-		return getOrCreateInlineMutator(stateVariable, sourceFile, component);
-
-	const pos = getCodePos(sourceFile, funcLike);
+		return getOrCreateInlineMutator(stateVariable, component);
+	const pos = getCodePos(funcLike);
 	const type = getDeclarationKind(funcLike);
 	const existing = stateVariable.mutators.find((mutator) => mutator.pos.line == pos.line && mutator.pos.column == pos.column && mutator.type == type);
 	if (existing)
@@ -133,7 +132,7 @@ function addUpdateNodeToMutator(mutator: StateMutatingFunction, update: StateUpd
 		mutator.nodes.push(update);
 }
 
-export function populateStateUpdatesAndMutators(sourceFile: SourceFile, component: SupportedComponentDeclaration, stateVariables: StateVariable[]) {
+export function populateStateUpdatesAndMutators(component: SupportedComponentDeclaration, stateVariables: StateVariable[]/*, sourceFile: SourceFile*/) {
 	const mutatorBodies = new Map<Id, Block>(); // mutator id - func body block map
 	if (!stateVariables.length)
 		return mutatorBodies;
@@ -159,10 +158,10 @@ export function populateStateUpdatesAndMutators(sourceFile: SourceFile, componen
 			Node.isArrowFunction
 		], component);
 
-		const update = createStateUpdate(stateVariable, callExpression, sourceFile);
+		const update = createStateUpdate(stateVariable, callExpression);
 		addUniqueUpdateToStateVariable(stateVariable, update);
 
-		const mutator = getOrCreateMutator(stateVariable, sourceFile, component, fn);
+		const mutator = getOrCreateMutator(stateVariable, component, fn);
 		addUpdateNodeToMutator(mutator, update);
 
 		if (!mutatorBodies.has(mutator.id)) {

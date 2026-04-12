@@ -81,7 +81,7 @@ export function isDirectlyOwnedByComponent(declaration: Node, component: Support
 	return getFirstAncestorOfKinds(declaration, [Node.isFunctionDeclaration, Node.isFunctionExpression, Node.isArrowFunction, Node.isMethodDeclaration,]) == component
 }
 
-export function collectStateVariables(sourceFile: SourceFile, component: SupportedComponentDeclaration) {
+export function collectStateVariables(component: SupportedComponentDeclaration, sourceFile: SourceFile) {
 	const body = component.getBody();
 	if (!body || !Node.isBlock(body))
 		return [];
@@ -110,7 +110,7 @@ export function collectStateVariables(sourceFile: SourceFile, component: Support
 			continue;
 
 		// console.log(stateElement, setterElement, useStateCall, initializer);
-		const pos = getCodePos(sourceFile, stateElement.getNameNode());
+		const pos = getCodePos(stateElement.getNameNode(), sourceFile);
 		const stateVariable: StateVariable = {
 			id: createId('state', stateName, pos),
 			hook: 'useState',

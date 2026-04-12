@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 
-type NodeProps = {
+export type NodeProps = {
   data: {
     color: string;
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -11,7 +11,7 @@ type NodeProps = {
   isConnectable: boolean;
 };
 
-const nodeStyles = {
+export const nodeStyles = {
   shell: {
     width: 200,
     position: 'relative' as const,

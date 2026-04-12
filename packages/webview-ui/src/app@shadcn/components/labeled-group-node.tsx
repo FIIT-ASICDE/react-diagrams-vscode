@@ -62,7 +62,7 @@ export function GroupNode({ label, position, ...props }: GroupNodeProps) {
       {...props}
     >
       {/* <p>{label}</p> */}
-      <Panel className="m-0 p-0" position={position}>
+      <Panel className="m-0! p-0" position={position}>
         {label && (
           <GroupNodeLabel className={getLabelClassName(position)}>
             {label}
