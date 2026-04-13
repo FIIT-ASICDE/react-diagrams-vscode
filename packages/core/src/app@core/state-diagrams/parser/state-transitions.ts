@@ -32,7 +32,7 @@ export function createFlowNode(kind: ControlFlowNodeKind, node: Node, mutator: S
 	const pos = getCodePos(node);
 	return {
 		id: createId('flow', label ? `${mutator.id}-${label}:${kind}` : `${mutator.id}:${kind}`, pos),
-		nodeType: StateGraphNodeType.ControlFlow,
+		nodeType: 'control-flow',
 		kind,
 		label,
 		pos,
@@ -40,7 +40,7 @@ export function createFlowNode(kind: ControlFlowNodeKind, node: Node, mutator: S
 }
 
 export function createTransition(from: StateGraphNode, to: StateGraphNode, kind: StateTransitionKind, rawConditionText?: string): StateTransition {
-	const label = rawConditionText ? `[${kind}] ${truncate(rawConditionText, 80)}` : kind;
+	const label = rawConditionText ? `[${kind}] ${truncate(rawConditionText, 80)}` : (kind == StateTransitionKind.Normal ? '' : `[${kind}]`);
 	return {
 		id: createId('transition', `${from.id}->${to.id}:${kind}`, from.pos),
 		fromNodeId: from.id,
@@ -54,17 +54,17 @@ export function createTransition(from: StateGraphNode, to: StateGraphNode, kind:
 export function createOccurrenceUpdateNode(call: CallExpression, stateVariable: StateVariable/*, sourceFile: SourceFile*/): StateUpdate {
 	const pos = getCodePos(call);
 	const arg = call.getArguments()[0];
-	const expressionText = arg ? normText(arg) : undefined;
+	const label = arg ? normText(arg) : undefined;
 	const kind = classifyStateUpdateKind(arg);
 
 	return {
 		id: createId('update-occ', `${stateVariable.name}:${kind}`, pos),
-		nodeType: StateGraphNodeType.StateUpdate,
+		nodeType: 'state-update',
 		stateVariableId: stateVariable.id,
 		setterName: stateVariable.setterName,
 		kind,
 		pos,
-		expressionText,
+		label,
 	};
 }
 
@@ -86,7 +86,7 @@ export class GraphBuilder {
 		
 	) {
 		for (const node of nodes) {
-			if (node.nodeType != StateGraphNodeType.StateUpdate || node.stateVariableId != stateVariable.id)
+			if (node.nodeType != 'state-update' || node.stateVariableId != stateVariable.id)
 				continue;
 			this.updateNodesByPos.set(codePosStr(node.pos), node);
 		}
@@ -127,22 +127,22 @@ export class GraphBuilder {
 			current = [{ from: updateNode, kind: StateTransitionKind.Normal }];
 		}
 
-		// const txt = statement.getExpression()?.getText(); 
-		const exitNode = this.appendFlowNode(ControlFlowNodeKind.Exit, statement, /*txt ? `return ${truncate(txt, 80)}` :*/ `return`);
+		const txt = statement.getExpression()?.getText(); 
+		const exitNode = this.appendFlowNode('exit', statement, txt ? `return ${truncate(txt, 80)}` : ``);
 		this.connect(exitNode, current);
 		return [];
 	}
 
 	visitThrow(statement: ThrowStatement, incoming: OpenEdge[]) {
 		const txt = statement.getExpression().getText();
-		const exitNode = this.appendFlowNode(ControlFlowNodeKind.Exit, statement, `throw ${truncate(txt, 80)}`);
+		const exitNode = this.appendFlowNode('throw', statement, `throw ${truncate(txt, 80)}`);
 		this.connect(exitNode, incoming);
 		return [];
 	}
 
 	visitIf(statement: IfStatement, incoming: OpenEdge[]) {
 		const conditionText = statement.getExpression().getText();
-		const decisionNode = this.appendFlowNode(ControlFlowNodeKind.Decision, statement, truncate(conditionText, 80));
+		const decisionNode = this.appendFlowNode('decision', statement, truncate(conditionText, 80));
 		this.connect(decisionNode, incoming);
 
 		const thenIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Then, rawConditionText: conditionText }];
@@ -157,13 +157,13 @@ export class GraphBuilder {
 		if (!allOpen.length)
 			return [];
 
-		const mergeNode = this.appendFlowNode(ControlFlowNodeKind.Merge, statement);
+		const mergeNode = this.appendFlowNode('merge', statement);
 		this.connect(mergeNode, allOpen);
 		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
 	}
 
 	visitTry(statement: TryStatement, incoming: OpenEdge[]) {
-		const decisionNode = this.appendFlowNode(ControlFlowNodeKind.Decision, statement, 'try');
+		const decisionNode = this.appendFlowNode('try-decision', statement, 'try');
 		this.connect(decisionNode, incoming);
 
 		const tryOpen = this.visit(statement.getTryBlock(), [{ from: decisionNode, kind: StateTransitionKind.Normal }]);
@@ -193,7 +193,7 @@ export class GraphBuilder {
 		if (!finalOpen.length)
 			return [];
 
-		const mergeNode = this.appendFlowNode(ControlFlowNodeKind.Merge, statement);
+		const mergeNode = this.appendFlowNode('merge', statement);
 		this.connect(mergeNode, finalOpen);
 		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
 	}
@@ -232,12 +232,13 @@ export class GraphBuilder {
 	}
 
 	build(body: Block) {
-		const entryNode = this.appendFlowNode(ControlFlowNodeKind.Entry, body, this.mutator.name);
+		const entryNode = this.appendFlowNode('entry', body, this.mutator.name);
 		const finalOpen = this.visit(body, [{ from: entryNode, kind: StateTransitionKind.Normal }]);
 		if (!finalOpen.length)
 			return;
 
-		const exitNode = this.appendFlowNode(ControlFlowNodeKind.Exit, body, 'return');
+		// const exitNode = this.appendFlowNode('exit', body, 'return');
+		const exitNode = this.appendFlowNode('exit', body);
 		this.connect(exitNode, finalOpen);
 	}
 }
@@ -250,7 +251,7 @@ export function buildTransitionFlowGraph(mutatorBodies: Map<Id, Block>, stateVar
 			if (!body)
 				continue;
 
-			mutator.nodes = mutator.nodes.filter(({nodeType}) => nodeType == StateGraphNodeType.StateUpdate);
+			mutator.nodes = mutator.nodes.filter(({nodeType}) => nodeType == 'state-update');
 			mutator.transitions = [];
 
 			const builder = new GraphBuilder(

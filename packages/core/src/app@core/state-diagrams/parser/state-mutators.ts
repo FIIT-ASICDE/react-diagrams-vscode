@@ -23,10 +23,10 @@ import { SupportedComponentDeclaration, SupportedDeclaration } from './types';
 
 export function classifyStateUpdateKind(argument?: Node): StateUpdateKind {
 	if (!argument)
-		return StateUpdateKind.Expression;
+		return 'expression';
 
 	if (Node.isArrowFunction(argument) || Node.isFunctionExpression(argument))
-		return StateUpdateKind.Updater;
+		return 'updater';
 
 	if (
 		Node.isStringLiteral(argument) ||
@@ -36,26 +36,26 @@ export function classifyStateUpdateKind(argument?: Node): StateUpdateKind {
 		argument.getKind() == SyntaxKind.NullKeyword ||
 		argument.getKind() == SyntaxKind.NoSubstitutionTemplateLiteral
 	) {
-		return StateUpdateKind.Direct;
+		return 'direct';
 	}
 
-	return StateUpdateKind.Expression;
+	return 'expression';
 }
 
 export function createStateUpdate(stateVariable: StateVariable, callExpression: CallExpression/*, sourceFile: SourceFile*/) {
 	const arg = callExpression.getArguments()[0];
-	const expressionText = arg ? normText(arg) : undefined;
+	const label = arg ? normText(arg) : undefined;
 	const kind = classifyStateUpdateKind(arg);
 	const pos = getCodePos(callExpression);
 
 	const update: StateUpdate = {
 		id: createId('update', `${stateVariable.name}:${kind}`, pos),
-		nodeType: StateGraphNodeType.StateUpdate,
+		nodeType: 'state-update',
 		stateVariableId: stateVariable.id,
 		setterName: stateVariable.setterName,
 		kind,
 		pos,
-		expressionText,
+		label,
 	};
 
 	return update;
@@ -112,8 +112,8 @@ function getOrCreateMutator(stateVariable: StateVariable, component: SupportedCo
 function addUniqueUpdateToStateVariable(stateVariable: StateVariable, update: StateUpdate) {
 	stateVariable.states ??= [];
 
-	const key = `${update.kind}:${normText(update.expressionText)}`;
-	const existing = stateVariable.states.find((current) => `${current.kind}:${normText(current.expressionText)}` == key);
+	const key = `${update.kind}:${normText(update.label)}`;
+	const existing = stateVariable.states.find((current) => `${current.kind}:${normText(current.label)}` == key);
 	if (existing)
 		return existing;
 
@@ -124,7 +124,7 @@ function addUniqueUpdateToStateVariable(stateVariable: StateVariable, update: St
 /** Adds a setter call-site update node to mutator graph nodes without duplicate positions. */
 function addUpdateNodeToMutator(mutator: StateMutatingFunction, update: StateUpdate) {
 	const existing = mutator.nodes.find((node) =>
-		node.nodeType == StateGraphNodeType.StateUpdate &&
+		node.nodeType == 'state-update' &&
 		node.pos.line == update.pos.line &&
 		node.pos.column == update.pos.column
 	);

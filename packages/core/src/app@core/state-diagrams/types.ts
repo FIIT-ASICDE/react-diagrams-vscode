@@ -40,29 +40,29 @@ export interface StateMutatingFunction { // A function that mutates a specific S
 	transitions: StateTransition[]; // Directed edges connecting the graph nodes.
 }
 
-export enum StateUpdateKind {
-	Direct = 'direct',
-	Expression = 'expression',
-	Updater = 'updater',
-}
+export type StateUpdateKind = 
+	'direct' |
+	'expression' |
+	'updater';
 
-export enum ControlFlowNodeKind { // Future: Loop, Switch (if needed)
-	Entry = 'entry',
-	Decision = 'decision',
-	Merge = 'merge',
-	Exit = 'exit',
-}
 
-export enum StateGraphNodeType {
-	StateUpdate = 'state-update',
-	ControlFlow = 'control-flow',
-}
+export type ControlFlowNodeKind = 
+	'entry' |
+	'decision' |
+	'try-decision' |
+	'merge' |
+	'exit' |
+	'throw';
+
+export type StateGraphNodeType = 
+	'state-update' |
+	'control-flow';
 
 export type StateGraphNode = StateUpdate | ControlFlowNode;
 
 export interface ControlFlowNode {
 	id: Id;
-	nodeType: StateGraphNodeType.ControlFlow;
+	nodeType: 'control-flow';
 	kind: ControlFlowNodeKind;
 	label?: string; // txt for decision nodes
 	pos: CodePos;
@@ -70,12 +70,12 @@ export interface ControlFlowNode {
 
 export interface StateUpdate {
 	id: Id;
-	nodeType: StateGraphNodeType.StateUpdate;
+	nodeType: 'state-update';
 	stateVariableId: Id;
 	setterName: string;
 	kind: StateUpdateKind;
 	pos: CodePos;
-	expressionText?: string;
+	label?: string; // expression txt
 }
 
 export enum StateTransitionKind {
@@ -87,6 +87,15 @@ export enum StateTransitionKind {
 	Return = 'return',
 	Throw = 'throw',
 }
+
+// export type StateTransitionKind = 
+// 	'normal' |
+// 	'then' |
+// 	'else' |
+// 	'catch' |
+// 	'finally' |
+// 	'return' |
+// 	'throw';
 
 export interface StateTransition {
 	id: Id;

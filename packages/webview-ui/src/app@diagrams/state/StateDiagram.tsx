@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import ELK from 'elkjs/lib/elk.bundled.js';
-import { Background, Controls, MarkerType, Position, ReactFlow, useReactFlow, type Edge, type EdgeTypes, type Node, type NodeTypes } from '@xyflow/react';
+import { Background, Controls, MarkerType, ReactFlow, useReactFlow, type Edge, type Node } from '@xyflow/react';
 import type { StateDiagram as StateDiagramModel, StateGraphNode, StateMutatingFunction, StateVariable } from '@react-diagrams/core';
-import FloatingEdge from '@/app@components/xyflow-react/components/FloatingEdge';
 import FloatingConnectionLine from '@/app@components/xyflow-react/components/FloatingConnectionLine';
-import LabeledGroupNode from '@/app@components/xyflow-react/components/LabeledGroupNode';
+import { nodeTypes, getGraphNodeVisual } from './rendering/nodes';
+import { edgeTypes } from './rendering/edges';
 import type { GroupNodeProps } from '@/app@shadcn/components/labeled-group-node';
 import type { ElkNode } from 'elkjs/lib/elk-api';
 
@@ -17,31 +17,31 @@ const elk = new ELK();
 const elkPadding = (top: number, horizontal: number, bottom = horizontal) => `[top=${top},left=${horizontal},bottom=${bottom},right=${horizontal}]`;
 
 const LAYOUT = {
-	canvasPadding: 24,
+	canvasPadding: 12,
 	headerHeight: 24,
 	
 	state: {
 		gap: 24,
-		pad: 18,
-		minWidth: 280,
-		minHeight: 170,
+		pad: 16,
+		minWidth: 200,
+		minHeight: 100,
 	},
 	mutator: {
-		gap: 24,
-		pad: 18,
-		minWidth: 280,
-		minHeight: 170,
+		gap: 18,
+		pad: 24,
+		minWidth: 200,
+		minHeight: 100,
 	},
 
-	graphNodeWidth: 220,
-	graphNodeHeight: 56,
+	graphNodeWidth: 190,
+	graphNodeHeight: 48,
 };
 
 const ELK_OPTIONS = {
 	'elk.algorithm': 'layered',
 	'elk.direction': 'DOWN',
 	'elk.layered.spacing.nodeNodeBetweenLayers': '46',
-	'elk.spacing.nodeNode': '80',
+	'elk.spacing.nodeNode': '46',
 	'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
 	'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
 	'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
@@ -56,21 +56,16 @@ const ELK_BOX_ROW_OPTIONS = {
 	'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
 };
 
-const edgeTypes: EdgeTypes = {
-	floating: FloatingEdge as EdgeTypes['floating'],
-};
-
-const nodeTypes: NodeTypes = {
-	labeledGroupNode: LabeledGroupNode,
-};
-
-function asNodeLabel(node: StateGraphNode) {
-	if (node.nodeType === 'state-update') {
-		const expr = node.expressionText ? `: ${node.expressionText}` : '';
-		return `${node.kind}${expr}`;
+function getGraphNodeSize(graphNode: StateGraphNode) {
+	if (graphNode.nodeType == 'state-update') {
+		return { width: LAYOUT.graphNodeWidth, height: LAYOUT.graphNodeHeight };
 	}
 
-	return `${node.kind}${node.label ? `: ${node.label}` : ''}`;
+	if (graphNode.kind == 'decision' || graphNode.kind == 'try-decision' || graphNode.kind == 'merge') {
+		return { width: 54, height: 38 };
+	}
+
+	return { width: 38, height: 38 };
 }
 
 async function layoutMutator(mutator: StateMutatingFunction, elkLayout = {}) {
@@ -87,11 +82,7 @@ async function layoutMutator(mutator: StateMutatingFunction, elkLayout = {}) {
 	const graph = {
 		id: `elk-${mutator.id}`,
 		layoutOptions: { ...ELK_OPTIONS, ...elkLayout },
-		children: mutator.nodes.map(node => ({
-			width: LAYOUT.graphNodeWidth,
-			height: LAYOUT.graphNodeHeight,
-			...node
-		})),
+		children: mutator.nodes.map(node => ({ ...getGraphNodeSize(node), ...node })),
 		edges: mutator.transitions.map(transition => ({
 			sources: [transition.fromNodeId],
 			targets: [transition.toNodeId],
@@ -234,26 +225,22 @@ async function toFlow(model?: StateDiagramModel) {
 			for (const graphNode of mutatorLayout.layoutedNodes) {
 				const flowNodeId = `${graphNode.id}`;
 				const { x, y, width, height } = graphNode;
+				const visual = getGraphNodeVisual(graphNode);
 
 				nodes.push({
 					id: flowNodeId,
+					type: visual.type,
 					position: { x, y },
 					parentId: mutatorGroupId,
 					extent: 'parent',
-					data: { label: asNodeLabel(graphNode) },
-					targetPosition: Position.Top,
-					sourcePosition: Position.Bottom,
+					data: {
+						...visual.data,
+						width,
+						height,
+					},
 					width,
 					height,
-					className: 'rounded-lg text-(--vscode-foreground) text-[12px]',
-					style: {
-						border: graphNode.nodeType === 'state-update'
-							? '1px solid var(--vscode-testing-iconPassed)'
-							: '1px solid var(--vscode-button-border)',
-						background: graphNode.nodeType === 'state-update'
-							? 'color-mix(in srgb, var(--vscode-testing-iconPassed) 35%, transparent)'
-							: 'var(--vscode-input-background)',
-					},
+					className: 'bg-transparent border-0 shadow-none',
 					draggable: false,
 				});
 			}
@@ -271,7 +258,7 @@ async function toFlow(model?: StateDiagramModel) {
 					target,
 					label: transition.label,
 					type: 'floating',
-					animated: transition.kind != 'normal',
+					// animated: transition.kind != 'normal',
 					markerEnd: { type: MarkerType.ArrowClosed },
 				});
 			}
