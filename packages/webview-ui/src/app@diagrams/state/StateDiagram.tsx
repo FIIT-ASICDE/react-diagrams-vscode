@@ -14,23 +14,24 @@ type StateDiagramProps = {
 
 const elk = new ELK();
 
+const elkPadding = (top: number, horizontal: number, bottom = horizontal) => `[top=${top},left=${horizontal},bottom=${bottom},right=${horizontal}]`;
+
 const LAYOUT = {
-	canvasPaddingX: 24,
-	canvasPaddingY: 24,
-
-	stateGroupMinWidth: 320,
-	stateGroupMinHeight: 180,
-	stateGroupGapX: 48,
-	stateGroupPaddingX: 24,
-	stateGroupPaddingY: 28,
-	stateGroupHeaderOffsetY: 42,
-
-	mutatorGroupMinWidth: 280,
-	mutatorGroupMinHeight: 170,
-	mutatorGroupGapX: 24,
-	mutatorGroupPaddingX: 18,
-	mutatorGroupPaddingY: 18,
-	mutatorGroupHeaderOffsetY: 24,
+	canvasPadding: 24,
+	headerHeight: 24,
+	
+	state: {
+		gap: 24,
+		pad: 18,
+		minWidth: 280,
+		minHeight: 170,
+	},
+	mutator: {
+		gap: 24,
+		pad: 18,
+		minWidth: 280,
+		minHeight: 170,
+	},
 
 	graphNodeWidth: 220,
 	graphNodeHeight: 56,
@@ -46,6 +47,7 @@ const ELK_OPTIONS = {
 	'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
 	'elk.layered.feedbackEdges': 'true',
 	'elk.edgeRouting': 'ORTHOGONAL',
+	'elk.padding': elkPadding(LAYOUT.headerHeight + LAYOUT.mutator.pad, LAYOUT.mutator.pad)
 };
 
 const ELK_BOX_ROW_OPTIONS = {
@@ -71,20 +73,20 @@ function asNodeLabel(node: StateGraphNode) {
 	return `${node.kind}${node.label ? `: ${node.label}` : ''}`;
 }
 
-async function layoutMutator(mutator: StateMutatingFunction) {
+async function layoutMutator(mutator: StateMutatingFunction, elkLayout = {}) {
 	if (!mutator.nodes.length) {
 		return {
 			...mutator,
 			layoutedNodes: [],
 			transitions: [],
-			width: LAYOUT.mutatorGroupMinWidth,
-			height: LAYOUT.mutatorGroupMinHeight,
+			width: LAYOUT.mutator.minWidth,
+			height: LAYOUT.mutator.minHeight,
 		};
 	}
 
 	const graph = {
 		id: `elk-${mutator.id}`,
-		layoutOptions: ELK_OPTIONS,
+		layoutOptions: { ...ELK_OPTIONS, ...elkLayout },
 		children: mutator.nodes.map(node => ({
 			width: LAYOUT.graphNodeWidth,
 			height: LAYOUT.graphNodeHeight,
@@ -97,33 +99,27 @@ async function layoutMutator(mutator: StateMutatingFunction) {
 		})),
 	};
 
-	const { children = [], edges: transitions } = await elk.layout(graph);
-	const layoutedNodes = children.map(node => ({
-		...node,
-		x: node.x ?? 0,
-		y: node.y ?? 0,
-		width: node.width ?? LAYOUT.graphNodeWidth,
-		height: node.height ?? LAYOUT.graphNodeHeight,
-	}));
-
-	const maxX = layoutedNodes.length ? Math.max(...layoutedNodes.map((node) => node.x + node.width)) : 0;
-	const maxY = layoutedNodes.length ? Math.max(...layoutedNodes.map((node) => node.y + node.height)) : 0;
+	const { children = [], edges: transitions, width = 0, height = 0 } = await elk.layout<ElkNode & {
+		children: (StateGraphNode & ElkNode)[]
+		edges: typeof graph.edges;
+	}>(graph);
+	const layoutedNodes = children.map(node => ({x: 0, y: 0, width: 0, height: 0, ...node}));
 
 	return {
 		...mutator,
 		layoutedNodes,
 		transitions,
-		width: Math.max(LAYOUT.mutatorGroupMinWidth, maxX + (LAYOUT.mutatorGroupPaddingX * 2)),
-		height: Math.max(LAYOUT.mutatorGroupMinHeight, maxY + (LAYOUT.mutatorGroupPaddingY * 2) + LAYOUT.mutatorGroupHeaderOffsetY),
+		width: Math.max(LAYOUT.mutator.minWidth, width ?? 0),
+		height: Math.max(LAYOUT.mutator.minHeight, height ?? 0),
 	};
 }
 
-async function layoutBoxRow<T extends ElkNode>(items: T[], gapX: number) {
+async function layoutBoxRow<T extends ElkNode>(items: T[], { gap, padding, minWidth = 0, minHeight = 0 }: any) {
 	if (!items.length) {
 		return {
 			layoutedItems: [],
-			width: 0,
-			height: 0,
+			width: minWidth,
+			height: minHeight,
 		};
 	}
 
@@ -131,28 +127,23 @@ async function layoutBoxRow<T extends ElkNode>(items: T[], gapX: number) {
 		id: `elk-box-row-${items.map(item => item.id).join('-')}`,
 		layoutOptions: {
 			...ELK_BOX_ROW_OPTIONS,
-			'elk.spacing.nodeNode': `${gapX}`,
+			'elk.spacing.componentComponent': `${gap}`,
+			...(padding ? { 'elk.padding': padding } : {}),
 		},
 		children: items,
 		edges: [],
 	};
 
-	const { children = [] } = await elk.layout(graph);
-	const layoutedItems = children.map(item => ({
-		...item,
-		x: item.x ?? 0,
-		y: item.y ?? 0,
-		width: item.width ?? 0,
-		height: item.height ?? 0,
-	}));
+	const { children = [], width = 0, height = 0 } = await elk.layout<ElkNode & { children: T[] }>(graph);
+	const layoutedItems = children.map(item => ({x: 0, y: 0, width: 0, height: 0, ...item}));
 
 	const maxX = layoutedItems.length ? Math.max(...layoutedItems.map((item) => item.x + item.width)) : 0;
 	const maxY = layoutedItems.length ? Math.max(...layoutedItems.map((item) => item.y + item.height)) : 0;
 
 	return {
 		layoutedItems,
-		width: maxX,
-		height: maxY,
+		width: Math.max(minWidth, width ?? maxX),
+		height: Math.max(minHeight, height ?? maxY),
 	};
 }
 
@@ -162,19 +153,24 @@ async function layoutStateVariable(stateVariable: StateVariable) {
 		return {
 			...stateVariable,
 			layoutedMutators: [],
-			width: LAYOUT.stateGroupMinWidth,
-			height: LAYOUT.stateGroupMinHeight,
+			width: LAYOUT.state.minWidth,
+			height: LAYOUT.state.minHeight,
 		};
 	}
 
 	const mutatorLayouts = await Promise.all(mutators.map(layoutMutator));
-	
-	const { layoutedItems: layoutedMutators, width, height } = await layoutBoxRow(mutatorLayouts, LAYOUT.mutatorGroupGapX);
+
+	const { layoutedItems: layoutedMutators, width, height } = await layoutBoxRow(mutatorLayouts, {
+		gap: LAYOUT.mutator.gap,
+		padding: elkPadding(LAYOUT.headerHeight + LAYOUT.state.pad, LAYOUT.state.pad),
+		minWidth: LAYOUT.state.minWidth,
+		minHeight: LAYOUT.state.minHeight,
+	});
 	return {
 		...stateVariable,
 		layoutedMutators,
-		width: Math.max(LAYOUT.stateGroupMinWidth, (LAYOUT.stateGroupPaddingX * 2) + width),
-		height: Math.max(LAYOUT.stateGroupMinHeight, height + (LAYOUT.stateGroupPaddingY * 2) + LAYOUT.stateGroupHeaderOffsetY),
+		width,
+		height,
 	};
 }
 
@@ -186,7 +182,10 @@ async function toFlow(model?: StateDiagramModel) {
 		return { nodes, edges };
 
 	const stateVariableLayouts = await Promise.all(model.stateVariables.map(layoutStateVariable));
-	const { layoutedItems: layoutedStateVariables } = await layoutBoxRow(stateVariableLayouts, LAYOUT.stateGroupGapX);
+	const { layoutedItems: layoutedStateVariables } = await layoutBoxRow(stateVariableLayouts, {
+		gap: LAYOUT.state.gap,
+		padding: elkPadding(LAYOUT.canvasPadding, LAYOUT.canvasPadding),
+	});
 
 	for (const stateVariableLayout of layoutedStateVariables) {
 		const stateGroupId = `${stateVariableLayout.id}`;
@@ -194,40 +193,24 @@ async function toFlow(model?: StateDiagramModel) {
 		nodes.push({
 			id: stateGroupId,
 			type: 'labeledGroupNode',
-			position: {
-				x: LAYOUT.canvasPaddingX + stateVariableLayout.x,
-				y: LAYOUT.canvasPaddingY + stateVariableLayout.y,
-			},
+			position: { x: stateVariableLayout.x, y: stateVariableLayout.y },
 			data: { label: stateVariableLayout.name, position: 'top-left' } as GroupNodeProps,
 			width: stateVariableLayout.width,
 			height: stateVariableLayout.height,
-			style: {
-				borderRadius: 12,
-				border: 'none',
-				color: 'var(--vscode-foreground)',
-			},
+			className: 'rounded-lg border-0 text-(--vscode-foreground)',
 			draggable: false,
 		});
 
 		if (!stateVariableLayout.mutators?.length) {
 			nodes.push({
 				id: `${stateGroupId}:empty`,
-				position: { x: LAYOUT.stateGroupPaddingX, y: LAYOUT.stateGroupHeaderOffsetY + 28 },
+				position: { x: LAYOUT.state.pad, y: LAYOUT.headerHeight + LAYOUT.state.pad },
 				parentId: stateGroupId,
 				extent: 'parent',
 				data: { label: 'No states or mutators' },
-				width: Math.min(stateVariableLayout.width - (LAYOUT.stateGroupPaddingX * 2), LAYOUT.graphNodeWidth + 40),
+				width: Math.min(stateVariableLayout.width - (LAYOUT.state.pad * 2), LAYOUT.graphNodeWidth + 40),
 				height: LAYOUT.graphNodeHeight,
-				style: {
-					padding: 14,
-					borderRadius: 8,
-					border: '1px dashed var(--vscode-descriptionForeground)',
-					background: 'var(--vscode-editor-background)',
-					color: 'var(--vscode-descriptionForeground)',
-					fontStyle: 'italic',
-					display: 'flex',
-					alignItems: 'center',
-				},
+				className: 'rounded-lg border border-dashed border-(--vscode-descriptionForeground) bg-(--vscode-editor-background) text-(--vscode-descriptionForeground) italic flex items-center p-[14px]',
 				draggable: false,
 				selectable: false,
 			});
@@ -238,20 +221,13 @@ async function toFlow(model?: StateDiagramModel) {
 			nodes.push({
 				id: mutatorGroupId,
 				type: 'labeledGroupNode',
-				position: {
-					x: LAYOUT.stateGroupPaddingX + mutatorLayout.x,
-					y: LAYOUT.stateGroupHeaderOffsetY + mutatorLayout.y,
-				},
+				position: { x: mutatorLayout.x, y: mutatorLayout.y },
 				parentId: stateGroupId,
 				extent: 'parent',
 				data: { label: mutatorLayout.name, position: 'top-left' } as GroupNodeProps,
 				width: mutatorLayout.width,
 				height: mutatorLayout.height,
-				style: {
-					borderRadius: 14,
-					border: 'none',
-					color: 'var(--vscode-foreground)',
-				},
+				className: 'rounded-lg border-0 text-(--vscode-foreground)',
 				draggable: false,
 			});
 
@@ -261,10 +237,7 @@ async function toFlow(model?: StateDiagramModel) {
 
 				nodes.push({
 					id: flowNodeId,
-					position: {
-						x: LAYOUT.mutatorGroupPaddingX + x,
-						y: LAYOUT.mutatorGroupHeaderOffsetY + LAYOUT.mutatorGroupPaddingY + y,
-					},
+					position: { x, y },
 					parentId: mutatorGroupId,
 					extent: 'parent',
 					data: { label: asNodeLabel(graphNode) },
@@ -272,16 +245,14 @@ async function toFlow(model?: StateDiagramModel) {
 					sourcePosition: Position.Bottom,
 					width,
 					height,
+					className: 'rounded-lg text-(--vscode-foreground) text-[12px]',
 					style: {
-						borderRadius: 8,
 						border: graphNode.nodeType === 'state-update'
 							? '1px solid var(--vscode-testing-iconPassed)'
 							: '1px solid var(--vscode-button-border)',
 						background: graphNode.nodeType === 'state-update'
 							? 'color-mix(in srgb, var(--vscode-testing-iconPassed) 35%, transparent)'
 							: 'var(--vscode-input-background)',
-						color: 'var(--vscode-foreground)',
-						fontSize: 12,
 					},
 					draggable: false,
 				});
