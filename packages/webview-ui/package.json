@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": " vite build --mode fast",
-    "build-prod": "vite build --mode compiler",
+    "build": "tsc -b && vite build --mode fast",
+    "build-prod": "tsc -b && vite build --mode compiler",
     "build:debug": "vite --debug plugin-transform build",
     "lint": "eslint .",
     "preview": "vite preview",

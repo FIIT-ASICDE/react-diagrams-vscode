@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { Background, Controls, MarkerType, Position, ReactFlow, useReactFlow, type Edge, type EdgeTypes, type Node, type NodeTypes } from '@xyflow/react';
-import type { Id, StateDiagram as StateDiagramModel, StateGraphNode, StateMutatingFunction } from '@react-diagrams/core';
+import type { StateDiagram as StateDiagramModel, StateGraphNode, StateMutatingFunction, StateVariable } from '@react-diagrams/core';
 import FloatingEdge from '@/app@components/xyflow-react/components/FloatingEdge';
 import FloatingConnectionLine from '@/app@components/xyflow-react/components/FloatingConnectionLine';
 import LabeledGroupNode from '@/app@components/xyflow-react/components/LabeledGroupNode';
 import type { GroupNodeProps } from '@/app@shadcn/components/labeled-group-node';
-import { getColor } from 'random-material-color';
+import type { ElkNode } from 'elkjs/lib/elk-api';
 
 type StateDiagramProps = {
 	model?: StateDiagramModel;
@@ -48,6 +48,12 @@ const ELK_OPTIONS = {
 	'elk.edgeRouting': 'ORTHOGONAL',
 };
 
+const ELK_BOX_ROW_OPTIONS = {
+	'elk.algorithm': 'layered',
+	'elk.direction': 'DOWN',
+	'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+};
+
 const edgeTypes: EdgeTypes = {
 	floating: FloatingEdge as EdgeTypes['floating'],
 };
@@ -68,7 +74,7 @@ function asNodeLabel(node: StateGraphNode) {
 async function layoutMutator(mutator: StateMutatingFunction) {
 	if (!mutator.nodes.length) {
 		return {
-			mutator,
+			...mutator,
 			layoutedNodes: [],
 			transitions: [],
 			width: LAYOUT.mutatorGroupMinWidth,
@@ -104,11 +110,71 @@ async function layoutMutator(mutator: StateMutatingFunction) {
 	const maxY = layoutedNodes.length ? Math.max(...layoutedNodes.map((node) => node.y + node.height)) : 0;
 
 	return {
-		mutator,
+		...mutator,
 		layoutedNodes,
 		transitions,
 		width: Math.max(LAYOUT.mutatorGroupMinWidth, maxX + (LAYOUT.mutatorGroupPaddingX * 2)),
 		height: Math.max(LAYOUT.mutatorGroupMinHeight, maxY + (LAYOUT.mutatorGroupPaddingY * 2) + LAYOUT.mutatorGroupHeaderOffsetY),
+	};
+}
+
+async function layoutBoxRow<T extends ElkNode>(items: T[], gapX: number) {
+	if (!items.length) {
+		return {
+			layoutedItems: [],
+			width: 0,
+			height: 0,
+		};
+	}
+
+	const graph = {
+		id: `elk-box-row-${items.map(item => item.id).join('-')}`,
+		layoutOptions: {
+			...ELK_BOX_ROW_OPTIONS,
+			'elk.spacing.nodeNode': `${gapX}`,
+		},
+		children: items,
+		edges: [],
+	};
+
+	const { children = [] } = await elk.layout(graph);
+	const layoutedItems = children.map(item => ({
+		...item,
+		x: item.x ?? 0,
+		y: item.y ?? 0,
+		width: item.width ?? 0,
+		height: item.height ?? 0,
+	}));
+
+	const maxX = layoutedItems.length ? Math.max(...layoutedItems.map((item) => item.x + item.width)) : 0;
+	const maxY = layoutedItems.length ? Math.max(...layoutedItems.map((item) => item.y + item.height)) : 0;
+
+	return {
+		layoutedItems,
+		width: maxX,
+		height: maxY,
+	};
+}
+
+async function layoutStateVariable(stateVariable: StateVariable) {
+	const mutators = stateVariable.mutators
+	if (!mutators?.length) {
+		return {
+			...stateVariable,
+			layoutedMutators: [],
+			width: LAYOUT.stateGroupMinWidth,
+			height: LAYOUT.stateGroupMinHeight,
+		};
+	}
+
+	const mutatorLayouts = await Promise.all(mutators.map(layoutMutator));
+	
+	const { layoutedItems: layoutedMutators, width, height } = await layoutBoxRow(mutatorLayouts, LAYOUT.mutatorGroupGapX);
+	return {
+		...stateVariable,
+		layoutedMutators,
+		width: Math.max(LAYOUT.stateGroupMinWidth, (LAYOUT.stateGroupPaddingX * 2) + width),
+		height: Math.max(LAYOUT.stateGroupMinHeight, height + (LAYOUT.stateGroupPaddingY * 2) + LAYOUT.stateGroupHeaderOffsetY),
 	};
 }
 
@@ -119,36 +185,22 @@ async function toFlow(model?: StateDiagramModel) {
 	if (!model?.stateVariables?.length)
 		return { nodes, edges };
 
-	let stateGroupOffsetX = LAYOUT.canvasPaddingX;
+	const stateVariableLayouts = await Promise.all(model.stateVariables.map(layoutStateVariable));
+	const { layoutedItems: layoutedStateVariables } = await layoutBoxRow(stateVariableLayouts, LAYOUT.stateGroupGapX);
 
-	for (const stateVariable of model.stateVariables) {
-		const mutators = stateVariable.mutators ?? [];
-		const hasMutators = mutators.length > 0;
-		const mutatorLayouts = await Promise.all(mutators.map((mutator) => layoutMutator(mutator)));
-		const tallestMutator = mutatorLayouts.length ? Math.max(...mutatorLayouts.map((layout) => layout.height)) : 0;
-		const stateGroupInnerWidth = mutatorLayouts.reduce((totalWidth, layout, index) => {
-			return totalWidth + layout.width + (index > 0 ? LAYOUT.mutatorGroupGapX : 0);
-		}, 0);
+	for (const stateVariableLayout of layoutedStateVariables) {
+		const stateGroupId = `${stateVariableLayout.id}`;
 
-		const stateGroupWidth = hasMutators
-			? Math.max(
-				LAYOUT.stateGroupMinWidth,
-				(LAYOUT.stateGroupPaddingX * 2) + stateGroupInnerWidth,
-			)
-			: LAYOUT.stateGroupMinWidth;
-
-		const stateGroupHeight = hasMutators
-			? Math.max(LAYOUT.stateGroupMinHeight, tallestMutator + (LAYOUT.stateGroupPaddingY * 2) + LAYOUT.stateGroupHeaderOffsetY)
-			: LAYOUT.stateGroupMinHeight;
-
-		const stateGroupId = `${stateVariable.id}`;
 		nodes.push({
 			id: stateGroupId,
 			type: 'labeledGroupNode',
-			position: { x: stateGroupOffsetX, y: LAYOUT.canvasPaddingY },
-			data: { label: stateVariable.name, position: 'top-left' } as GroupNodeProps,
-			width: stateGroupWidth,
-			height: stateGroupHeight,
+			position: {
+				x: LAYOUT.canvasPaddingX + stateVariableLayout.x,
+				y: LAYOUT.canvasPaddingY + stateVariableLayout.y,
+			},
+			data: { label: stateVariableLayout.name, position: 'top-left' } as GroupNodeProps,
+			width: stateVariableLayout.width,
+			height: stateVariableLayout.height,
 			style: {
 				borderRadius: 12,
 				border: 'none',
@@ -157,14 +209,14 @@ async function toFlow(model?: StateDiagramModel) {
 			draggable: false,
 		});
 
-		if (!hasMutators) {
+		if (!stateVariableLayout.mutators?.length) {
 			nodes.push({
 				id: `${stateGroupId}:empty`,
 				position: { x: LAYOUT.stateGroupPaddingX, y: LAYOUT.stateGroupHeaderOffsetY + 28 },
 				parentId: stateGroupId,
 				extent: 'parent',
 				data: { label: 'No states or mutators' },
-				width: Math.min(stateGroupWidth - (LAYOUT.stateGroupPaddingX * 2), LAYOUT.graphNodeWidth + 40),
+				width: Math.min(stateVariableLayout.width - (LAYOUT.stateGroupPaddingX * 2), LAYOUT.graphNodeWidth + 40),
 				height: LAYOUT.graphNodeHeight,
 				style: {
 					padding: 14,
@@ -181,19 +233,18 @@ async function toFlow(model?: StateDiagramModel) {
 			});
 		}
 
-		let mutatorOffsetX = LAYOUT.stateGroupPaddingX;
-		for (const mutatorLayout of mutatorLayouts) {
-			const mutatorGroupId = `${mutatorLayout.mutator.id}`;
+		for (const mutatorLayout of stateVariableLayout.layoutedMutators) {
+			const mutatorGroupId = `${mutatorLayout.id}`;
 			nodes.push({
 				id: mutatorGroupId,
 				type: 'labeledGroupNode',
 				position: {
-					x: mutatorOffsetX,
-					y: LAYOUT.stateGroupHeaderOffsetY,
+					x: LAYOUT.stateGroupPaddingX + mutatorLayout.x,
+					y: LAYOUT.stateGroupHeaderOffsetY + mutatorLayout.y,
 				},
 				parentId: stateGroupId,
 				extent: 'parent',
-				data: { label: mutatorLayout.mutator.name, position: 'top-left' } as GroupNodeProps,
+				data: { label: mutatorLayout.name, position: 'top-left' } as GroupNodeProps,
 				width: mutatorLayout.width,
 				height: mutatorLayout.height,
 				style: {
@@ -204,10 +255,8 @@ async function toFlow(model?: StateDiagramModel) {
 				draggable: false,
 			});
 
-			// const nodeIdMap = new Map<Id, string>();
 			for (const graphNode of mutatorLayout.layoutedNodes) {
 				const flowNodeId = `${graphNode.id}`;
-				// nodeIdMap.set(graphNode.id, flowNodeId);
 				const { x, y, width, height } = graphNode;
 
 				nodes.push({
@@ -237,15 +286,13 @@ async function toFlow(model?: StateDiagramModel) {
 					draggable: false,
 				});
 			}
-			
-			for (const transition of mutatorLayout.mutator.transitions) {
+
+			for (const transition of mutatorLayout.transitions) {
 				const source = transition.fromNodeId;
 				const target = transition.toNodeId;
 
 				if (!source || !target)
 					continue;
-
-				// console.debug(transition.fromNodeId, source, transition.toNodeId, target)
 
 				edges.push({
 					id: `${mutatorGroupId}-${transition.id}`,
@@ -257,11 +304,7 @@ async function toFlow(model?: StateDiagramModel) {
 					markerEnd: { type: MarkerType.ArrowClosed },
 				});
 			}
-
-			mutatorOffsetX += mutatorLayout.width + LAYOUT.mutatorGroupGapX;
 		}
-
-		stateGroupOffsetX += stateGroupWidth + LAYOUT.stateGroupGapX;
 	}
 
 	return { nodes, edges };
@@ -286,19 +329,14 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	useEffect(() => {
 		let cancelled = false;
 
-		void (async () => {
-			try {
-				const nextFlowState = await toFlow(model);
-				if (!cancelled) {
-					setFlowState(nextFlowState);
-				}
-			} catch (error) {
-				console.error('Failed to layout state diagram with ELK', error);
-				if (!cancelled) {
-					setFlowState({ nodes: [], edges: [] });
-				}
-			}
-		})();
+		toFlow(model).then((nextFlowState) => {
+			if (!cancelled)
+				setFlowState(nextFlowState);
+		}).catch((error) => {
+			console.error('Failed to layout state diagram with ELK', error);
+			if (!cancelled)
+				setFlowState({ nodes: [], edges: [] });
+		});
 
 		return () => {
 			cancelled = true;
