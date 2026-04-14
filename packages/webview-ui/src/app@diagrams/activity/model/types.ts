@@ -23,6 +23,7 @@ export type RenameDraft = {
 export type ActivityWebviewMessenger = {
 	postMessage: {
 		(type: 'diagram/requestType'): void;
+		(type: 'diagram/visibleGraph', data: ActivityGraphPayload): void;
 		(type: 'code/request'): void;
 		(type: 'code/generateSkeleton', data: ActivityGraphPayload): void;
 		(type: 'code/nodePreview', data: ActivityNodePreviewRequestPayload): void;

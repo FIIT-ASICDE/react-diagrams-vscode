@@ -9,9 +9,20 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onChatParticipant:vs-code-ext.diagram"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "vs-code-ext.diagram",
+        "name": "diagram",
+        "fullName": "Activity Diagram Assistant",
+        "description": "Understands TypeScript, TSX, and activity diagrams using your current code and diagram context.",
+        "isSticky": true
+      }
+    ],
     "commands": [
       {
         "command": "vs-code-ext.componentState",

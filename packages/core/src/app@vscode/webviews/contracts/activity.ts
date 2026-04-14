@@ -19,6 +19,7 @@ export type ActivityNodePreviewDataPayload = {
 
 export type ActivityWebviewToExtensionMessage =
 	| { type: "diagram/requestType" }
+	| { type: "diagram/visibleGraph"; data: ActivityGraphPayload }
 	| { type: "code/request" }
 	| { type: "code/generateSkeleton"; data: ActivityGraphPayload }
 	| { type: "code/nodePreview"; data: ActivityNodePreviewRequestPayload };
@@ -32,6 +33,7 @@ export type ActivityExtensionToWebviewMessage =
 
 const ACTIVITY_WEBVIEW_TO_EXTENSION_TYPES = new Set<string>([
 	"diagram/requestType",
+	"diagram/visibleGraph",
 	"code/request",
 	"code/generateSkeleton",
 	"code/nodePreview",

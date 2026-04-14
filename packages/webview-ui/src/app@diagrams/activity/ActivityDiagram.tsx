@@ -223,6 +223,13 @@ export default function ActivityDiagram() {
 		});
 	}, [fitViewRevision, getStartNodes, inPreview]);
 
+	useEffect(() => {
+		vscode.postMessage('diagram/visibleGraph', {
+			nodes: displayedNodes,
+			edges: displayedEdges,
+		});
+	}, [displayedNodes, displayedEdges]);
+
 	const onNodesChange = useCallback(
 		(changes) => {
 			if (inPreview) {

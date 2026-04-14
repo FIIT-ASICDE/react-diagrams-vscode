@@ -10,6 +10,20 @@ import type {
 } from "@react-diagrams/core/app@vscode";
 import { isActivityWebviewToExtensionMessage } from "@react-diagrams/core/app@vscode";
 import { Node, Edge } from "@xyflow/react";
+
+type ActivityGraph = {
+	nodes: Node[];
+	edges: Edge[];
+};
+
+function isVisibleGraphMessage(message: unknown): message is { type: "diagram/visibleGraph"; data: ActivityGraphPayload } {
+	if (!message || typeof message !== "object")
+		return false;
+
+	const maybeType = (message as { type?: unknown }).type;
+	return maybeType === "diagram/visibleGraph";
+}
+
 export class ComponentActivityPanel {
 	public static readonly WEBVIEW_DIR = "dist/webview";
 
@@ -19,6 +33,30 @@ export class ComponentActivityPanel {
 	private disposables: Disposable[] = [];
 	// Cache the last file-backed document so we can still read code after the webview gets focus.
 	private lastKnownFileDocument?: TextDocument;
+	private lastKnownActivityGraph?: ActivityGraph;
+	private lastVisibleActivityGraph?: ActivityGraph;
+
+	public static getCurrentActivityGraph(): ActivityGraph | undefined {
+		const current = ComponentActivityPanel.currentPanel?.lastKnownActivityGraph;
+		if (!current)
+			return undefined;
+
+		return {
+			nodes: [...current.nodes],
+			edges: [...current.edges],
+		};
+	}
+
+	public static getCurrentVisibleActivityGraph(): ActivityGraph | undefined {
+		const current = ComponentActivityPanel.currentPanel?.lastVisibleActivityGraph;
+		if (!current)
+			return undefined;
+
+		return {
+			nodes: [...current.nodes],
+			edges: [...current.edges],
+		};
+	}
 
 	/**
 	 * The ComponentActivityPanel class private constructor (called only from the render method).
@@ -139,6 +177,10 @@ export class ComponentActivityPanel {
 
 		this.lastKnownFileDocument = bestDocument;
 		const parsedComponent: { nodes: Node[]; edges: Edge[] } = await parseActivityComponent(bestDocument.getText());
+		this.lastKnownActivityGraph = {
+			nodes: parsedComponent.nodes,
+			edges: parsedComponent.edges,
+		};
 
 
 		// Send raw code payload to webview; parsing is intentionally done later.
@@ -241,6 +283,14 @@ export class ComponentActivityPanel {
 	}
 
 	private webviewMessageListener(message: unknown) {
+		if (isVisibleGraphMessage(message)) {
+			const payload = message.data as ActivityGraphPayload;
+			const nodes = Array.isArray(payload.nodes) ? payload.nodes as Node[] : [];
+			const edges = Array.isArray(payload.edges) ? payload.edges as Edge[] : [];
+			this.lastVisibleActivityGraph = { nodes, edges };
+			return;
+		}
+
 		if (!isActivityWebviewToExtensionMessage(message))
 			return;
 
@@ -259,6 +309,7 @@ export class ComponentActivityPanel {
 				const payload = message.data as ActivityGraphPayload;
 				const nodes = Array.isArray(payload.nodes) ? payload.nodes as Node[] : [];
 				const edges = Array.isArray(payload.edges) ? payload.edges as Edge[] : [];
+				this.lastKnownActivityGraph = { nodes, edges };
 				void this.generateSkeletonFromDiagram(nodes, edges);
 				return;
 			}
