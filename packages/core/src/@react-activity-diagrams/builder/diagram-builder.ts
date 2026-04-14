@@ -3,13 +3,12 @@ import {
   Statement,
   SourceFile,
 } from 'ts-morph';
-import { GraphWriter, type WriterState } from './graph-writer';
+import { GraphWriter } from './graph-writer';
 import { StatementVisitor } from './visitors';
 import { applyElkLayout } from './elkLayout';
 export class DiagramBuilder {
   private nodes: Node[] = [];
   private edges: Edge[] = [];
-  private nodeIdCounter = 0;
 
   public async build(ast: SourceFile): Promise<{ nodes: Node[]; edges: Edge[] }> {
     return this.buildStatements(ast.getStatements());
@@ -18,21 +17,18 @@ export class DiagramBuilder {
   public async buildStatements(statements: Statement[]): Promise<{ nodes: Node[]; edges: Edge[] }> {
     this.reset();
 
-    const state: WriterState = { nodeIdCounter: 0 };
-    const writer = new GraphWriter(this.nodes, this.edges, state);
+    const writer = new GraphWriter(this.nodes, this.edges);
     const visitor = new StatementVisitor(writer);
 
     const startId = writer.addFlowNode('initial', 'Start');
     const main = visitor.visitStatements(statements);
-
-    this.nodeIdCounter = state.nodeIdCounter;
 
     const endId = writer.addFlowNode('end', 'End');
 
     if (main.entry) {
       writer.addEdge(startId, main.entry);
       for (const exit of main.exits) {
-        writer.addEdge(exit, endId);
+        writer.addEdge(exit, endId, exit.startsWith('decision-') ? 'no' : undefined);
       }
     } else {
       writer.addEdge(startId, endId);
@@ -44,6 +40,5 @@ export class DiagramBuilder {
   private reset() {
     this.nodes = [];
     this.edges = [];
-    this.nodeIdCounter = 0;
   }
 }

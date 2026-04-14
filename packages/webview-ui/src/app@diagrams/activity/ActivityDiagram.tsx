@@ -1,36 +1,40 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ReactFlow, Background, addEdge, applyEdgeChanges, applyNodeChanges, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
+import { ReactFlow, Background, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { VSCodeButton } from '@vscode/webview-ui-toolkit/react';
 import { vscode } from '../../app@vscode/api';
 import { nodeTypes } from './diagram-rendering/nodeTypes';
 import DiagramNavigator from './diagram-rendering/DiagramNavigator';
 import BackEdge from './diagram-rendering/BackEdge';
-
-
-type CodeDataMessage = {
-	type: 'code/data';
-	nodes: Node[];
-	edges: Edge[];
-};
-
-type CodeErrorMessage = {
-	type: 'code/error';
-	message?: string;
-};
-
-type NodePreviewDataMessage = {
-	type: 'code/nodePreviewData';
-	title: string;
-	sourceText?: string;
-	nodes: Node[];
-	edges: Edge[];
-};
-
-type NodePreviewErrorMessage = {
-	type: 'code/nodePreviewError';
-	message?: string;
-};
+import { generateCodeFromDiagram } from './logic/diagram-code-generation';
+import {
+	appendSnapshot,
+	createTextPreviewSnapshot,
+	truncateSnapshots,
+} from './logic/snapshot-utils';
+import { applyRenameToNodes, createRenameDraft } from './logic/rename-utils';
+import {
+	appendNode,
+	appendNodeToTopSnapshot,
+	applyEdgeChangesToEdges,
+	applyEdgeChangesToTopSnapshot,
+	applyNodeChangesToNodes,
+	applyNodeChangesToTopSnapshot,
+	centerNodeInViewport,
+	connectEdges,
+	connectTopSnapshotEdges,
+	createActivityNode,
+} from './logic/graph-edit-utils';
+import type {
+	ActivityGraphPayload,
+	ActivityNodePreviewDataPayload,
+} from '@react-diagrams/core/app@vscode';
+import type {
+	ActivityNodeType,
+	ActivityMessage,
+	PreviewSnapshot,
+	RenameDraft,
+} from './model/types';
 
 const customNode = {
 	action: nodeTypes.action,
@@ -46,10 +50,6 @@ const customEdge = {
 	back: BackEdge,
 };
 
-type ActivityNodeType = 'start' | 'action' | 'decision' | 'merge' | 'end';
-
-type ActivityMessage = CodeDataMessage | CodeErrorMessage | NodePreviewDataMessage | NodePreviewErrorMessage | { type?: string };
-
 function truncate(text: string, maxLength: number) {
 	return text.length <= maxLength ? text : `${text.slice(0, maxLength - 3)}...`;
 }
@@ -57,11 +57,12 @@ function truncate(text: string, maxLength: number) {
 export default function ActivityDiagram() {
 	const [nodes, setNodes] = useState<Node[]>([]);
 	const [edges, setEdges] = useState<Edge[]>([]);
-	const [renameDraft, setRenameDraft] = useState<{ nodeId: string; value: string } | null>(null);
-	const [previewStack, setPreviewStack] = useState<Array<{ title: string; sourceText?: string; nodes: Node[]; edges: Edge[] }>>([]);
+	const [renameDraft, setRenameDraft] = useState<RenameDraft | null>(null);
+	const [previewStack, setPreviewStack] = useState<PreviewSnapshot[]>([]);
 	const [fitViewRevision, setFitViewRevision] = useState(0);
 	const nodeCounter = useRef(1);
 	const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
+	const previewClickTimeoutRef = useRef<number | null>(null);
 
 	const inPreview = previewStack.length > 0;
 	const currentPreview = inPreview ? previewStack[previewStack.length - 1] : null;
@@ -92,54 +93,24 @@ export default function ActivityDiagram() {
 
 	}, []);
 
-	const createNode = useCallback((type: ActivityNodeType, previewMode = false): Node => {
-		const currentIndex = nodeCounter.current++;
-		const idPrefix = previewMode ? 'preview' : type;
-		const id = `${idPrefix}-${currentIndex}`;
-
-		const defaultLabelByType: Record<ActivityNodeType, string> = {
-			start: 'Start',
-			action: 'Action',
-			decision: 'Condition',
-			merge: 'Merge',
-			end: 'End',
-		};
-
-		return {
-			id,
-			type,
-			draggable: true,
-			position: { x: 80 + (currentIndex % 4) * 220, y: 80 + Math.floor(currentIndex / 4) * 120 },
-			data: { label: `${defaultLabelByType[type]} ${currentIndex}` },
-		};
-	}, []);
-
 	const addNode = useCallback((type: ActivityNodeType) => {
+		const createCenteredNode = (previewMode: boolean) => centerNodeInViewport(
+			createActivityNode(type, nodeCounter.current++, previewMode),
+			reactFlowRef.current,
+			window.innerWidth,
+			window.innerHeight,
+		);
+
 		if (inPreview) {
-			setPreviewStack((stackSnapshot) => {
-				if (stackSnapshot.length === 0) {
-					return stackSnapshot;
-				}
-
-				const lastIndex = stackSnapshot.length - 1;
-				const lastPreview = stackSnapshot[lastIndex];
-
-				return [
-					...stackSnapshot.slice(0, lastIndex),
-					{
-						...lastPreview,
-						nodes: [...lastPreview.nodes, createNode(type, true)],
-					},
-				];
-			});
+			setPreviewStack((stackSnapshot) => appendNodeToTopSnapshot(stackSnapshot, createCenteredNode(true)));
 			return;
 		}
 
-		setNodes((snapshot) => [...snapshot, createNode(type)]);
-	}, [createNode, inPreview]);
+		setNodes((snapshot) => appendNode(snapshot, createCenteredNode(false)));
+	}, [inPreview]);
 
 	const generateSkeleton = useCallback(() => {
-		vscode.postMessage('code/generateSkeleton', { nodes: diagramNodes, edges: diagramEdges });
+		generateCodeFromDiagram(vscode, diagramNodes, diagramEdges);
 	}, [diagramNodes, diagramEdges]);
 
 	const openNodePreview = useCallback((node: Node) => {
@@ -157,32 +128,7 @@ export default function ActivityDiagram() {
 		}
 
 		if (nodeType !== 'expandable') {
-			const lines = sourceText.split(/\r?\n/);
-			const longestLineLength = lines.reduce((max, line) => Math.max(max, line.length), 0);
-			const previewWidth = Math.min(1100, Math.max(420, longestLineLength * 7 + 60));
-			const previewHeight = Math.min(720, Math.max(220, lines.length * 20 + 60));
-
-			setPreviewStack((stackSnapshot) => [
-				...stackSnapshot,
-				{
-					title: label || 'Full text preview',
-					sourceText,
-					nodes: [
-						{
-							id: `text-preview-${Date.now()}`,
-							type: 'textPreview',
-							position: { x: 0, y: 0 },
-							draggable: true,
-							data: {
-								label: sourceText,
-								previewWidth,
-								previewHeight,
-							},
-						},
-					],
-					edges: [],
-				},
-			]);
+			setPreviewStack((stackSnapshot) => appendSnapshot(stackSnapshot, createTextPreviewSnapshot(label || 'Full text preview', sourceText)));
 			setFitViewRevision((revision) => revision + 1);
 			return;
 		}
@@ -198,17 +144,17 @@ export default function ActivityDiagram() {
 			const message = event.data as ActivityMessage;
 
 			if (message.type === 'code/data') {
-				const codeMessage = message as CodeDataMessage;
-				setNodes(codeMessage.nodes);
-				setEdges(codeMessage.edges);
+				const payload = message.data as ActivityGraphPayload;
+				setNodes(Array.isArray(payload.nodes) ? payload.nodes as Node[] : []);
+				setEdges(Array.isArray(payload.edges) ? payload.edges as Edge[] : []);
 				setPreviewStack([]);
 				setFitViewRevision((revision) => revision + 1);
-				nodeCounter.current = codeMessage.nodes.length + 1;
+				nodeCounter.current = (Array.isArray(payload.nodes) ? payload.nodes.length : 0) + 1;
 				return;
 			}
 
 			if (message.type === 'code/error') {
-				const errorMessage = message as CodeErrorMessage;
+				const errorMessage = message.data as { message?: string };
 				setNodes([
 					{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'Activity diagram error' } },
 					{ id: 'n2', position: { x: 0, y: 100 }, data: { label: truncate(errorMessage.message ?? 'Unknown error', 80) } },
@@ -221,26 +167,20 @@ export default function ActivityDiagram() {
 			}
 
 			if (message.type === 'code/nodePreviewData') {
-				const previewMessage = message as NodePreviewDataMessage;
-				setPreviewStack((stackSnapshot) => [
-					...stackSnapshot,
-					{
-						title: previewMessage.title,
-						sourceText: previewMessage.sourceText,
-						nodes: previewMessage.nodes,
-						edges: previewMessage.edges,
-					},
-				]);
+				const previewMessage = message.data as ActivityNodePreviewDataPayload;
+				setPreviewStack((stackSnapshot) => appendSnapshot(stackSnapshot, {
+					title: previewMessage.title,
+					sourceText: previewMessage.sourceText,
+					nodes: Array.isArray(previewMessage.nodes) ? previewMessage.nodes as Node[] : [],
+					edges: Array.isArray(previewMessage.edges) ? previewMessage.edges as Edge[] : [],
+				}));
 				setFitViewRevision((revision) => revision + 1);
 				return;
 			}
 
 			if (message.type === 'code/nodePreviewError') {
-				const errorMessage = message as NodePreviewErrorMessage;
-				setPreviewStack((stackSnapshot) => [
-					...stackSnapshot,
-					{ title: 'Preview unavailable', sourceText: errorMessage.message, nodes: [], edges: [] },
-				]);
+				const errorMessage = message.data as { message?: string };
+				setPreviewStack((stackSnapshot) => appendSnapshot(stackSnapshot, { title: 'Preview unavailable', sourceText: errorMessage.message, nodes: [], edges: [] }));
 				setFitViewRevision((revision) => revision + 1);
 				return;
 			}
@@ -250,6 +190,10 @@ export default function ActivityDiagram() {
 		vscode.postMessage('code/request');
 
 		return () => {
+			if (previewClickTimeoutRef.current !== null) {
+				window.clearTimeout(previewClickTimeoutRef.current);
+				previewClickTimeoutRef.current = null;
+			}
 			window.removeEventListener('message', onMessage);
 		};
 	}, []);
@@ -282,23 +226,11 @@ export default function ActivityDiagram() {
 	const onNodesChange = useCallback(
 		(changes) => {
 			if (inPreview) {
-				setPreviewStack((stackSnapshot) => {
-					if (stackSnapshot.length === 0) {
-						return stackSnapshot;
-					}
-
-					const lastIndex = stackSnapshot.length - 1;
-					const lastPreview = stackSnapshot[lastIndex];
-
-					return [
-						...stackSnapshot.slice(0, lastIndex),
-						{ ...lastPreview, nodes: applyNodeChanges(changes, lastPreview.nodes) },
-					];
-				});
+				setPreviewStack((stackSnapshot) => applyNodeChangesToTopSnapshot(stackSnapshot, changes));
 				return;
 			}
 
-			setNodes((nodesSnapshot) => applyNodeChanges(changes, nodesSnapshot));
+			setNodes((nodesSnapshot) => applyNodeChangesToNodes(nodesSnapshot, changes));
 		},
 		[inPreview],
 	);
@@ -306,22 +238,10 @@ export default function ActivityDiagram() {
 	const onEdgesChange = useCallback(
 		(changes) => {
 			if (inPreview) {
-				setPreviewStack((stackSnapshot) => {
-					if (stackSnapshot.length === 0) {
-						return stackSnapshot;
-					}
-
-					const lastIndex = stackSnapshot.length - 1;
-					const lastPreview = stackSnapshot[lastIndex];
-
-					return [
-						...stackSnapshot.slice(0, lastIndex),
-						{ ...lastPreview, edges: applyEdgeChanges(changes, lastPreview.edges) },
-					];
-				});
+				setPreviewStack((stackSnapshot) => applyEdgeChangesToTopSnapshot(stackSnapshot, changes));
 				return;
 			}
-			setEdges((edgesSnapshot) => applyEdgeChanges(changes, edgesSnapshot));
+			setEdges((edgesSnapshot) => applyEdgeChangesToEdges(edgesSnapshot, changes));
 		},
 		[inPreview],
 	);
@@ -329,47 +249,35 @@ export default function ActivityDiagram() {
 	const onConnect = useCallback(
 		(params) => {
 			if (inPreview) {
-				setPreviewStack((stackSnapshot) => {
-					if (stackSnapshot.length === 0) {
-						return stackSnapshot;
-					}
-
-					const lastIndex = stackSnapshot.length - 1;
-					const lastPreview = stackSnapshot[lastIndex];
-
-					return [
-						...stackSnapshot.slice(0, lastIndex),
-						{ ...lastPreview, edges: addEdge(params, lastPreview.edges) },
-					];
-				});
+				setPreviewStack((stackSnapshot) => connectTopSnapshotEdges(stackSnapshot, params));
 				return;
 			}
-			setEdges((edgesSnapshot) => addEdge(params, edgesSnapshot));
+			setEdges((edgesSnapshot) => connectEdges(edgesSnapshot, params));
 		},
 		[inPreview],
 	);
 
 	const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
-		if (inPreview) {
-			return;
+		if (previewClickTimeoutRef.current !== null) {
+			window.clearTimeout(previewClickTimeoutRef.current);
+			previewClickTimeoutRef.current = null;
 		}
-
-		const currentLabel = String((node.data as { label?: unknown } | undefined)?.label ?? '');
-		setRenameDraft({ nodeId: node.id, value: currentLabel });
-	}, [inPreview]);
+		setRenameDraft(createRenameDraft(node));
+	}, []);
 
 	const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-		openNodePreview(node);
+		if (previewClickTimeoutRef.current !== null) {
+			window.clearTimeout(previewClickTimeoutRef.current);
+		}
+
+		previewClickTimeoutRef.current = window.setTimeout(() => {
+			openNodePreview(node);
+			previewClickTimeoutRef.current = null;
+		}, 150);
 	}, [openNodePreview]);
 
 	const navigateTo = useCallback((stackIndex: number) => {
-		if (stackIndex < 0) {
-			setPreviewStack([]);
-			setFitViewRevision((revision) => revision + 1);
-			return;
-		}
-
-		setPreviewStack((stackSnapshot) => stackSnapshot.slice(0, stackIndex + 1));
+		setPreviewStack((stackSnapshot) => truncateSnapshots(stackSnapshot, stackIndex));
 		setFitViewRevision((revision) => revision + 1);
 	}, []);
 
@@ -378,16 +286,32 @@ export default function ActivityDiagram() {
 			return;
 		}
 
-		setNodes((nodesSnapshot) =>
-			nodesSnapshot.map((candidate) =>
-				candidate.id === renameDraft.nodeId
-					? { ...candidate, data: { ...candidate.data, label: renameDraft.value } }
-					: candidate,
-			),
-		);
+		if (inPreview) {
+			setPreviewStack((stackSnapshot) => {
+				if (stackSnapshot.length === 0) {
+					return stackSnapshot;
+				}
+
+				const lastIndex = stackSnapshot.length - 1;
+				const lastPreview = stackSnapshot[lastIndex];
+					const updatedPreviewNodes = applyRenameToNodes(lastPreview.nodes, renameDraft);
+
+				return [
+					...stackSnapshot.slice(0, lastIndex),
+					{
+						...lastPreview,
+						nodes: updatedPreviewNodes,
+					},
+				];
+			});
+			setRenameDraft(null);
+			return;
+		}
+
+		setNodes((nodesSnapshot) => applyRenameToNodes(nodesSnapshot, renameDraft));
 
 		setRenameDraft(null);
-	}, [renameDraft]);
+	}, [inPreview, renameDraft]);
 
 	const cancelRename = useCallback(() => {
 		setRenameDraft(null);
@@ -409,7 +333,7 @@ export default function ActivityDiagram() {
 					onNavigateTo={navigateTo}
 				/>
 			</div>
-			{renameDraft && !inPreview && (
+			{renameDraft && (
 				<div className="absolute left-2 top-16 z-20 flex items-center gap-2 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-editor-background)] p-2">
 					<input
 						className="min-w-56 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-2 py-1 text-[var(--vscode-input-foreground)]"
@@ -425,6 +349,22 @@ export default function ActivityDiagram() {
 							}
 						}}
 					/>
+					{renameDraft.deps !== undefined && (
+						<input
+							className="min-w-40 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-2 py-1 text-[var(--vscode-input-foreground)]"
+							value={renameDraft.deps}
+							placeholder="deps"
+							onChange={(event) => setRenameDraft((snapshot) => snapshot ? { ...snapshot, deps: event.target.value } : snapshot)}
+							onKeyDown={(event) => {
+								if (event.key === 'Enter') {
+									applyRename();
+								}
+								if (event.key === 'Escape') {
+									cancelRename();
+								}
+							}}
+						/>
+					)}
 					<VSCodeButton appearance="primary" onClick={applyRename}>Save</VSCodeButton>
 					<VSCodeButton appearance="secondary" onClick={cancelRename}>Cancel</VSCodeButton>
 				</div>

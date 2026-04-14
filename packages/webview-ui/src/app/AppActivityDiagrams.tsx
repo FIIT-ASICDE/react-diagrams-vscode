@@ -4,6 +4,7 @@ import StateDiagram from '@/app@diagrams/state/StateDiagram';
 import ActivityDiagram from '@/app@diagrams/activity/ActivityDiagram';
 import Tests from '@/app@components/Tests';
 import { vscode } from '@/app@vscode/api';
+import type { ActivityExtensionToWebviewMessage } from '@react-diagrams/core/app@vscode';
 
 type DiagramType = 'state' | 'activity';
 
@@ -13,9 +14,9 @@ function App() {
 
 	useEffect(() => {
 		const onMessage = (event: MessageEvent) => {
-			const message = event.data as { type?: string; diagramType?: DiagramType };
-			if (message.type === 'diagram/type' && (message.diagramType === 'state' || message.diagramType === 'activity')) {
-				setDiagramType(message.diagramType);
+			const message = event.data as ActivityExtensionToWebviewMessage | { type?: string; data?: unknown };
+			if (message.type === 'diagram/type' && message.data.diagramType === 'activity') {
+				setDiagramType(message.data.diagramType);
 			}
 			// it recieves diagram type from panel. 
 			// activity diagram panel is sending 'activity', state diagram panel not sending anything for now, so it defaults to 'state'

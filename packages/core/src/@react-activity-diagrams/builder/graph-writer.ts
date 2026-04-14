@@ -1,18 +1,16 @@
 import { Edge, Node } from '@xyflow/react';
 import type { FlowNodeData } from './types';
-export type WriterState = {
-  nodeIdCounter: number;
-};
 
 export class GraphWriter {
+  private nextNodeId = 0;
+
   constructor(
     private readonly nodes: Node[],
     private readonly edges: Edge[],
-    private readonly state: WriterState,
   ) {}
 
   addFlowNode(type: string, label: string, data: Partial<FlowNodeData> = {}): string {
-    const id = `${type}-${this.state.nodeIdCounter++}`;
+    const id = `${type}-${this.nextNodeId++}`;
 
     this.nodes.push({
       id,
@@ -24,9 +22,7 @@ export class GraphWriter {
     return id;
   }
 
-  addEdge(source: string, target: string, label?: string, type?: string, data?: Record<string, unknown>): void {
-    const isBackEdge = type === 'dashed';
-
+  addEdge(source: string, target: string, label?: string, isBackEdge = false, data?: Record<string, unknown>): void {
     this.edges.push({
       id: `edge-${this.edges.length}-${source}-${target}`,
       source,

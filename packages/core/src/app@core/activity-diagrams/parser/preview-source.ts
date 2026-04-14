@@ -29,6 +29,11 @@ export function getPreviewStatements(sourceFile: SourceFile): Statement[] | unde
 		if (body && SyntaxKind.Block === body.getKind() && typeof (body as { getStatements?: () => Statement[] }).getStatements === "function") {
 			return ((body as unknown) as { getStatements: () => Statement[] }).getStatements();
 		}
+
+		// Expression-bodied arrows have no block statements; treat the expression as a single step preview.
+		if (body && body.getKind() !== SyntaxKind.Block) {
+			return [body as unknown as Statement];
+		}
 	}
 
 	const functionExpression = sourceFile.getDescendantsOfKind(SyntaxKind.FunctionExpression)[0];

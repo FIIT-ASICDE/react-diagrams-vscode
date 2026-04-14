@@ -25,7 +25,6 @@ const elkBaseOptions: ElkLayoutOptions = {
 };
 
 function estimateNodeSize(node: Node): { width: number; height: number } {
-  const nodeType = String(node.type ?? 'action');
   return { width: 500, height: 56 };
 }
 

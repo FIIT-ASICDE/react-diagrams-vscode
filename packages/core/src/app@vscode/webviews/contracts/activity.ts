@@ -1,0 +1,48 @@
+export type DiagramType = "activity";
+
+export type ActivityGraphPayload = {
+	nodes: unknown[];
+	edges: unknown[];
+};
+
+export type ActivityNodePreviewRequestPayload = {
+	title: string;
+	sourceText: string;
+};
+
+export type ActivityNodePreviewDataPayload = {
+	title: string;
+	sourceText?: string;
+	nodes: unknown[];
+	edges: unknown[];
+};
+
+export type ActivityWebviewToExtensionMessage =
+	| { type: "diagram/requestType" }
+	| { type: "code/request" }
+	| { type: "code/generateSkeleton"; data: ActivityGraphPayload }
+	| { type: "code/nodePreview"; data: ActivityNodePreviewRequestPayload };
+
+export type ActivityExtensionToWebviewMessage =
+	| { type: "diagram/type"; data: { diagramType: DiagramType } }
+	| { type: "code/data"; data: ActivityGraphPayload }
+	| { type: "code/error"; data: { message: string } }
+	| { type: "code/nodePreviewData"; data: ActivityNodePreviewDataPayload }
+	| { type: "code/nodePreviewError"; data: { message: string } };
+
+const ACTIVITY_WEBVIEW_TO_EXTENSION_TYPES = new Set<string>([
+	"diagram/requestType",
+	"code/request",
+	"code/generateSkeleton",
+	"code/nodePreview",
+]);
+
+export function isActivityWebviewToExtensionMessage(
+	message: unknown,
+): message is ActivityWebviewToExtensionMessage {
+	if (!message || typeof message !== "object")
+		return false;
+
+	const maybeType = (message as { type?: unknown }).type;
+	return typeof maybeType === "string" && ACTIVITY_WEBVIEW_TO_EXTENSION_TYPES.has(maybeType);
+}
