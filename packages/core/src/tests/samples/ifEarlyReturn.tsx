@@ -2,8 +2,30 @@ import { useState } from "react";
 
 export default function IfElseWithEarlyReturn() {
 	const [state1, setState1] = useState<number>(0);
+	const [unused, setUnused] = useState<string>("");
 
 	const arr = [1, 2, 3, 4, 5];
+
+	// ...
+
+	function dontCare() {
+		if (condition1)
+			return "1";
+
+		if (condition2)
+		{
+			return "2";
+		}
+	}
+
+	function func01(num = 1) {
+		setState1(0);
+
+		if (typeof num != "number")
+			return;
+
+		setState1(num);
+	}
 
 	function doSomething() {
 		setState1(0);

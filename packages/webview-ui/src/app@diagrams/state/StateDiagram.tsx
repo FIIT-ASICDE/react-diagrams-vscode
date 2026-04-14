@@ -40,13 +40,16 @@ const LAYOUT = {
 const ELK_OPTIONS = {
 	'elk.algorithm': 'layered',
 	'elk.direction': 'DOWN',
-	'elk.layered.spacing.nodeNodeBetweenLayers': '46',
-	'elk.spacing.nodeNode': '46',
+	'elk.layered.spacing.nodeNodeBetweenLayers': '48',
 	'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
 	'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+	'elk.layered.nodePlacement.favorStraightEdges': 'true',
+	'elk.layered.nodePlacement.bk.fixedAlignment': 'BALANCED',
 	'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+	'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
 	'elk.layered.feedbackEdges': 'true',
 	'elk.edgeRouting': 'ORTHOGONAL',
+	'elk.spacing.nodeNode': '46',
 	'elk.padding': elkPadding(LAYOUT.headerHeight + LAYOUT.mutator.pad, LAYOUT.mutator.pad)
 };
 
@@ -178,36 +181,20 @@ async function toFlow(model?: StateDiagramModel) {
 		padding: elkPadding(LAYOUT.canvasPadding, LAYOUT.canvasPadding),
 	});
 
-	for (const stateVariableLayout of layoutedStateVariables) {
-		const stateGroupId = `${stateVariableLayout.id}`;
+	for (const stateVar of layoutedStateVariables) {
+		const stateGroupId = `${stateVar.id}`;
 
 		nodes.push({
 			id: stateGroupId,
 			type: 'labeledGroupNode',
-			position: { x: stateVariableLayout.x, y: stateVariableLayout.y },
-			data: { label: stateVariableLayout.name, position: 'top-left' } as GroupNodeProps,
-			width: stateVariableLayout.width,
-			height: stateVariableLayout.height,
+			position: { x: stateVar.x, y: stateVar.y },
+			data: { label: stateVar.name, position: 'top-left', children: !stateVar.mutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No Mutators</p> } as GroupNodeProps,
+			width: stateVar.width,
+			height: stateVar.height,
 			className: 'rounded-lg border-0 text-(--vscode-foreground)',
-			draggable: false,
 		});
 
-		if (!stateVariableLayout.mutators?.length) {
-			nodes.push({
-				id: `${stateGroupId}:empty`,
-				position: { x: LAYOUT.state.pad, y: LAYOUT.headerHeight + LAYOUT.state.pad },
-				parentId: stateGroupId,
-				extent: 'parent',
-				data: { label: 'No states or mutators' },
-				width: Math.min(stateVariableLayout.width - (LAYOUT.state.pad * 2), LAYOUT.graphNodeWidth + 40),
-				height: LAYOUT.graphNodeHeight,
-				className: 'rounded-lg border border-dashed border-(--vscode-descriptionForeground) bg-(--vscode-editor-background) text-(--vscode-descriptionForeground) italic flex items-center p-[14px]',
-				draggable: false,
-				selectable: false,
-			});
-		}
-
-		for (const mutatorLayout of stateVariableLayout.layoutedMutators) {
+		for (const mutatorLayout of stateVar.layoutedMutators) {
 			const mutatorGroupId = `${mutatorLayout.id}`;
 			nodes.push({
 				id: mutatorGroupId,
@@ -219,14 +206,13 @@ async function toFlow(model?: StateDiagramModel) {
 				width: mutatorLayout.width,
 				height: mutatorLayout.height,
 				className: 'rounded-lg border-0 text-(--vscode-foreground)',
-				draggable: false,
 			});
 
 			for (const graphNode of mutatorLayout.layoutedNodes) {
 				const flowNodeId = `${graphNode.id}`;
 				const { x, y, width, height } = graphNode;
 				const visual = getGraphNodeVisual(graphNode);
-
+				
 				nodes.push({
 					id: flowNodeId,
 					type: visual.type,
@@ -241,19 +227,16 @@ async function toFlow(model?: StateDiagramModel) {
 					width,
 					height,
 					className: 'bg-transparent border-0 shadow-none',
-					draggable: false,
+					draggable: true,
 				});
 			}
 
-			for (const transition of mutatorLayout.transitions) {
-				const source = transition.fromNodeId;
-				const target = transition.toNodeId;
-
+			for (const { id, fromNodeId: source, toNodeId: target, ...transition } of mutatorLayout.transitions) {
 				if (!source || !target)
 					continue;
 
 				edges.push({
-					id: `${mutatorGroupId}-${transition.id}`,
+					id,
 					source,
 					target,
 					label: transition.label,
@@ -273,7 +256,7 @@ function AutoFitView({ ready }: { ready: boolean }) {
 
 	useEffect(() => {
 		if (ready) {
-			void fitView({ padding: 0.2, duration: 150 });
+			void fitView({ padding: 0.1, duration: 150 });
 		}
 	}, [fitView, ready]);
 
@@ -322,6 +305,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 					markerEnd: { type: MarkerType.ArrowClosed },
 				}}
 				className='floating-edges'
+				onNodeDoubleClick={(e, node) => console.log(node)}
 			>
 				<AutoFitView ready={flowState.nodes.length > 0} />
 				<Controls />

@@ -5,5 +5,7 @@ export default function LabeledGroupNode(props: GroupNodeProps) {
 		{...props} 
 		label={props.label ?? props.data?.label as string}
 		position={props.position ?? props.data?.position as GroupNodeProps["position"]}
-	/>;
+	>
+		{props.children ?? props.data?.children as React.ReactNode}
+	</GroupNode>;
 }

@@ -29,7 +29,7 @@ function NodeShell({ width, height, children }: { width: number; height: number;
 }
 
 function CenteredLabel({ label }: { label?: string }) {
-	if (!label)
+	if (!label?.length)
 		return null;
 
 	return (
@@ -263,10 +263,10 @@ export const nodeTypes: NodeTypes = {
 
 const NODE_COLORS = {
 	neutral: 'var(--vscode-input-background)',
-	decision: 'color-mix(in srgb, var(--vscode-testing-iconPassed) 60%, transparent)',
-	tryDecision: 'color-mix(in srgb, var(--vscode-testing-iconQueued, #f59e0b) 60%, transparent)',
+	decision: 'color-mix(in srgb, var(--vscode-testing-iconPassed) 64%, transparent)',
+	tryDecision: 'color-mix(in srgb, var(--vscode-testing-iconQueued, #f59e0b) 64%, transparent)',
 	throw: 'var(--vscode-errorForeground, #ef4444)',
-	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { depth: 4, blockedHueRanges: [ [350, 20] ] })} 60%, transparent)`,
+	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { depth: 4, blockedHueRanges: [ [350, 20] ] })} 64%, transparent)`,
 };
 
 export function getNodeColor(type: string, text: string) {
@@ -287,7 +287,7 @@ export function getGraphNodeVisual(graphNode): { type: string; data: any } {
 	if (graphNode.kind == 'entry') {
 		return {
 			type: 'entryNode',
-			data: { color: getNodeColor('neutral', graphNode.label) },
+			data: { label: null, color: getNodeColor('neutral', graphNode.label) },
 		};
 	}
 

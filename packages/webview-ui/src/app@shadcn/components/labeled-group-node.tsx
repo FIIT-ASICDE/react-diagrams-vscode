@@ -30,11 +30,12 @@ export function GroupNodeLabel({
 export type GroupNodeProps = Partial<NodeProps> & {
   label?: ReactNode;
   position?: PanelPosition;
+  children?: ReactNode;
 };
 
 /* GROUP NODE -------------------------------------------------------------- */
 
-export function GroupNode({ label, position, ...props }: GroupNodeProps) {
+export function GroupNode({ label, position, children, ...props }: GroupNodeProps) {
   const getLabelClassName = (position?: PanelPosition) => {
     switch (position) {
       case "top-left":
@@ -64,10 +65,11 @@ export function GroupNode({ label, position, ...props }: GroupNodeProps) {
       {/* <p>{label}</p> */}
       <Panel className="m-0! p-0" position={position}>
         {label && (
-          <GroupNodeLabel className={getLabelClassName(position)}>
+          <GroupNodeLabel className={`${getLabelClassName(position)}`}>
             {label}
           </GroupNodeLabel>
         )}
+        {children && <div className="m-4">{children}</div>}
       </Panel>
     </BaseNode>
   );
