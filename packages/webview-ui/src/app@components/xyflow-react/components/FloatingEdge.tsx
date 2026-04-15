@@ -34,10 +34,11 @@ function FloatingEdge({ id, source, target, markerEnd, style, label }: EdgeProps
       />
       {label && (
         <EdgeLabelRenderer>
-          <div
-            className="pointer-events-none absolute rounded border border-(--vscode-widget-border) bg-(--vscode-editor-background) px-1.5 py-0.5 text-[11px] text-(--vscode-foreground) shadow-sm z-50"
+          <div 
+            className="pointer-events-none absolute rounded border border-(--vscode-widget-border) p-1 leading-none text-[11px] text-(--vscode-foreground) shadow-sm z-50"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              background: `color-mix(in srgb, var(--vscode-editor-background) 80%, transparent)`
             }}
           >
             {label}
