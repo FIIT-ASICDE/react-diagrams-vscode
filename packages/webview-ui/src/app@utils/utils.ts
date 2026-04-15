@@ -13,8 +13,8 @@ export function shiftHue(hue, blockedRanges) {
 	return newHue;
 }
 
-export function getColor(text, options: { depth?: number; saturation?: number; blockedHueRanges?: [number, number][] } = {}) {
-	const { depth = 3, saturation = 60, blockedHueRanges = [] } = options;
+export function getColor(text, options: { lightness?: number; saturation?: number; blockedHueRanges?: [number, number][] } | number = {}) {
+	const { lightness = 75, saturation = 60, blockedHueRanges = [] } = typeof options == 'number' ? { lightness: options } : options;
 
 	let h = 0;
 	for (let i = 0; i < text.length; i++) {
@@ -22,6 +22,5 @@ export function getColor(text, options: { depth?: number; saturation?: number; b
 	}
 
 	const hue = shiftHue(h % 360, blockedHueRanges);
-	const lightness = Math.min(35 + depth * 12, 85);
 	return chroma.lch(lightness, saturation, hue).hex();
 }

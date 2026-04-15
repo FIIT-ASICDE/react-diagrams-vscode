@@ -14,13 +14,8 @@ export function GroupNodeLabel({
   ...props
 }: GroupNodeLabelProps) {
   return (
-    <div className="h-full w-full" {...props}>
-      <div
-        className={cn(
-          "text-card-foreground bg-secondary w-fit p-2 text-xs",
-          className,
-        )}
-      >
+    <div className="h-full w-full rounded-br" {...props}>
+      <div className={cn("text-card-foreground bg-secondary w-fit p-2 text-xs", className)}>
         {children}
       </div>
     </div>
@@ -31,11 +26,12 @@ export type GroupNodeProps = Partial<NodeProps> & {
   label?: ReactNode;
   position?: PanelPosition;
   children?: ReactNode;
+  color?: string;
 };
 
 /* GROUP NODE -------------------------------------------------------------- */
 
-export function GroupNode({ label, position, children, ...props }: GroupNodeProps) {
+export function GroupNode({ label, position, children, color, ...props }: GroupNodeProps) {
   const getLabelClassName = (position?: PanelPosition) => {
     switch (position) {
       case "top-left":
@@ -60,12 +56,13 @@ export function GroupNode({ label, position, children, ...props }: GroupNodeProp
   return (
     <BaseNode
       className="bg-opacity-50 h-full overflow-hidden rounded-sm"
+      style={{ borderColor: color }}
       {...props}
     >
       {/* <p>{label}</p> */}
       <Panel className="m-0! p-0" position={position}>
         {label && (
-          <GroupNodeLabel className={`${getLabelClassName(position)}`}>
+          <GroupNodeLabel className={`${getLabelClassName(position)}`} style={{ background: `color-mix(in srgb, ${color} 64%, transparent)` }}>
             {label}
           </GroupNodeLabel>
         )}

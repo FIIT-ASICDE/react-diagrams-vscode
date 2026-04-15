@@ -4,7 +4,7 @@ import {
 import {
 	StateDiagram,
 } from '../types';
-import { text2SrcFile } from './utils';
+import { asSrcFile } from './utils';
 import { createComponentModel, resolveDefaultExportComponent } from './component';
 import { truncate } from '../../utils';
 import { collectStateVariables } from './state-variables';
@@ -68,14 +68,15 @@ Step 4:
 		Loops should be incorporated into this with the backwards transitions cyclic transitions.
 */
 
-export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): StateDiagram {
-	const { sourceFile } = text2SrcFile(reactComponentTxt, rootDir);
+export function parseReactComponent(reactComponent: string, rootDir = '.'): StateDiagram {
+	const { sourceFile } = asSrcFile(reactComponent, rootDir);
 	try {
 		const component = resolveDefaultExportComponent(sourceFile);
 		// console.debug(component);
 		if (!component) {
 			return {
 				stateVariables: [],
+				source: reactComponent
 			};
 		}
 
@@ -86,8 +87,16 @@ export function parseReactComponent(reactComponentTxt: string, rootDir = '.'): S
 		return {
 			component: createComponentModel(component, sourceFile),
 			stateVariables,
+			source: reactComponent
 		};
 	}
+	// catch (error) {
+	// 	console.error('Error parsing React component for state diagram', error);
+	// 	return {
+	// 		stateVariables: [],
+	// 		source: reactComponent
+	// 	};
+	// }
 	finally {
 		sourceFile.delete();
 	}

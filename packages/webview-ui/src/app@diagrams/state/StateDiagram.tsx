@@ -7,6 +7,7 @@ import { nodeTypes, getGraphNodeVisual } from './rendering/nodes';
 import { edgeTypes } from './rendering/edges';
 import type { GroupNodeProps } from '@/app@shadcn/components/labeled-group-node';
 import type { ElkNode } from 'elkjs/lib/elk-api';
+import { getColor } from '@/app@utils/utils';
 
 type StateDiagramProps = {
 	model?: StateDiagramModel;
@@ -188,7 +189,8 @@ async function toFlow(model?: StateDiagramModel) {
 			id: stateGroupId,
 			type: 'labeledGroupNode',
 			position: { x: stateVar.x, y: stateVar.y },
-			data: { label: stateVar.name, position: 'top-left', children: !stateVar.mutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No Mutators</p> } as GroupNodeProps,
+			data: { label: stateVar.name, color: getColor(stateVar.name, 22), children: !stateVar.mutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No Mutators</p> 
+			} as GroupNodeProps,
 			width: stateVar.width,
 			height: stateVar.height,
 			className: 'rounded-lg border-0 text-(--vscode-foreground)',
@@ -202,7 +204,7 @@ async function toFlow(model?: StateDiagramModel) {
 				position: { x: mutatorLayout.x, y: mutatorLayout.y },
 				parentId: stateGroupId,
 				extent: 'parent',
-				data: { label: mutatorLayout.name, position: 'top-left' } as GroupNodeProps,
+				data: { label: `${mutatorLayout.name}(...)`, color: getColor(mutatorLayout.name, 40) } as GroupNodeProps,
 				width: mutatorLayout.width,
 				height: mutatorLayout.height,
 				className: 'rounded-lg border-0 text-(--vscode-foreground)',

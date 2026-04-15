@@ -40,7 +40,8 @@ export function createFlowNode(kind: ControlFlowNodeKind, node: Node, mutator: S
 }
 
 export function createTransition(from: StateGraphNode, to: StateGraphNode, kind: StateTransitionKind, rawConditionText?: string): StateTransition {
-	const label = rawConditionText ? `[${kind}] ${truncate(rawConditionText, 80)}` : (kind == StateTransitionKind.Normal ? '' : `[${kind}]`);
+	const ifKindName = kind => kind == StateTransitionKind.Then ? 'true' : kind == StateTransitionKind.Else ? 'false' : kind;
+	const label = rawConditionText ? `[${kind}] ${truncate(rawConditionText, 80)}` : (kind == StateTransitionKind.Normal ? '' : `[${ifKindName(kind)}]`);
 	return {
 		id: createId('transition', `${from.id}->${to.id}:${kind}`, from.pos),
 		fromNodeId: from.id,
@@ -145,11 +146,11 @@ export class GraphBuilder {
 		const decisionNode = this.appendFlowNode('decision', statement, truncate(conditionText, 80));
 		this.connect(decisionNode, incoming);
 
-		const thenIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Then, rawConditionText: conditionText }];
+		const thenIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Then, /*rawConditionText: conditionText*/ }];
 		const thenBody = statement.getThenStatement();
 		const thenOpen = this.visit(thenBody, thenIncoming)
 
-		const elseIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Else, rawConditionText: `!(${conditionText})` }];
+		const elseIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Else, /*rawConditionText: `!(${conditionText})`*/ }];
 		const elseBody = statement.getElseStatement();
 		var elseOpen = !elseBody ? elseIncoming : Node.isIfStatement(elseBody) ? this.visitIf(elseBody, elseIncoming) : this.visit(elseBody, elseIncoming);
 

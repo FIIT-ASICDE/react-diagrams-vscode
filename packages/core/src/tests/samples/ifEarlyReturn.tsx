@@ -2,7 +2,7 @@ import { useState } from "react";
 
 export default function IfElseWithEarlyReturn() {
 	const [state1, setState1] = useState<number>(0);
-	const [unused, setUnused] = useState<string>("");
+	const [tstUnused, setTstUnused] = useState<string>("");
 
 	const arr = [1, 2, 3, 4, 5];
 

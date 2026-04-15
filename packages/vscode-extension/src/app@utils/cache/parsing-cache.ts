@@ -29,7 +29,7 @@ export class ParsingCache<T = any> {
 		}
 
 		console.time("Parsing React component");
-		const data = this.parseFunction(document.getText(), rootPath ?? getRootPath(document));
+		const data = this.parseFunction(document.uri.fsPath, rootPath ?? getRootPath(document));
 		console.timeEnd("Parsing React component");
 
 		const entry: CacheEntry<T> = {

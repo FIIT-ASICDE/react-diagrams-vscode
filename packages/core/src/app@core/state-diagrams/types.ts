@@ -109,4 +109,5 @@ export interface StateTransition {
 export interface StateDiagram {
 	component?: StateDiagramComponent;
 	stateVariables: StateVariable[];
+	source?: string; // Orig component source code or path to source file
 }

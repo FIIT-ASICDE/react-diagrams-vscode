@@ -266,7 +266,7 @@ const NODE_COLORS = {
 	decision: 'color-mix(in srgb, var(--vscode-testing-iconPassed) 64%, transparent)',
 	tryDecision: 'color-mix(in srgb, var(--vscode-testing-iconQueued, #f59e0b) 64%, transparent)',
 	throw: 'var(--vscode-errorForeground, #ef4444)',
-	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { depth: 4, blockedHueRanges: [ [350, 20] ] })} 64%, transparent)`,
+	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 80, blockedHueRanges: [ [350, 20] ] })} 64%, transparent)`,
 };
 
 export function getNodeColor(type: string, text: string) {

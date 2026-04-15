@@ -24,12 +24,17 @@ export function createProject(rootDir: string) {
 	return new Project({
 		tsConfigFilePath: tsConfigPath,
 		skipAddingFilesFromTsConfig: true,
+		compilerOptions: {
+			allowJs: true,
+		},
 	});
 }
 
-export function text2SrcFile(text: string, rootDir: Project | string = '.') {
+export function asSrcFile(pathOrTxt: string, rootDir: Project | string = '.') {
 	const project = typeof rootDir == 'string' ? createProject(rootDir) : rootDir;
-	const sourceFile = project.createSourceFile('__temp__.tsx', text);
+	var sourceFile = project.addSourceFileAtPathIfExists(pathOrTxt);
+	if (!sourceFile)
+		sourceFile = project.createSourceFile('__temp__.tsx', pathOrTxt);
 	return { project, sourceFile };
 }
 
