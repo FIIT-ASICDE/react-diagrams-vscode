@@ -1,8 +1,9 @@
 import { Project, Node, SyntaxKind, SourceFile, VariableDeclaration, CallExpression, Statement } from 'ts-morph';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { CodePos, SupportedDeclaration,  } from './types';
-import { FunctionDeclarationKind } from '../types';
+import { CodePos } from '../../app@state-diagram-model/types';
+import { SupportedDeclaration  } from './types';
+import { FunctionDeclarationKind } from '../../app@state-diagram-model/types';
 
 export function findTsConfig(rootDir: string) {
 	const candidates = [

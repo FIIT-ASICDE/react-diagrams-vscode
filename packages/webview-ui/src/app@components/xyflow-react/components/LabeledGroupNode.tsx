@@ -3,7 +3,7 @@ import { GroupNode, type GroupNodeProps } from "@/app@shadcn/components/labeled-
 export default function LabeledGroupNode(props: GroupNodeProps) {
 	return <GroupNode 
 		{...props} 
-		label={props.label ?? props.data?.label as string}
+		label={props.label ?? (props.data?.name ?? props.data?.label) as string}
 		position={props.position ?? props.data?.position as GroupNodeProps["position"]}
 		color={props.color ?? props.data?.color as string}
 	>

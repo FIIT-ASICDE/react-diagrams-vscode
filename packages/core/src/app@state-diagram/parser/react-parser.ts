@@ -3,10 +3,9 @@ import {
 } from 'ts-morph';
 import {
 	StateDiagram,
-} from '../types';
+} from '../../app@state-diagram-model/types';
 import { asSrcFile } from './utils';
 import { createComponentModel, resolveDefaultExportComponent } from './component';
-import { truncate } from '../../utils';
 import { collectStateVariables } from './state-variables';
 import { classifyStateUpdateKind, populateStateUpdatesAndMutators } from './state-mutators';
 import { buildTransitionFlowGraph, GraphBuilder } from './state-transitions';

@@ -1,6 +1,6 @@
 import { Node, SourceFile, SyntaxKind, VariableDeclaration } from "ts-morph";
 import { getCodePos, getDeclarationKind } from "./utils";
-import { StateDiagramComponent } from "../types";
+import { StateDiagramComponent } from "../../app@state-diagram-model/types";
 import { SupportedComponentDeclaration } from "./types";
 
 export function getComponentName(component: SupportedComponentDeclaration) {

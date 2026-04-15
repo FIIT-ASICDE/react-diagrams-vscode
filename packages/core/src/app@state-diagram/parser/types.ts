@@ -13,8 +13,3 @@ export type SupportedDeclaration =
 export type SupportedComponentDeclaration = SupportedDeclaration
 	//|
 	;
-
-export type CodePos = {
-	line: number;
-	column: number;
-};

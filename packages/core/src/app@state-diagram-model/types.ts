@@ -1,4 +1,7 @@
-import { CodePos } from "./parser/types";
+export type CodePos = {
+	line: number;
+	column: number;
+};
 
 export type FunctionDeclarationKind = 'function' | 'arrow-function' | 'function-expression';
 

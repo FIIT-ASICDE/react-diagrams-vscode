@@ -14,7 +14,7 @@ export function GroupNodeLabel({
   ...props
 }: GroupNodeLabelProps) {
   return (
-    <div className="h-full w-full rounded-br" {...props}>
+    <div className="h-full w-full rounded-br-md" {...props}>
       <div className={cn("text-card-foreground bg-secondary w-fit p-2 text-xs", className)}>
         {children}
       </div>

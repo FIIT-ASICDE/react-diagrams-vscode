@@ -1,7 +1,5 @@
 import { Disposable, TextDocument, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
-import { getNonce } from "../app@utils/crypto";
-import { getUri } from "../app@utils/urls";
-import { normalizeFilePath } from "@react-diagrams/core";
+import { getNonce, getUri, jumpToPosition } from "../app@utils";
 import { basename, extname } from "path";
 import { componentStateCache, getRootPath } from "../app@utils/cache";
 
@@ -219,7 +217,14 @@ export class ComponentStatePanel {
 				void this.refresh(this.initialDocument);
 				this.initialDocument = undefined;
 				return;
-
+			case "nodeDblClick":
+				const uri = componentStateCache?.getCurrentDocument()?.uri;
+				if (uri) {
+					const pos = data.data.pos;
+					// console.debug(pos)
+					jumpToPosition(uri, pos.line - 1, pos.column - 1);
+				}
+				return;
 		}
 	}
 }

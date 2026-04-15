@@ -10,10 +10,10 @@ import {
 	TryStatement,
 	VariableDeclaration,
 } from 'ts-morph';
-import { StateVariable } from '../types';
+import { StateVariable } from '../../app@state-diagram-model/types';
 import { createId, getBindingElementName, getCodePos,  getFirstAncestorOfKinds } from './utils';
 import { SupportedComponentDeclaration } from './types';
-import { truncate } from '../../utils';
+import { truncate } from '../../app@core/utils';
 
 /** Returns a call expression when a node matches a tracked useState invocation. */
 function getTrackedUseStateCall(node: Node | undefined, useStateIdentifiers: Set<string>): CallExpression | undefined {

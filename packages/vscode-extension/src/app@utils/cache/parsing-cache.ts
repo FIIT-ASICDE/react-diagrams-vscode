@@ -1,5 +1,5 @@
 import { TextDocument, workspace } from "vscode";
-import { normalizeFilePath } from "@react-diagrams/core";
+import { normalizeFilePath } from "../index";
 
 export type CacheEntry<T> = {
 	data: T;
