@@ -1,7 +1,7 @@
 import { commands, ExtensionContext, ExtensionMode, RelativePattern, Uri, window, workspace } from "vscode";
 import { ComponentActivityPanel } from "./app@panels/ComponentActivityPanel";
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
-import { normalizeFilePath } from "@react-diagrams/core";
+import { normalizeFilePath } from "./app@utils";
 
 export function activate(context: ExtensionContext) {
 	const showComponentStateDiagram = commands.registerCommand("vs-code-ext.componentState", () => {
