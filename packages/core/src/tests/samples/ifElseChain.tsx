@@ -14,7 +14,7 @@ export default function IfElseChainComplex() {
 
   const cond = phase === "idle";
 
-  const init = () => {
+  const doInit = () => {
     if (cond) {
       console.log("Init");
     }
@@ -40,6 +40,9 @@ export default function IfElseChainComplex() {
     setPhase("done");
   }
 
-  init();
-  return <button onClick={() => handleProcess(count + 1)}>Run</button>;
+  doInit();
+  return <>
+    <button onClick={() => handleProcess(count + 1)}>Run</button>
+    <button onClick={() => { setCount(count + 10) }}>Run big incr</button>
+  </>;
 }

@@ -8,7 +8,7 @@ import { asSrcFile } from './utils';
 import { createComponentModel, resolveDefaultExportComponent } from './component';
 import { collectStateVariables } from './state-variables';
 import { classifyStateUpdateKind, populateStateUpdatesAndMutators } from './state-mutators';
-import { buildTransitionFlowGraph, GraphBuilder } from './state-transitions';
+import { buildTransitionFlowGraph, GraphBuilder } from './state-flow-graph';
 
 /*
 

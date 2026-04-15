@@ -199,6 +199,8 @@ export class GraphBuilder {
 		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
 	}
 
+	// TODO Later add loops and switch when time comes...
+
 	visit(what: Statement | Block, incoming: OpenEdge[]) {
 		let current = incoming;
 		if (Node.isBlock(what)) {
