@@ -2,6 +2,7 @@ import { commands, ExtensionContext, ExtensionMode, RelativePattern, Uri, window
 import { ComponentActivityPanel } from "./app@panels/ComponentActivityPanel";
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
 import { normalizeFilePath } from "./app@utils";
+import { registerDiagramChatParticipant } from "@/app@ai/chat/DiagramChatParticipant";
 
 export function activate(context: ExtensionContext) {
 	const showComponentStateDiagram = commands.registerCommand("vs-code-ext.componentState", () => {
@@ -29,9 +30,10 @@ export function activate(context: ExtensionContext) {
 		void ComponentStatePanel.refreshCurrentPanel(activeDocument);
 	});
 
-	const autoRestartInDev = setupAutoRestartInDevelopment(context);
+	const diagramChatParticipant = registerDiagramChatParticipant(context);
 
-	context.subscriptions.push(showComponentStateDiagram, refreshCurrentPanelOnSave, showActivityCommand, autoRestartInDev);
+	const autoRestartInDev = setupAutoRestartInDevelopment(context);
+	context.subscriptions.push(showComponentStateDiagram, refreshCurrentPanelOnSave, showActivityCommand, diagramChatParticipant, autoRestartInDev);
 }
 
 function setupAutoRestartInDevelopment(context: ExtensionContext) {

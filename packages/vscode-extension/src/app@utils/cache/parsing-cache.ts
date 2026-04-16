@@ -51,9 +51,12 @@ export class ParsingCache<T = any> {
 		return this.currentDocument;
 	}
 
-	get(filePath: TextDocument | string) {
+	get(filePath?: TextDocument | string) {
 		if (typeof filePath == "string")
 			return this.entries.get(normalizeFilePath(filePath));
+
+		if (!filePath)
+			return undefined;
 
 		const normPath = normalizeFilePath(filePath.uri.fsPath);
 		return this.entries.get(normPath) ?? this.updateEntry(filePath);
