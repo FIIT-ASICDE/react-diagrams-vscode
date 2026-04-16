@@ -108,8 +108,11 @@ export function getFuncName(fn: SupportedDeclaration | CallExpression): string |
 	}
 }
 
-export function getAllCalls(statement: Statement, funcName: string) {
-	return statement.getDescendantsOfKind(SyntaxKind.CallExpression).filter(cl => getFuncName(cl) == funcName);
+export function getAllCalls(node: Node, funcName: string, filterType: "filter" | "some" = "filter") {
+	const calls = node.getDescendantsOfKind(SyntaxKind.CallExpression);
+	if (filterType == "some")
+		return calls.some(cl => getFuncName(cl) == funcName);
+	return calls.filter(cl => getFuncName(cl) == funcName);
 }
 
 export function normText(text?: string | Node) {

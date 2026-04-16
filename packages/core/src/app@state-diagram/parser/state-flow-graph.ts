@@ -69,6 +69,16 @@ export function createOccurrenceUpdateNode(call: CallExpression, stateVariable: 
 	};
 }
 
+export const isRelevant = (node: Node, setterName: string, hasSetterAhead = false) => {
+	if (getAllCalls(node, setterName, "some"))
+		return true;
+
+	if (!hasSetterAhead)
+		return false;
+
+	return node.getDescendants().some(n => Node.isReturnStatement(n) || Node.isThrowStatement(n));
+};
+
 export interface OpenEdge { // We dont yet know "to", remember type and from...
 	from: StateGraphNode;
 	kind: StateTransitionKind;
@@ -98,8 +108,12 @@ export class GraphBuilder {
 			this.transitions.push(createTransition(edge.from, to, edge.kind, edge.rawConditionText));
 	}
 
-	private appendFlowNode(kind: ControlFlowNodeKind, node: Node, label?: string) {
+	private appendFlowNode(kind: ControlFlowNodeKind, node: Node, label?: string, replaceCurrent?: ControlFlowNode) {
 		const flowNode = createFlowNode(kind, node, this.mutator, label);
+		if (replaceCurrent) {
+			Object.assign(replaceCurrent, { ...flowNode, id: replaceCurrent.id });
+			return replaceCurrent;
+		}
 		this.nodes.push(flowNode);
 		return flowNode;
 	}
@@ -120,7 +134,7 @@ export class GraphBuilder {
 
 	visitReturn(statement: ReturnStatement, incoming: OpenEdge[]) {
 		let current = incoming;
-		const setterCalls = getAllCalls(statement, this.stateVariable.setterName);
+		const setterCalls = getAllCalls(statement, this.stateVariable.setterName) as CallExpression[];
 
 		for (const call of setterCalls) {
 			const updateNode = this.appendUpdateNode(call);
@@ -128,46 +142,64 @@ export class GraphBuilder {
 			current = [{ from: updateNode, kind: StateTransitionKind.Normal }];
 		}
 
-		const txt = statement.getExpression()?.getText(); 
-		const exitNode = this.appendFlowNode('exit', statement, txt ? `return ${truncate(txt, 80)}` : ``);
-		this.connect(exitNode, current);
+		return this.visitEnd(statement, current, 'return');
+	}
+
+	// visitThrow(statement: ThrowStatement, incoming: OpenEdge[]) {
+	// 	const txt = statement.getExpression().getText();
+	// 	const currNode = incoming.length == 1 ? incoming[0].from : undefined;
+	// 	const exitNode = this.appendFlowNode('throw', statement, `throw ${truncate(txt, 80)}`, currNode?.kind == 'merge' ? currNode : undefined);
+	// 	if (currNode != exitNode)
+	// 		this.connect(exitNode, incoming);
+	// 	return [];
+	// }
+
+	visitEnd(statement: ThrowStatement | ReturnStatement, incoming: OpenEdge[], what: 'return' | 'throw') {
+		const txt = statement.getExpression()?.getText();
+
+		const currNode = incoming.length == 1 ? incoming[0].from : undefined;
+		const exitNode = this.appendFlowNode(what == 'return' ? 'exit' : what, statement, txt ? `${what} ${truncate(txt, 80)}` : ``, currNode?.kind == 'merge' ? currNode : undefined);
+		if (currNode != exitNode)
+			this.connect(exitNode, incoming);
 		return [];
 	}
 
-	visitThrow(statement: ThrowStatement, incoming: OpenEdge[]) {
-		const txt = statement.getExpression().getText();
-		const exitNode = this.appendFlowNode('throw', statement, `throw ${truncate(txt, 80)}`);
-		this.connect(exitNode, incoming);
-		return [];
-	}
+	visitIf(statement: IfStatement, incoming: OpenEdge[], hasSetterAhead = false): OpenEdge[] {
+		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+			return incoming;
 
-	visitIf(statement: IfStatement, incoming: OpenEdge[]) {
 		const conditionText = statement.getExpression().getText();
 		const decisionNode = this.appendFlowNode('decision', statement, truncate(conditionText, 80));
 		this.connect(decisionNode, incoming);
 
 		const thenIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Then, /*rawConditionText: conditionText*/ }];
 		const thenBody = statement.getThenStatement();
-		const thenOpen = this.visit(thenBody, thenIncoming)
+		const thenOpen = this.visit(thenBody, thenIncoming, hasSetterAhead)
 
 		const elseIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Else, /*rawConditionText: `!(${conditionText})`*/ }];
 		const elseBody = statement.getElseStatement();
-		var elseOpen = !elseBody ? elseIncoming : Node.isIfStatement(elseBody) ? this.visitIf(elseBody, elseIncoming) : this.visit(elseBody, elseIncoming);
+		var elseOpen = !elseBody ? elseIncoming : Node.isIfStatement(elseBody) ? this.visitIf(elseBody, elseIncoming, hasSetterAhead) : this.visit(elseBody, elseIncoming, hasSetterAhead);
 
 		const allOpen = [...thenOpen, ...elseOpen];
 		if (!allOpen.length)
 			return [];
+
+		if (allOpen.length == 1)
+			return allOpen;
 
 		const mergeNode = this.appendFlowNode('merge', statement);
 		this.connect(mergeNode, allOpen);
 		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
 	}
 
-	visitTry(statement: TryStatement, incoming: OpenEdge[]) {
+	visitTry(statement: TryStatement, incoming: OpenEdge[], hasSetterAhead = false) {
+		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+			return incoming;
+
 		const decisionNode = this.appendFlowNode('try-decision', statement, 'try');
 		this.connect(decisionNode, incoming);
 
-		const tryOpen = this.visit(statement.getTryBlock(), [{ from: decisionNode, kind: StateTransitionKind.Normal }]);
+		const tryOpen = this.visit(statement.getTryBlock(), [{ from: decisionNode, kind: StateTransitionKind.Normal }], hasSetterAhead);
 
 		const catchClause = statement.getCatchClause();
 		let catchOpen: OpenEdge[] = [];
@@ -177,7 +209,7 @@ export class GraphBuilder {
 				from: decisionNode,
 				kind: StateTransitionKind.Catch,
 				rawConditionText: catchParam,
-			}]);
+			}], hasSetterAhead);
 		}
 
 		const finallyBlock = statement.getFinallyBlock();
@@ -185,7 +217,7 @@ export class GraphBuilder {
 		if (finallyBlock) {
 			const toFinally = [...tryOpen, ...catchOpen];
 			const finallyIncoming = toFinally.length ? toFinally : [{ from: decisionNode, kind: StateTransitionKind.Finally }];
-			finalOpen = this.visit(finallyBlock, finallyIncoming);
+			finalOpen = this.visit(finallyBlock, finallyIncoming, hasSetterAhead);
 		}
 		else {
 			finalOpen = [...tryOpen, ...catchOpen];
@@ -194,6 +226,9 @@ export class GraphBuilder {
 		if (!finalOpen.length)
 			return [];
 
+		if (finalOpen.length == 1)
+			return finalOpen;
+
 		const mergeNode = this.appendFlowNode('merge', statement);
 		this.connect(mergeNode, finalOpen);
 		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
@@ -201,11 +236,21 @@ export class GraphBuilder {
 
 	// TODO Later add loops and switch when time comes...
 
-	visit(what: Statement | Block, incoming: OpenEdge[]) {
+	visit(what: Statement | Block, incoming: OpenEdge[], hasSetterAhead = false) {
 		let current = incoming;
 		if (Node.isBlock(what)) {
-			for (const statement of what.getStatements()) {
-				current = this.visit(statement, current);
+			const statements = what.getStatements();
+			const hasSetterAfter: boolean[] = new Array(statements.length);
+			let seenSetterAhead = hasSetterAhead;
+
+			for (let i = statements.length - 1; i >= 0; i--) {
+				hasSetterAfter[i] = seenSetterAhead;
+				if (getAllCalls(statements[i], this.stateVariable.setterName, "some"))
+					seenSetterAhead = true;
+			}
+
+			for (let i = 0; i < statements.length; i++) {
+				current = this.visit(statements[i], current, hasSetterAfter[i]);
 				if (!current.length)
 					return current;
 			}
@@ -213,18 +258,18 @@ export class GraphBuilder {
 		}
 
 		if (Node.isIfStatement(what))
-			return this.visitIf(what, incoming);
+			return this.visitIf(what, incoming, hasSetterAhead);
 
 		if (Node.isTryStatement(what))
-			return this.visitTry(what, incoming);
+			return this.visitTry(what, incoming, hasSetterAhead);
 
 		if (Node.isReturnStatement(what))
 			return this.visitReturn(what, incoming);
 
 		if (Node.isThrowStatement(what))
-			return this.visitThrow(what, incoming);
+			return this.visitEnd(what, incoming, 'throw');
 
-		const setterCalls = getAllCalls(what, this.stateVariable.setterName);
+		const setterCalls = getAllCalls(what, this.stateVariable.setterName) as CallExpression[];
 		for (const call of setterCalls) {
 			const updateNode = this.appendUpdateNode(call);
 			this.connect(updateNode, current);
@@ -241,8 +286,10 @@ export class GraphBuilder {
 			return;
 
 		// const exitNode = this.appendFlowNode('exit', body, 'return');
-		const exitNode = this.appendFlowNode('exit', body);
-		this.connect(exitNode, finalOpen);
+		const currNode = finalOpen.length == 1 ? finalOpen[0].from : undefined;
+		const exitNode = this.appendFlowNode('exit', body, undefined, currNode?.kind == 'merge' ? currNode : undefined);
+		if (currNode != exitNode)
+			this.connect(exitNode, finalOpen);
 	}
 }
 

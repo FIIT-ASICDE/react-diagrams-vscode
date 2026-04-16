@@ -30,7 +30,7 @@ async function toFlow(model?: StateDiagramModel) {
 			id: stateGroupId,
 			type: 'labeledGroupNode',
 			position: { x: stateVar.x, y: stateVar.y },
-			data: { ...stateVar, color: getColor(stateVar.name, 22), children: !stateVar.mutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No mutators found</p> } as GroupNodeProps,
+			data: { ...stateVar, color: getColor(stateVar.name, 24), children: !stateVar.mutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No mutators found</p> } as GroupNodeProps,
 			width: stateVar.width,
 			height: stateVar.height,
 			className: 'rounded-lg border-0 text-(--vscode-foreground)',
