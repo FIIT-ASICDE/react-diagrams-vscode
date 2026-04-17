@@ -1,6 +1,6 @@
-import FloatingEdge from '@/app@components/xyflow-react/components/FloatingEdge';
+import CustomFloatingEdge from '@/app@components/xyflow-react/components/CustomFloatingEdge';
 import type { EdgeTypes } from '@xyflow/react';
 
 export const edgeTypes: EdgeTypes = {
-	floating: FloatingEdge as EdgeTypes['floating'],
+	floating: CustomFloatingEdge as EdgeTypes['floating'],
 };

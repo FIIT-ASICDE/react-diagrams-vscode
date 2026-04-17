@@ -24,6 +24,8 @@ export default defineConfig([
       '@typescript-eslint/no-implicit-any': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       'react-refresh/only-export-components': 'warn',
+      'no-var': 'off',
+      'prefer-const': 'off',
     },
   },
 ])

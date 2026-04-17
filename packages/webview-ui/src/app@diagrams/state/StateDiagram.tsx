@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Background, Controls, MarkerType, ReactFlow, useReactFlow, type Edge, type Node } from '@xyflow/react';
 import type { StateDiagram as StateDiagramModel } from '@react-diagrams/core/app@state-diagram';
-import FloatingConnectionLine from '@/app@components/xyflow-react/components/FloatingConnectionLine';
+// import FloatingConnectionLine from '@/app@components/xyflow-react/components/FloatingConnectionLine';
 import { nodeTypes, getGraphNodeVisual } from './rendering/nodes';
 import { edgeTypes } from './rendering/edges';
 import { layoutBoxRow, layoutStateVariable, elkPadd, STATE_DIAGRAM_LAYOUT as LAYOUT } from '@react-diagrams/core/app@state-diagram-model';
@@ -23,11 +23,9 @@ async function toFlow(model?: StateDiagramModel) {
 	const stateVariableLayouts = await Promise.all(model.stateVariables.map(layoutStateVariable));
 	const { layoutedItems: layoutedStateVariables } = await layoutBoxRow(stateVariableLayouts, { gap: LAYOUT.state.gap, padding: elkPadd(LAYOUT.canvasPadding, LAYOUT.canvasPadding) });
 
-	for (const stateVar of layoutedStateVariables) {
-		const stateGroupId = `${stateVar.id}`;
-
+	for (const { id: stateVarId, ...stateVar } of layoutedStateVariables) {
 		nodes.push({
-			id: stateGroupId,
+			id: stateVarId,
 			type: 'labeledGroupNode',
 			position: { x: stateVar.x, y: stateVar.y },
 			data: { ...stateVar, color: getColor(stateVar.name, 24), children: !stateVar.mutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No mutators found</p> } as GroupNodeProps,
@@ -36,13 +34,12 @@ async function toFlow(model?: StateDiagramModel) {
 			className: 'rounded-lg border-0 text-(--vscode-foreground)',
 		});
 
-		for (const mutatorLayout of stateVar.layoutedMutators) {
-			const mutatorGroupId = `${mutatorLayout.id}`;
+		for (const { id: mutatorId, ...mutatorLayout } of stateVar.layoutedMutators) {
 			nodes.push({
-				id: mutatorGroupId,
+				id: mutatorId,
 				type: 'labeledGroupNode',
 				position: { x: mutatorLayout.x, y: mutatorLayout.y },
-				parentId: stateGroupId,
+				parentId: stateVarId,
 				extent: 'parent',
 				data: { ...mutatorLayout, name: `${mutatorLayout.name}(...)`, color: getColor(mutatorLayout.name, 40) } as GroupNodeProps,
 				width: mutatorLayout.width,
@@ -50,16 +47,17 @@ async function toFlow(model?: StateDiagramModel) {
 				className: 'rounded-lg border-0 text-(--vscode-foreground)',
 			});
 
-			for (const graphNode of mutatorLayout.layoutedNodes) {
-				const flowNodeId = `${graphNode.id}`;
+			const mutatorNodes: Node[] = [];
+			for (const { id: nodeId, ...graphNode } of mutatorLayout.layoutedNodes) {
 				const { x, y, width, height } = graphNode;
 				const visual = getGraphNodeVisual(graphNode);
 				
-				nodes.push({
-					id: flowNodeId,
+				mutatorNodes.push({
+					id: nodeId,
 					type: visual.type,
+					// position: { x: x + mutatorLayout.x + stateVar.x, y: y + mutatorLayout.y + stateVar.y },
 					position: { x, y },
-					parentId: mutatorGroupId,
+					parentId: mutatorId,
 					extent: 'parent',
 					data: {
 						...graphNode,
@@ -67,10 +65,11 @@ async function toFlow(model?: StateDiagramModel) {
 					},
 					width,
 					height,
-					className: 'bg-transparent border-0 shadow-none',
+					className: 'bg-transparent border-0 shadow-none z-20',
 					draggable: true,
 				});
 			}
+			nodes.push(...mutatorNodes);
 
 			for (const { id, fromNodeId: source, toNodeId: target, ...transition } of mutatorLayout.transitions) {
 				if (!source || !target)
@@ -84,6 +83,7 @@ async function toFlow(model?: StateDiagramModel) {
 					type: 'floating',
 					// animated: transition.kind != 'normal',
 					markerEnd: { type: MarkerType.ArrowClosed },
+					// data: { nodes: mutatorNodes }
 				});
 			}
 		}
@@ -143,14 +143,15 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 				elementsSelectable
 				nodeTypes={nodeTypes}
 				edgeTypes={edgeTypes}
-				connectionLineComponent={FloatingConnectionLine}
-				fitViewOptions={{ padding: 0.2 }}
+				// connectionLineComponent={FloatingConnectionLine}
+				fitViewOptions={{ padding: 0.1 }}
 				defaultEdgeOptions={{
 					type: 'floating',
 					markerEnd: { type: MarkerType.ArrowClosed },
 				}}
 				className='floating-edges'
 				onNodeDoubleClick={onDoubleClick}
+				snapToGrid={true}
 			>
 				<AutoFitView ready={flowState.nodes.length > 0} />
 				<Controls />
