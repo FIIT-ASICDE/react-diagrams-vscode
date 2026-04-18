@@ -8,6 +8,7 @@ import {
   ForStatement,
   IfStatement,
   Node as MorphNode,
+  ReturnStatement,
   Statement,
   SwitchStatement,
   SyntaxKind,
@@ -34,6 +35,7 @@ export class StatementVisitor {
   visitStatements(statements: Statement[]): BuildResult {
     let entry: string | undefined;
     let pendingExits: string[] = [];
+    const endExits: string[] = [];
 
     for (let index = 0; index < statements.length; index += 1) {
       if (statements[index].getKind() === SyntaxKind.ImportDeclaration) {
@@ -54,11 +56,13 @@ export class StatementVisitor {
       }
 
       pendingExits = result.exits;
+      endExits.push(...result.endExits);
     }
 
     return {
       entry,
       exits: entry ? pendingExits : [],
+      endExits,
     };
   }
 
@@ -74,7 +78,7 @@ export class StatementVisitor {
         sourceText: expandableMeta.sourceText ?? stmt.getText(),
         nodeKind: expandableMeta.nodeKind,
       });
-      return { entry: id, exits: [id] };
+      return { entry: id, exits: [id], endExits: [] };
     }
 
     if (stmt.getKind() === SyntaxKind.ExpressionStatement) {
@@ -120,6 +124,10 @@ export class StatementVisitor {
       return this.visitSwitch(stmt as SwitchStatement);
     }
 
+    if (stmt.getKind() === SyntaxKind.ReturnStatement) {
+      return this.visitReturn(stmt as ReturnStatement);
+    }
+
     if (stmt.getKind() === SyntaxKind.Block) {
       return this.visitStatements((stmt as Block).getStatements());
     }
@@ -134,7 +142,7 @@ export class StatementVisitor {
       deps: hookMeta.dependencyText,
     });
 
-    return { entry: bodyId, exits: [bodyId] };
+    return { entry: bodyId, exits: [bodyId], endExits: [] };
   }
 
   visitForEachLike(callExpression: CallExpression): BuildResult {
@@ -154,7 +162,7 @@ export class StatementVisitor {
       this.writer.addEdge(decisionId, decisionId, 'each', true, { innerDecisionCount });
     }
 
-    return { entry: decisionId, exits: [decisionId] };
+    return { entry: decisionId, exits: [decisionId], endExits: [] };
   }
 
   visitAction(label: string, sourceText?: string): BuildResult {
@@ -162,7 +170,18 @@ export class StatementVisitor {
       sourceText,
       nodeKind: 'action',
     });
-    return { entry: id, exits: [id] };
+    return { entry: id, exits: [id], endExits: [] };
+  }
+
+  visitReturn(stmt: ReturnStatement): BuildResult {
+    const expressionText = stmt.getExpression()?.getText();
+    const label = expressionText ? `return ${expressionText}` : 'return';
+    const id = this.writer.addFlowNode('action', compactLabel(label), {
+      sourceText: stmt.getText(),
+      nodeKind: 'action',
+    });
+
+    return { entry: id, exits: [], endExits: [id] };
   }
 
   visitIf(stmt: IfStatement): BuildResult {
@@ -175,12 +194,14 @@ export class StatementVisitor {
     const thenResult = this.visitBranch(stmt.getThenStatement());
     const elseResult = elseStmt ? this.visitBranch(elseStmt) : undefined;
     const mergeId = this.writer.addFlowNode('merge', '');
+    const endExits: string[] = [];
 
     if (thenResult.entry) {
       this.writer.addEdge(decisionId, thenResult.entry, 'yes');
       for (const exit of thenResult.exits) {
         this.writer.addEdge(exit, mergeId);
       }
+      endExits.push(...thenResult.endExits);
     } else {
       this.writer.addEdge(decisionId, mergeId, 'yes');
     }
@@ -190,11 +211,12 @@ export class StatementVisitor {
       for (const exit of elseResult.exits) {
         this.writer.addEdge(exit, mergeId);
       }
+      endExits.push(...elseResult.endExits);
     } else {
       this.writer.addEdge(decisionId, mergeId, 'no');
     }
 
-    return { entry: decisionId, exits: [mergeId] };
+    return { entry: decisionId, exits: [mergeId], endExits };
   }
 
   visitWhile(stmt: WhileStatement): BuildResult {
@@ -223,11 +245,11 @@ export class StatementVisitor {
       }
 
       this.writer.addEdge(decisionId, body.entry, 'yes', true, { innerDecisionCount });
-      return { entry: body.entry, exits: [decisionId] };
+      return { entry: body.entry, exits: [decisionId], endExits: body.endExits };
     }
 
     this.writer.addEdge(decisionId, decisionId, 'yes', true, { innerDecisionCount });
-    return { entry: decisionId, exits: [decisionId] };
+    return { entry: decisionId, exits: [decisionId], endExits: [] };
   }
 
   visitFor(stmt: ForStatement): BuildResult {
@@ -284,7 +306,7 @@ export class StatementVisitor {
       this.writer.addEdge(incrementId, decisionId, '', true, { innerDecisionCount });
     }
 
-    return { entry: firstEntry, exits: [decisionId] };
+    return { entry: firstEntry, exits: [decisionId], endExits: body.endExits };
   }
 
   visitForOf(stmt: ForOfStatement): BuildResult {
@@ -301,6 +323,7 @@ export class StatementVisitor {
     const finallyBlock = stmt.getFinallyBlock();
     const finallyResult = finallyBlock ? this.visitBranch(finallyBlock) : undefined;
     const finalTarget = finallyResult?.entry ?? mergeId;
+    const endExits: string[] = [];
 
     const tryResult = this.visitBranch(stmt.getTryBlock());
     if (tryResult.entry) {
@@ -308,6 +331,7 @@ export class StatementVisitor {
       for (const exit of tryResult.exits) {
         this.writer.addEdge(exit, finalTarget);
       }
+      endExits.push(...tryResult.endExits);
     } else {
       this.writer.addEdge(decisionId, finalTarget, 'try');
     }
@@ -320,6 +344,7 @@ export class StatementVisitor {
         for (const exit of catchResult.exits) {
           this.writer.addEdge(exit, finalTarget);
         }
+        endExits.push(...catchResult.endExits);
       } else {
         this.writer.addEdge(decisionId, finalTarget, 'catch');
       }
@@ -329,9 +354,13 @@ export class StatementVisitor {
       for (const exit of finallyResult.exits) {
         this.writer.addEdge(exit, mergeId);
       }
+
+      if (finallyResult.endExits.length > 0) {
+        return { entry: decisionId, exits: [mergeId], endExits: finallyResult.endExits };
+      }
     }
 
-    return { entry: decisionId, exits: [mergeId] };
+    return { entry: decisionId, exits: [mergeId], endExits };
   }
 
   visitSwitch(stmt: SwitchStatement): BuildResult {
@@ -340,6 +369,7 @@ export class StatementVisitor {
     const mergeId = this.writer.addFlowNode('merge', '');
     const clauses = stmt.getCaseBlock().getClauses();
     let pendingLabels: string[] = [];
+    const endExits: string[] = [];
 
     for (const clause of clauses) {
       const caseClause = clause.asKind(SyntaxKind.CaseClause);
@@ -364,6 +394,7 @@ export class StatementVisitor {
         for (const exit of body.exits) {
           this.writer.addEdge(exit, mergeId);
         }
+        endExits.push(...body.endExits);
       } else {
         for (const branchLabel of pendingLabels) {
           this.writer.addEdge(decisionId, mergeId, branchLabel);
@@ -377,7 +408,7 @@ export class StatementVisitor {
       this.writer.addEdge(decisionId, mergeId, branchLabel);
     }
 
-    return { entry: decisionId, exits: [mergeId] };
+    return { entry: decisionId, exits: [mergeId], endExits };
   }
 
   visitBranch(node: MorphNode): BuildResult {
@@ -416,7 +447,7 @@ export class StatementVisitor {
       this.writer.addEdge(decisionId, decisionId, 'yes', true, { innerDecisionCount });
     }
 
-    return { entry: decisionId, exits: [decisionId] };
+    return { entry: decisionId, exits: [decisionId], endExits: body.endExits };
   }
 
   private visitIteratorLoop(stmt: ForOfStatement | ForInStatement): BuildResult {

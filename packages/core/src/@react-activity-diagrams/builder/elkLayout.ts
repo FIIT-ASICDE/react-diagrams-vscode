@@ -14,6 +14,7 @@ export interface LayoutResult {
 const elkBaseOptions: ElkLayoutOptions = {
   'elk.algorithm': 'layered',
   'elk.layered.spacing.nodeNodeBetweenLayers': '70',
+  'elk.spacing.nodeNode': '24',
   'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
   'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
   'elk.layered.nodePlacement.favorStraightEdges': 'true',
@@ -25,6 +26,7 @@ const elkBaseOptions: ElkLayoutOptions = {
 };
 
 function estimateNodeSize(node: Node): { width: number; height: number } {
+
   return { width: 500, height: 56 };
 }
 

@@ -1,6 +1,7 @@
 export type BuildResult = {
   entry?: string;
   exits: string[];
+  endExits: string[];
 };
 
 export type HookMeta = {

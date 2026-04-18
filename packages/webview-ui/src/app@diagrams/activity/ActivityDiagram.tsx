@@ -12,7 +12,12 @@ import {
 	createTextPreviewSnapshot,
 	truncateSnapshots,
 } from './logic/snapshot-utils';
-import { applyRenameToNodes, createRenameDraft } from './logic/rename-utils';
+import {
+	applyRenameToEdges,
+	applyRenameToNodes,
+	createEdgeRenameDraft,
+	createRenameDraft,
+} from './logic/rename-utils';
 import {
 	appendNode,
 	appendNodeToTopSnapshot,
@@ -32,8 +37,8 @@ import type {
 import type {
 	ActivityNodeType,
 	ActivityMessage,
+	DiagramRenameDraft,
 	PreviewSnapshot,
-	RenameDraft,
 } from './model/types';
 
 const customNode = {
@@ -57,7 +62,7 @@ function truncate(text: string, maxLength: number) {
 export default function ActivityDiagram() {
 	const [nodes, setNodes] = useState<Node[]>([]);
 	const [edges, setEdges] = useState<Edge[]>([]);
-	const [renameDraft, setRenameDraft] = useState<RenameDraft | null>(null);
+	const [renameDraft, setRenameDraft] = useState<DiagramRenameDraft | null>(null);
 	const [previewStack, setPreviewStack] = useState<PreviewSnapshot[]>([]);
 	const [fitViewRevision, setFitViewRevision] = useState(0);
 	const nodeCounter = useRef(1);
@@ -269,7 +274,15 @@ export default function ActivityDiagram() {
 			window.clearTimeout(previewClickTimeoutRef.current);
 			previewClickTimeoutRef.current = null;
 		}
-		setRenameDraft(createRenameDraft(node));
+		setRenameDraft({ kind: 'node', draft: createRenameDraft(node) });
+	}, []);
+
+	const onEdgeDoubleClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+		if (previewClickTimeoutRef.current !== null) {
+			window.clearTimeout(previewClickTimeoutRef.current);
+			previewClickTimeoutRef.current = null;
+		}
+		setRenameDraft({ kind: 'edge', draft: createEdgeRenameDraft(edge) });
 	}, []);
 
 	const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
@@ -301,13 +314,19 @@ export default function ActivityDiagram() {
 
 				const lastIndex = stackSnapshot.length - 1;
 				const lastPreview = stackSnapshot[lastIndex];
-					const updatedPreviewNodes = applyRenameToNodes(lastPreview.nodes, renameDraft);
+				const updatedPreviewNodes = renameDraft.kind === 'node'
+					? applyRenameToNodes(lastPreview.nodes, renameDraft.draft)
+					: lastPreview.nodes;
+				const updatedPreviewEdges = renameDraft.kind === 'edge'
+					? applyRenameToEdges(lastPreview.edges, renameDraft.draft)
+					: lastPreview.edges;
 
 				return [
 					...stackSnapshot.slice(0, lastIndex),
 					{
 						...lastPreview,
 						nodes: updatedPreviewNodes,
+						edges: updatedPreviewEdges,
 					},
 				];
 			});
@@ -315,7 +334,11 @@ export default function ActivityDiagram() {
 			return;
 		}
 
-		setNodes((nodesSnapshot) => applyRenameToNodes(nodesSnapshot, renameDraft));
+		if (renameDraft.kind === 'node') {
+			setNodes((nodesSnapshot) => applyRenameToNodes(nodesSnapshot, renameDraft.draft));
+		} else {
+			setEdges((edgesSnapshot) => applyRenameToEdges(edgesSnapshot, renameDraft.draft));
+		}
 
 		setRenameDraft(null);
 	}, [inPreview, renameDraft]);
@@ -344,9 +367,26 @@ export default function ActivityDiagram() {
 				<div className="absolute left-2 top-16 z-20 flex items-center gap-2 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-editor-background)] p-2">
 					<input
 						className="min-w-56 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-2 py-1 text-[var(--vscode-input-foreground)]"
-						value={renameDraft.value}
+						value={renameDraft.draft.value}
+						placeholder={renameDraft.kind === 'edge' ? 'Edge label' : 'Node label'}
 						autoFocus
-						onChange={(event) => setRenameDraft((snapshot) => snapshot ? { ...snapshot, value: event.target.value } : snapshot)}
+						onChange={(event) => setRenameDraft((snapshot) => {
+							if (!snapshot) {
+								return snapshot;
+							}
+
+							if (snapshot.kind === 'node') {
+								return {
+									kind: 'node',
+									draft: { ...snapshot.draft, value: event.target.value },
+								};
+							}
+
+							return {
+								kind: 'edge',
+								draft: { ...snapshot.draft, value: event.target.value },
+							};
+						})}
 						onKeyDown={(event) => {
 							if (event.key === 'Enter') {
 								applyRename();
@@ -356,12 +396,14 @@ export default function ActivityDiagram() {
 							}
 						}}
 					/>
-					{renameDraft.deps !== undefined && (
+					{renameDraft.kind === 'node' && renameDraft.draft.deps !== undefined && (
 						<input
 							className="min-w-40 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-2 py-1 text-[var(--vscode-input-foreground)]"
-							value={renameDraft.deps}
+							value={renameDraft.draft.deps}
 							placeholder="deps"
-							onChange={(event) => setRenameDraft((snapshot) => snapshot ? { ...snapshot, deps: event.target.value } : snapshot)}
+							onChange={(event) => setRenameDraft((snapshot) => snapshot && snapshot.kind === 'node'
+								? { ...snapshot, draft: { ...snapshot.draft, deps: event.target.value } }
+								: snapshot)}
 							onKeyDown={(event) => {
 								if (event.key === 'Enter') {
 									applyRename();
@@ -388,6 +430,7 @@ export default function ActivityDiagram() {
 				onConnect={onConnect}
 				onNodeClick={onNodeClick}
 				onNodeDoubleClick={onNodeDoubleClick}
+				onEdgeDoubleClick={onEdgeDoubleClick}
 				nodeTypes={customNode}
 				edgeTypes={customEdge}
 				fitView

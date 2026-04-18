@@ -3,7 +3,7 @@ import { ComponentActivityPanel } from "../app@panels/ComponentActivityPanel";
 
 const DIAGRAM_CHAT_PARTICIPANT_ID = "vs-code-ext.diagram";
 const MODEL_TYPE = "copilot";
-const RESPONSE_LANGUAGE = "English";
+const RESPONSE_LANGUAGE = "Slovak";
 
 type ChatContextSnapshot = {
 	userPrompt: string;
@@ -110,14 +110,17 @@ async function getChatContextSnapshot(userPrompt: string): Promise<ChatContextSn
 
 function buildLanguageModelMessages(snapshot: ChatContextSnapshot, promptWasVague: boolean): vscode.LanguageModelChatMessage[] {
 	const systemInstruction = [
-		"Role: expert assistant for TypeScript, TSX, and activity diagrams.",
-		`You must answer in this language: ${RESPONSE_LANGUAGE}.`,
-		"Always analyze code together with activity diagram context.",
-		"You can explain behavior, suggest refactors, compare code and diagram, and detect inconsistencies.",
-		"Always state whether and how the diagram influenced your answer.",
-		"If diagram updates would improve the outcome, propose concrete diagram changes.",
-		"Keep answers practical, structured, and implementation-focused."
+	"Role: expert assistant for TypeScript, TSX, and activity diagrams.",
+	`You must answer in this language: ${RESPONSE_LANGUAGE}.`,
+	"Analyze all available context (code and diagram) together and provide the best possible answer.",
+	"Do not explicitly compare code and diagram during the answer.",
+	"Answer strictly only what the user asks (e.g. if the prompt is 'explain', only explain the behavior).",
+	"Do not add extra sections, suggestions, or information unless explicitly requested.",
+	"Style the answer nicely and use markdown formatting where appropriate, especially for code snippets.",
+	"At the very end, briefly state how the diagram influenced your reasoning (or that it had no impact).",
+	"Keep the answer practical, concise, and implementation-focused."
 	].join("\n");
+
 
 	const effectiveTask = promptWasVague
 		? "Provide a short capabilities intro, suggest concrete next prompts, then give best-effort analysis from available context."

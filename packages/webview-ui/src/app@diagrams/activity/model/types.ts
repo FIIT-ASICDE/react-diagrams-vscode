@@ -20,6 +20,15 @@ export type RenameDraft = {
 	deps?: string;
 };
 
+export type EdgeRenameDraft = {
+	edgeId: string;
+	value: string;
+};
+
+export type DiagramRenameDraft =
+	| { kind: 'node'; draft: RenameDraft }
+	| { kind: 'edge'; draft: EdgeRenameDraft };
+
 export type ActivityWebviewMessenger = {
 	postMessage: {
 		(type: 'diagram/requestType'): void;

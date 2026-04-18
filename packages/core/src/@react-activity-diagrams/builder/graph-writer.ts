@@ -3,6 +3,7 @@ import type { FlowNodeData } from './types';
 
 export class GraphWriter {
   private nextNodeId = 0;
+  private nextEdgeId = 0;
 
   constructor(
     private readonly nodes: Node[],
@@ -24,7 +25,7 @@ export class GraphWriter {
 
   addEdge(source: string, target: string, label?: string, isBackEdge = false, data?: Record<string, unknown>): void {
     this.edges.push({
-      id: `edge-${this.edges.length}-${source}-${target}`,
+      id: `edge-${this.nextEdgeId++}`,
       source,
       target,
       sourceHandle: isBackEdge ? 'source-left' : 'source-bottom',

@@ -12,9 +12,10 @@ function buildBackEdgePath(sourceX: number, sourceY: number, targetX: number, ta
 	].join(' ');
 }
 
-export default function BackEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, style, data }: EdgeProps) {
+export default function BackEdge({ id, sourceX, sourceY, targetX, targetY, markerEnd, style, data, label }: EdgeProps) {
 	const rawInnerDecisionCount = (data as { innerDecisionCount?: unknown } | undefined)?.innerDecisionCount;
 	const innerDecisionCount = typeof rawInnerDecisionCount === 'number' ? rawInnerDecisionCount : 0;
+	const normalizedLabel = typeof label === 'string' ? label : undefined;
 	const path = buildBackEdgePath(sourceX, sourceY, targetX, targetY, innerDecisionCount);
 
 	return (
@@ -23,6 +24,8 @@ export default function BackEdge({ id, sourceX, sourceY, targetX, targetY, marke
 			path={path}
 			markerEnd={markerEnd}
 			style={style}
+			label={normalizedLabel}
+			labelShowBg
 		/>
 	);
 }
