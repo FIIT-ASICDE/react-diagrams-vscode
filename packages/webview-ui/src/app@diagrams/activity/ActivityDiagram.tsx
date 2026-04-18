@@ -9,7 +9,6 @@ import BackEdge from './diagram-rendering/BackEdge';
 import { generateCodeFromDiagram } from './logic/diagram-code-generation';
 import {
 	appendSnapshot,
-	createTextPreviewSnapshot,
 	truncateSnapshots,
 } from './logic/snapshot-utils';
 import {
@@ -120,11 +119,9 @@ export default function ActivityDiagram() {
 
 	const openNodePreview = useCallback((node: Node) => {
 		const sourceText = String((node.data as { sourceText?: unknown } | undefined)?.sourceText ?? '').trim();
-		const label = String((node.data as { label?: unknown } | undefined)?.label ?? '').trim();
 		const nodeType = String(node.type ?? 'action');
-		const isTruncatedLabel = label.endsWith('...');
 
-		if (nodeType !== 'expandable' && !(isTruncatedLabel && sourceText)) {
+		if (nodeType !== 'expandable') {
 			return;
 		}
 
@@ -132,15 +129,26 @@ export default function ActivityDiagram() {
 			return;
 		}
 
-		if (nodeType !== 'expandable') {
-			setPreviewStack((stackSnapshot) => appendSnapshot(stackSnapshot, createTextPreviewSnapshot(label || 'Full text preview', sourceText)));
-			setFitViewRevision((revision) => revision + 1);
-			return;
-		}
-
 		vscode.postMessage('code/nodePreview', {
 			title: String((node.data as { label?: unknown } | undefined)?.label ?? 'Node'),
 			sourceText,
+		});
+	}, []);
+
+	const openRenameForNode = useCallback((node: Node, useFullText: boolean) => {
+		const draft = createRenameDraft(node);
+		if (!useFullText) {
+			setRenameDraft({ kind: 'node', draft });
+			return;
+		}
+
+		const sourceText = String((node.data as { sourceText?: unknown } | undefined)?.sourceText ?? '').trim();
+		setRenameDraft({
+			kind: 'node',
+			draft: {
+				...draft,
+				value: sourceText || draft.value,
+			},
 		});
 	}, []);
 
@@ -274,8 +282,10 @@ export default function ActivityDiagram() {
 			window.clearTimeout(previewClickTimeoutRef.current);
 			previewClickTimeoutRef.current = null;
 		}
-		setRenameDraft({ kind: 'node', draft: createRenameDraft(node) });
-	}, []);
+
+		const nodeType = String(node.type ?? 'action');
+		openRenameForNode(node, nodeType === 'expandable');
+	}, [openRenameForNode]);
 
 	const onEdgeDoubleClick = useCallback((_: React.MouseEvent, edge: Edge) => {
 		if (previewClickTimeoutRef.current !== null) {
@@ -290,11 +300,19 @@ export default function ActivityDiagram() {
 			window.clearTimeout(previewClickTimeoutRef.current);
 		}
 
+		const nodeType = String(node.type ?? 'action');
+
+		if (nodeType !== 'expandable') {
+			openRenameForNode(node, true);
+			previewClickTimeoutRef.current = null;
+			return;
+		}
+
 		previewClickTimeoutRef.current = window.setTimeout(() => {
 			openNodePreview(node);
 			previewClickTimeoutRef.current = null;
 		}, 150);
-	}, [openNodePreview]);
+	}, [openNodePreview, openRenameForNode]);
 
 	const navigateTo = useCallback((stackIndex: number) => {
 		setPreviewStack((stackSnapshot) => truncateSnapshots(stackSnapshot, stackIndex));
@@ -364,60 +382,79 @@ export default function ActivityDiagram() {
 				/>
 			</div>
 			{renameDraft && (
-				<div className="absolute left-2 top-16 z-20 flex items-center gap-2 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-editor-background)] p-2">
-					<input
-						className="min-w-56 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-2 py-1 text-[var(--vscode-input-foreground)]"
-						value={renameDraft.draft.value}
-						placeholder={renameDraft.kind === 'edge' ? 'Edge label' : 'Node label'}
-						autoFocus
-						onChange={(event) => setRenameDraft((snapshot) => {
-							if (!snapshot) {
-								return snapshot;
-							}
+				<div className="absolute inset-0 z-30 flex items-start justify-center bg-black/20 pt-20">
+					<div className="w-[760px] max-w-[calc(100vw-48px)] rounded border border-[var(--vscode-editorWidget-border)] bg-[var(--vscode-editorWidget-background)] p-4 shadow-xl">
+						<div className="mb-3 text-sm font-semibold text-[var(--vscode-editor-foreground)]">
+							{renameDraft.kind === 'edge' ? 'Edit Edge Label' : 'Edit Node Text'}
+						</div>
 
-							if (snapshot.kind === 'node') {
-								return {
-									kind: 'node',
-									draft: { ...snapshot.draft, value: event.target.value },
-								};
-							}
+						{renameDraft.kind === 'node' ? (
+							<textarea
+								className="h-56 w-full resize-y rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
+								value={renameDraft.draft.value}
+								placeholder="Node text"
+								autoFocus
+								onChange={(event) => setRenameDraft((snapshot) => snapshot && snapshot.kind === 'node'
+									? { ...snapshot, draft: { ...snapshot.draft, value: event.target.value } }
+									: snapshot)}
+								onKeyDown={(event) => {
+									if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+										applyRename();
+									}
+									if (event.key === 'Escape') {
+										cancelRename();
+									}
+								}}
+							/>
+						) : (
+							<input
+								className="w-full rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
+								value={renameDraft.draft.value}
+								placeholder="Edge label"
+								autoFocus
+								onChange={(event) => setRenameDraft((snapshot) => snapshot && snapshot.kind === 'edge'
+									? { ...snapshot, draft: { ...snapshot.draft, value: event.target.value } }
+									: snapshot)}
+								onKeyDown={(event) => {
+									if (event.key === 'Enter') {
+										applyRename();
+									}
+									if (event.key === 'Escape') {
+										cancelRename();
+									}
+								}}
+							/>
+						)}
 
-							return {
-								kind: 'edge',
-								draft: { ...snapshot.draft, value: event.target.value },
-							};
-						})}
-						onKeyDown={(event) => {
-							if (event.key === 'Enter') {
-								applyRename();
-							}
-							if (event.key === 'Escape') {
-								cancelRename();
-							}
-						}}
-					/>
-					{renameDraft.kind === 'node' && renameDraft.draft.deps !== undefined && (
-						<input
-							className="min-w-40 rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-2 py-1 text-[var(--vscode-input-foreground)]"
-							value={renameDraft.draft.deps}
-							placeholder="deps"
-							onChange={(event) => setRenameDraft((snapshot) => snapshot && snapshot.kind === 'node'
-								? { ...snapshot, draft: { ...snapshot.draft, deps: event.target.value } }
-								: snapshot)}
-							onKeyDown={(event) => {
-								if (event.key === 'Enter') {
-									applyRename();
-								}
-								if (event.key === 'Escape') {
-									cancelRename();
-								}
-							}}
-						/>
-					)}
-					<VSCodeButton appearance="primary" onClick={applyRename}>Save</VSCodeButton>
-					<VSCodeButton appearance="secondary" onClick={cancelRename}>Cancel</VSCodeButton>
+						{renameDraft.kind === 'node' && renameDraft.draft.deps !== undefined && (
+							<input
+								className="mt-3 w-full rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
+								value={renameDraft.draft.deps}
+								placeholder="deps"
+								onChange={(event) => setRenameDraft((snapshot) => snapshot && snapshot.kind === 'node'
+									? { ...snapshot, draft: { ...snapshot.draft, deps: event.target.value } }
+									: snapshot)}
+							/>
+						)}
+
+						<div className="mt-4 flex items-center gap-2">
+							{renameDraft.kind === 'node' && (
+								<VSCodeButton
+									appearance="secondary"
+									onClick={() => {
+										void navigator.clipboard.writeText(renameDraft.draft.value);
+									}}
+								>
+									Copy
+								</VSCodeButton>
+							)}
+							<VSCodeButton appearance="primary" onClick={applyRename}>Save</VSCodeButton>
+							<VSCodeButton appearance="secondary" onClick={cancelRename}>Close</VSCodeButton>
+						</div>
+					</div>
 				</div>
 			)}
+
 			<ReactFlow
 				nodes={displayedNodes}
 				edges={displayedEdges}
