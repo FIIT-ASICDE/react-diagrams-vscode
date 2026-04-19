@@ -15,7 +15,7 @@ import {
   TryStatement,
   WhileStatement,
 } from 'ts-morph';
-import { GraphWriter } from '../graph-writer';
+import { EdgeBranchData, GraphWriter } from '../graph-writer';
 import {
   getCallbackBranch,
   getExpandableMeta,
@@ -31,6 +31,51 @@ import {
 
 export class StatementVisitor {
   constructor(private writer: GraphWriter) {}
+
+  private edgeMeta(branchSide: 'left' | 'right' | 'bottom', semanticKind: 'positive' | 'negative' | 'case' | 'default' | 'loop-back' | 'normal', extra?: Record<string, unknown>): EdgeBranchData {
+    return {
+      branchSide,
+      semanticKind,
+      ...extra,
+    };
+  }
+
+  private createContinuation(label = 'Continue'): string {
+    return this.writer.addFlowNode('action', label, {
+      sourceText: '',
+      nodeKind: 'continuation',
+    });
+  }
+
+  private createContinuationFrom(sourceId: string, edgeLabel?: string, edgeData?: EdgeBranchData): string {
+    const continuationId = this.createContinuation();
+    this.writer.addEdge(sourceId, continuationId, edgeLabel, false, edgeData);
+    return continuationId;
+  }
+
+  private createMergeForSources(sources: string[]): string | undefined {
+    const uniqueSources = [...new Set(sources)].filter(Boolean);
+
+    if (uniqueSources.length < 2) {
+      return undefined;
+    }
+
+    const mergeId = this.writer.addFlowNode('merge', '');
+    for (const source of uniqueSources) {
+      this.writer.addEdge(source, mergeId);
+    }
+    return mergeId;
+  }
+
+  private resolveExitSources(sources: string[]): string[] {
+    const uniqueSources = [...new Set(sources)].filter(Boolean);
+    if (uniqueSources.length <= 1) {
+      return uniqueSources;
+    }
+
+    const mergeId = this.createMergeForSources(uniqueSources);
+    return mergeId ? [mergeId] : uniqueSources;
+  }
 
   visitStatements(statements: Statement[]): BuildResult {
     let entry: string | undefined;
@@ -61,8 +106,8 @@ export class StatementVisitor {
 
     return {
       entry,
-      exits: entry ? pendingExits : [],
-      endExits,
+      exits: entry ? [...new Set(pendingExits)] : [],
+      endExits: [...new Set(endExits)],
     };
   }
 
@@ -146,7 +191,7 @@ export class StatementVisitor {
   }
 
   visitForEachLike(callExpression: CallExpression): BuildResult {
-    const decisionId = this.createDecisionNode(
+    const loopId = this.createLoopNode(
       compactLabel(callExpression.getExpression().getText()),
       callExpression.getText(),
     );
@@ -156,13 +201,15 @@ export class StatementVisitor {
     const body = callbackBranch ? this.visitBranch(callbackBranch) : undefined;
 
     if (body?.entry) {
-      this.writer.addEdge(decisionId, body.entry, 'each');
-      this.connectLoopBackEdges(body.exits, decisionId, innerDecisionCount);
-    } else {
-      this.writer.addEdge(decisionId, decisionId, 'each', true, { innerDecisionCount });
+      this.writer.addEdge(loopId, body.entry, 'each', false, this.edgeMeta('right', 'positive'));
+      this.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
+      const exitId = this.createContinuationFrom(loopId, 'done', this.edgeMeta('left', 'negative'));
+      return { entry: loopId, exits: [exitId], endExits: body.endExits };
     }
 
-    return { entry: decisionId, exits: [decisionId], endExits: [] };
+    this.writer.addEdge(loopId, loopId, 'each', true, this.edgeMeta('left', 'loop-back', { innerDecisionCount }));
+    const exitId = this.createContinuationFrom(loopId, 'done', this.edgeMeta('left', 'negative'));
+    return { entry: loopId, exits: [exitId], endExits: [] };
   }
 
   visitAction(label: string, sourceText?: string): BuildResult {
@@ -193,121 +240,164 @@ export class StatementVisitor {
 
     const thenResult = this.visitBranch(stmt.getThenStatement());
     const elseResult = elseStmt ? this.visitBranch(elseStmt) : undefined;
-    const mergeId = this.writer.addFlowNode('merge', '');
+    const mergeSources: string[] = [];
     const endExits: string[] = [];
 
     if (thenResult.entry) {
-      this.writer.addEdge(decisionId, thenResult.entry, 'yes');
-      for (const exit of thenResult.exits) {
-        this.writer.addEdge(exit, mergeId);
-      }
+      this.writer.addEdge(decisionId, thenResult.entry, 'yes', false, this.edgeMeta('right', 'positive'));
+      mergeSources.push(...thenResult.exits);
       endExits.push(...thenResult.endExits);
     } else {
-      this.writer.addEdge(decisionId, mergeId, 'yes');
+      mergeSources.push(this.createContinuationFrom(decisionId, 'yes', this.edgeMeta('right', 'positive')));
     }
 
-    if (elseResult?.entry) {
-      this.writer.addEdge(decisionId, elseResult.entry, 'no');
-      for (const exit of elseResult.exits) {
-        this.writer.addEdge(exit, mergeId);
+    if (elseResult) {
+      if (elseResult.entry) {
+        this.writer.addEdge(decisionId, elseResult.entry, 'no', false, this.edgeMeta('left', 'negative'));
+        mergeSources.push(...elseResult.exits);
+        endExits.push(...elseResult.endExits);
+      } else {
+        mergeSources.push(this.createContinuationFrom(decisionId, 'no', this.edgeMeta('left', 'negative')));
       }
-      endExits.push(...elseResult.endExits);
     } else {
-      this.writer.addEdge(decisionId, mergeId, 'no');
+      mergeSources.push(this.createContinuationFrom(decisionId, 'no', this.edgeMeta('left', 'negative')));
     }
 
-    return { entry: decisionId, exits: [mergeId], endExits };
+    return {
+      entry: decisionId,
+      exits: this.resolveExitSources(mergeSources),
+      endExits: [...new Set(endExits)],
+    };
   }
 
   visitWhile(stmt: WhileStatement): BuildResult {
     return this.visitStandardLoop(
-      this.createDecisionNode(
+      this.createLoopNode(
         compactLabel(stmt.getExpression().getText()),
         stmt.getExpression().getText(),
       ),
       stmt.getStatement(),
+      'yes',
+      'no',
     );
   }
 
-  visitDoWhile(stmt: DoStatement): BuildResult {
-    const decisionId = this.createDecisionNode(
-      compactLabel(stmt.getExpression().getText()),
-      stmt.getExpression().getText(),
+visitDoWhile(stmt: DoStatement): BuildResult {
+  const loopId = this.createLoopNode(
+    compactLabel(stmt.getExpression().getText()),
+    stmt.getExpression().getText(),
+  );
+
+  const loopBranch = stmt.getStatement();
+  const innerDecisionCount = countDecisionsInBranch(loopBranch);
+  const body = this.visitBranch(loopBranch);
+
+  if (!body.entry) {
+    this.writer.addEdge(loopId, loopId, 'yes', true, this.edgeMeta('left', 'loop-back', { innerDecisionCount }));
+    const exitId = this.createContinuationFrom(loopId, 'no', this.edgeMeta('left', 'negative'));
+    return { entry: loopId, exits: [exitId], endExits: [] };
+  }
+
+  // body flows normally into condition
+  for (const exit of body.exits) {
+    this.writer.addEdge(exit, loopId, getFallthroughEdgeLabel(exit));
+  }
+
+  // only the successful condition branch is the real loop-back
+  this.writer.addEdge(
+    loopId,
+    body.entry,
+    'yes',
+    true,
+    this.edgeMeta('left', 'loop-back', { innerDecisionCount }),
+  );
+
+  const exitId = this.createContinuationFrom(loopId, 'no', this.edgeMeta('left', 'negative'));
+
+  return {
+    entry: body.entry,
+    exits: [exitId],
+    endExits: [...new Set(body.endExits)],
+  };
+}
+visitFor(stmt: ForStatement): BuildResult {
+  let firstEntry: string | undefined;
+
+  const initializer = stmt.getInitializer();
+  if (initializer) {
+    firstEntry = this.writer.addFlowNode('action', compactLabel(initializer.getText()), {
+      sourceText: stmt.getText(),
+      nodeKind: 'action',
+    });
+  }
+
+  const loopId = this.createLoopNode(
+    compactLabel(stmt.getCondition()?.getText() ?? 'for'),
+    stmt.getCondition()?.getText() ?? 'for',
+  );
+
+  if (firstEntry) {
+    this.writer.addEdge(firstEntry, loopId);
+  } else {
+    firstEntry = loopId;
+  }
+
+  const loopBranch = stmt.getStatement();
+  const innerDecisionCount = countDecisionsInBranch(loopBranch);
+  const body = this.visitBranch(loopBranch);
+  const incrementor = stmt.getIncrementor();
+
+  let incrementId: string | undefined;
+  if (incrementor) {
+    incrementId = this.writer.addFlowNode('action', compactLabel(incrementor.getText()), {
+      sourceText: incrementor.getText(),
+      nodeKind: 'action',
+    });
+  }
+
+  // yes -> body (or increment if body is empty)
+  if (body.entry) {
+    this.writer.addEdge(loopId, body.entry, 'yes', false, this.edgeMeta('right', 'positive'));
+  } else if (incrementId) {
+    this.writer.addEdge(loopId, incrementId, 'yes', false, this.edgeMeta('right', 'positive'));
+  } else {
+    this.writer.addEdge(
+      loopId,
+      loopId,
+      'yes',
+      true,
+      this.edgeMeta('left', 'loop-back', { innerDecisionCount }),
     );
+  }
 
-    const loopBranch = stmt.getStatement();
-    const innerDecisionCount = countDecisionsInBranch(loopBranch);
-    const body = this.visitBranch(loopBranch);
-
+  // Make increment the linear tail of the body
+  if (incrementId) {
     if (body.entry) {
-      for (const exit of body.exits) {
-        this.writer.addEdge(exit, decisionId);
+      const uniqueBodyExits = [...new Set(body.exits)].filter(Boolean);
+      for (const exit of uniqueBodyExits) {
+        this.writer.addEdge(exit, incrementId, getFallthroughEdgeLabel(exit));
       }
-
-      this.writer.addEdge(decisionId, body.entry, 'yes', true, { innerDecisionCount });
-      return { entry: body.entry, exits: [decisionId], endExits: body.endExits };
     }
 
-    this.writer.addEdge(decisionId, decisionId, 'yes', true, { innerDecisionCount });
-    return { entry: decisionId, exits: [decisionId], endExits: [] };
-  }
-
-  visitFor(stmt: ForStatement): BuildResult {
-    let firstEntry: string | undefined;
-
-    const initializer = stmt.getInitializer();
-    if (initializer) {
-      firstEntry = this.writer.addFlowNode('action', compactLabel(initializer.getText()), {
-        sourceText: stmt.getText(),
-        nodeKind: 'action',
-      });
-    }
-
-    const decisionId = this.createDecisionNode(
-      compactLabel(stmt.getCondition()?.getText() ?? 'for'),
-      stmt.getCondition()?.getText() ?? 'for',
+    this.writer.addEdge(
+      incrementId,
+      loopId,
+      '',
+      true,
+      this.edgeMeta('left', 'loop-back', { innerDecisionCount }),
     );
-
-    if (firstEntry) {
-      this.writer.addEdge(firstEntry, decisionId);
-    } else {
-      firstEntry = decisionId;
-    }
-
-    const loopBranch = stmt.getStatement();
-    const innerDecisionCount = countDecisionsInBranch(loopBranch);
-    const body = this.visitBranch(loopBranch);
-    const incrementor = stmt.getIncrementor();
-
-    let incrementId: string | undefined;
-    if (incrementor) {
-      incrementId = this.writer.addFlowNode('action', compactLabel(incrementor.getText()), {
-        sourceText: stmt.getText(),
-        nodeKind: 'action',
-      });
-    }
-
-    if (body.entry) {
-      this.writer.addEdge(decisionId, body.entry, 'yes');
-      for (const exit of body.exits) {
-        if (incrementId) {
-          this.writer.addEdge(exit, incrementId, getFallthroughEdgeLabel(exit));
-        } else {
-          this.writer.addEdge(exit, decisionId, '', true, { innerDecisionCount });
-        }
-      }
-    } else if (incrementId) {
-      this.writer.addEdge(decisionId, incrementId, 'yes');
-    } else {
-      this.writer.addEdge(decisionId, decisionId, 'yes', true, { innerDecisionCount });
-    }
-
-    if (incrementId) {
-      this.writer.addEdge(incrementId, decisionId, '', true, { innerDecisionCount });
-    }
-
-    return { entry: firstEntry, exits: [decisionId], endExits: body.endExits };
+  } else if (body.entry) {
+    this.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
   }
+
+  const exitId = this.createContinuationFrom(loopId, 'no', this.edgeMeta('left', 'negative'));
+
+  return {
+    entry: firstEntry,
+    exits: [exitId],
+    endExits: [...new Set(body.endExits)],
+  };
+}
 
   visitForOf(stmt: ForOfStatement): BuildResult {
     return this.visitIteratorLoop(stmt);
@@ -319,56 +409,87 @@ export class StatementVisitor {
 
   visitTry(stmt: TryStatement): BuildResult {
     const decisionId = this.createDecisionNode('try', stmt.getText());
-    const mergeId = this.writer.addFlowNode('merge', '');
-    const finallyBlock = stmt.getFinallyBlock();
-    const finallyResult = finallyBlock ? this.visitBranch(finallyBlock) : undefined;
-    const finalTarget = finallyResult?.entry ?? mergeId;
+    const normalSources: string[] = [];
+    const abruptSources: string[] = [];
     const endExits: string[] = [];
 
     const tryResult = this.visitBranch(stmt.getTryBlock());
     if (tryResult.entry) {
-      this.writer.addEdge(decisionId, tryResult.entry, 'try');
-      for (const exit of tryResult.exits) {
-        this.writer.addEdge(exit, finalTarget);
-      }
-      endExits.push(...tryResult.endExits);
+      this.writer.addEdge(decisionId, tryResult.entry, 'try', false, this.edgeMeta('right', 'positive'));
+      normalSources.push(...tryResult.exits);
+      abruptSources.push(...tryResult.endExits);
     } else {
-      this.writer.addEdge(decisionId, finalTarget, 'try');
+      normalSources.push(this.createContinuationFrom(decisionId, 'try', this.edgeMeta('right', 'positive')));
     }
 
     const catchClause = stmt.getCatchClause();
     if (catchClause) {
       const catchResult = this.visitBranch(catchClause.getBlock());
       if (catchResult.entry) {
-        this.writer.addEdge(decisionId, catchResult.entry, 'catch');
-        for (const exit of catchResult.exits) {
-          this.writer.addEdge(exit, finalTarget);
-        }
-        endExits.push(...catchResult.endExits);
+        this.writer.addEdge(decisionId, catchResult.entry, 'catch', false, this.edgeMeta('left', 'negative'));
+        normalSources.push(...catchResult.exits);
+        abruptSources.push(...catchResult.endExits);
       } else {
-        this.writer.addEdge(decisionId, finalTarget, 'catch');
+        normalSources.push(this.createContinuationFrom(decisionId, 'catch', this.edgeMeta('left', 'negative')));
       }
     }
 
-    if (finallyResult?.entry) {
-      for (const exit of finallyResult.exits) {
-        this.writer.addEdge(exit, mergeId);
-      }
+    const finallyBlock = stmt.getFinallyBlock();
+    if (!finallyBlock) {
+      endExits.push(...abruptSources);
+      return {
+        entry: decisionId,
+        exits: this.resolveExitSources(normalSources),
+        endExits: [...new Set(endExits)],
+      };
+    }
 
-      if (finallyResult.endExits.length > 0) {
-        return { entry: decisionId, exits: [mergeId], endExits: finallyResult.endExits };
+    const combinedSources = [...new Set([...normalSources, ...abruptSources])];
+    if (combinedSources.length === 0) {
+      return { entry: decisionId, exits: [], endExits: [] };
+    }
+
+    const finallyResult = this.visitBranch(finallyBlock);
+    if (!finallyResult.entry) {
+      return {
+        entry: decisionId,
+        exits: this.resolveExitSources(normalSources),
+        endExits: [...new Set([...abruptSources, ...endExits])],
+      };
+    }
+
+    const finallyInput = this.resolveExitSources(combinedSources)[0];
+    if (finallyInput) {
+      this.writer.addEdge(finallyInput, finallyResult.entry);
+    }
+
+    const normalSet = new Set(normalSources);
+    const abruptSet = new Set(abruptSources);
+
+    for (const source of combinedSources) {
+      if (source === finallyInput) continue;
+      if (normalSet.has(source) || abruptSet.has(source)) {
+        this.writer.addEdge(source, finallyResult.entry);
       }
     }
 
-    return { entry: decisionId, exits: [mergeId], endExits };
+    const finallyNormalExits = finallyResult.exits;
+    const finallyAbruptExits = finallyResult.endExits;
+
+    return {
+      entry: decisionId,
+      exits: this.resolveExitSources(finallyNormalExits),
+      endExits: [...new Set(finallyAbruptExits)],
+    };
   }
 
   visitSwitch(stmt: SwitchStatement): BuildResult {
     const expressionText = stmt.getExpression().getText();
     const decisionId = this.createDecisionNode(compactLabel(expressionText), expressionText);
-    const mergeId = this.writer.addFlowNode('merge', '');
+    const mergeSources: string[] = [];
     const clauses = stmt.getCaseBlock().getClauses();
     let pendingLabels: string[] = [];
+    let pendingFallthroughExits: string[] = [];
     const endExits: string[] = [];
 
     for (const clause of clauses) {
@@ -379,36 +500,88 @@ export class StatementVisitor {
 
       pendingLabels.push(label);
 
-      const statements = clause.getStatements();
-      if (statements.length === 0) {
+      const clauseStatements = clause.getStatements();
+      const hasTopLevelBreak = clauseStatements.some(
+        (statement) => statement.getKind() === SyntaxKind.BreakStatement,
+      );
+      const executableStatements = clauseStatements.filter(
+        (statement) => statement.getKind() !== SyntaxKind.BreakStatement,
+      );
+
+      if (executableStatements.length === 0) {
+        if (hasTopLevelBreak) {
+          mergeSources.push(...pendingFallthroughExits);
+          pendingFallthroughExits = [];
+          const lowerLabels = pendingLabels.map((entry) => entry.toLowerCase());
+          const isDefaultOnly = lowerLabels.every((entry) => entry === 'default');
+          mergeSources.push(this.createContinuationFrom(
+            decisionId,
+            pendingLabels.join(' / '),
+            this.edgeMeta(isDefaultOnly ? 'bottom' : 'right', isDefaultOnly ? 'default' : 'case'),
+          ));
+          pendingLabels = [];
+        }
         continue;
       }
 
-      const body = this.visitStatements(statements);
+      const body = this.visitStatements(executableStatements);
 
       if (body.entry) {
+        for (const fallthroughExit of pendingFallthroughExits) {
+          this.writer.addEdge(fallthroughExit, body.entry, getFallthroughEdgeLabel(fallthroughExit));
+        }
+        pendingFallthroughExits = [];
+
         for (const branchLabel of pendingLabels) {
-          this.writer.addEdge(decisionId, body.entry, branchLabel);
+          const isDefault = branchLabel.toLowerCase() === 'default';
+          this.writer.addEdge(
+            decisionId,
+            body.entry,
+            branchLabel,
+            false,
+            this.edgeMeta(isDefault ? 'bottom' : 'right', isDefault ? 'default' : 'case'),
+          );
         }
 
-        for (const exit of body.exits) {
-          this.writer.addEdge(exit, mergeId);
+        if (hasTopLevelBreak) {
+          mergeSources.push(...body.exits);
+        } else {
+          pendingFallthroughExits.push(...body.exits);
         }
+
         endExits.push(...body.endExits);
       } else {
-        for (const branchLabel of pendingLabels) {
-          this.writer.addEdge(decisionId, mergeId, branchLabel);
-        }
+        const lowerLabels = pendingLabels.map((entry) => entry.toLowerCase());
+        const isDefaultOnly = lowerLabels.every((entry) => entry === 'default');
+        mergeSources.push(this.createContinuationFrom(
+          decisionId,
+          pendingLabels.join(' / '),
+          this.edgeMeta(isDefaultOnly ? 'bottom' : 'right', isDefaultOnly ? 'default' : 'case'),
+        ));
       }
 
       pendingLabels = [];
     }
 
-    for (const branchLabel of pendingLabels) {
-      this.writer.addEdge(decisionId, mergeId, branchLabel);
+    if (pendingFallthroughExits.length > 0) {
+      mergeSources.push(...pendingFallthroughExits);
     }
 
-    return { entry: decisionId, exits: [mergeId], endExits };
+    if (pendingLabels.length > 0) {
+      const lowerLabels = pendingLabels.map((entry) => entry.toLowerCase());
+      const isDefaultOnly = lowerLabels.every((entry) => entry === 'default');
+      mergeSources.push(this.createContinuationFrom(
+        decisionId,
+        pendingLabels.join(' / '),
+        this.edgeMeta(isDefaultOnly ? 'bottom' : 'right', isDefaultOnly ? 'default' : 'case'),
+      ));
+    }
+
+    return {
+      entry: decisionId,
+      exits: this.resolveExitSources(mergeSources),
+      endExits: [...new Set(endExits)],
+    };
   }
 
   visitBranch(node: MorphNode): BuildResult {
@@ -430,33 +603,60 @@ export class StatementVisitor {
     });
   }
 
-  private connectLoopBackEdges(exits: string[], decisionId: string, innerDecisionCount: number): void {
-    for (const exit of exits) {
-      this.writer.addEdge(exit, decisionId, '', true, { innerDecisionCount });
+  private createLoopNode(label: string, sourceText: string): string {
+    return this.writer.addFlowNode('loop', label, {
+      sourceText,
+      nodeKind: 'loop',
+    });
+  }
+
+  private connectLoopBackEdges(exits: string[], loopId: string, innerDecisionCount: number): void {
+    const uniqueExits = [...new Set(exits)].filter((exit) => exit && exit !== loopId);
+
+    for (const exit of uniqueExits) {
+      this.writer.addEdge(
+        exit,
+        loopId,
+        '',
+        true,
+        this.edgeMeta('left', 'loop-back', { innerDecisionCount }),
+      );
     }
   }
 
-  private visitStandardLoop(decisionId: string, loopBranch: MorphNode): BuildResult {
+  private visitStandardLoop(
+    loopId: string,
+    loopBranch: MorphNode,
+    bodyLabel = 'yes',
+    exitLabel = 'no',
+  ): BuildResult {
     const innerDecisionCount = countDecisionsInBranch(loopBranch);
     const body = this.visitBranch(loopBranch);
 
     if (body.entry) {
-      this.writer.addEdge(decisionId, body.entry, 'yes');
-      this.connectLoopBackEdges(body.exits, decisionId, innerDecisionCount);
+      this.writer.addEdge(loopId, body.entry, bodyLabel, false, this.edgeMeta('right', 'positive'));
+      this.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
     } else {
-      this.writer.addEdge(decisionId, decisionId, 'yes', true, { innerDecisionCount });
+      this.writer.addEdge(loopId, loopId, bodyLabel, true, this.edgeMeta('left', 'loop-back', { innerDecisionCount }));
     }
 
-    return { entry: decisionId, exits: [decisionId], endExits: body.endExits };
+    const exitId = this.createContinuationFrom(loopId, exitLabel, this.edgeMeta('left', 'negative'));
+    return {
+      entry: loopId,
+      exits: [exitId],
+      endExits: [...new Set(body.endExits)],
+    };
   }
 
   private visitIteratorLoop(stmt: ForOfStatement | ForInStatement): BuildResult {
     return this.visitStandardLoop(
-      this.createDecisionNode(
+      this.createLoopNode(
         compactLabel(stmt.getExpression().getText()),
         stmt.getExpression().getText(),
       ),
       stmt.getStatement(),
+      'each',
+      'done',
     );
   }
 }

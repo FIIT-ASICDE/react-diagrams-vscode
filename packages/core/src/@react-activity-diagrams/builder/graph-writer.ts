@@ -1,6 +1,14 @@
 import { Edge, Node } from '@xyflow/react';
 import type { FlowNodeData } from './types';
 
+export type BranchSide = 'left' | 'right' | 'bottom';
+export type SemanticKind = 'positive' | 'negative' | 'case' | 'default' | 'loop-back' | 'normal';
+
+export type EdgeBranchData = Record<string, unknown> & {
+  branchSide?: BranchSide;
+  semanticKind?: SemanticKind;
+};
+
 export class GraphWriter {
   private nextNodeId = 0;
   private nextEdgeId = 0;
@@ -23,12 +31,17 @@ export class GraphWriter {
     return id;
   }
 
-  addEdge(source: string, target: string, label?: string, isBackEdge = false, data?: Record<string, unknown>): void {
+  addEdge(source: string, target: string, label?: string, isBackEdge = false, data?: EdgeBranchData): void {
+    const branchSide: BranchSide = data?.branchSide ?? 'bottom';
+    const sourceHandle = isBackEdge
+      ? 'source-left'
+      : (branchSide === 'right' ? 'source-left' : branchSide === 'left' ? 'source-right' : 'source-bottom');
+
     this.edges.push({
       id: `edge-${this.nextEdgeId++}`,
       source,
       target,
-      sourceHandle: isBackEdge ? 'source-left' : 'source-bottom',
+      sourceHandle,
       targetHandle: isBackEdge ? 'target-left' : 'target-top',
       label: label,
       type: isBackEdge ? 'back' : 'smoothstep',

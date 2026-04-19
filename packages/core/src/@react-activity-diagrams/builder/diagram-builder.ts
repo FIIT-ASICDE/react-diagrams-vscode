@@ -5,7 +5,8 @@ import {
 } from 'ts-morph';
 import { GraphWriter } from './graph-writer';
 import { StatementVisitor } from './visitors';
-import { applyElkLayout } from './elkLayout';
+import { adjustDecisionEdgeHandles, applyElkLayout } from './elkLayout';
+
 export class DiagramBuilder {
   private nodes: Node[] = [];
   private edges: Edge[] = [];
@@ -15,81 +16,100 @@ export class DiagramBuilder {
   }
 
   public async buildStatements(statements: Statement[]): Promise<{ nodes: Node[]; edges: Edge[] }> {
-    this.reset();
+  this.reset();
 
-    const writer = new GraphWriter(this.nodes, this.edges);
-    const visitor = new StatementVisitor(writer);
+  const writer = new GraphWriter(this.nodes, this.edges);
+  const visitor = new StatementVisitor(writer);
 
-    const startId = writer.addFlowNode('initial', 'Start');
-    const main = visitor.visitStatements(statements);
+  const startId = writer.addFlowNode('initial', 'Start');
+  const main = visitor.visitStatements(statements);
 
-    const endId = writer.addFlowNode('end', 'End');
-    const returnTargetId = main.endExits.length > 1
-      ? writer.addFlowNode('merge', '')
-      : endId;
+  const uniqueEndExits = [...new Set(main.endExits)];
+  const uniqueNormalExits = [...new Set(main.exits)].filter((exit) => !uniqueEndExits.includes(exit));
 
-    if (returnTargetId !== endId) {
-      writer.addEdge(returnTargetId, endId);
-    }
+  const endId = writer.addFlowNode('end', 'End');
 
-    if (main.entry) {
-      writer.addEdge(startId, main.entry);
-      for (const exit of main.exits) {
-        writer.addEdge(exit, endId, exit.startsWith('decision-') ? 'no' : undefined);
-      }
+  if (main.entry) {
+    writer.addEdge(startId, main.entry);
 
-      for (const endExit of main.endExits) {
-        writer.addEdge(endExit, returnTargetId);
-      }
-    } else {
+    const terminalSources = [...new Set([...uniqueNormalExits, ...uniqueEndExits])];
+
+    if (terminalSources.length === 0) {
       writer.addEdge(startId, endId);
-    }
+    } else if (terminalSources.length === 1) {
+      const onlyExit = terminalSources[0];
+      writer.addEdge(
+        onlyExit,
+        endId,
+        onlyExit.startsWith('decision-') || onlyExit.startsWith('loop-') ? 'no' : undefined,
+        false,
+        onlyExit.startsWith('decision-') || onlyExit.startsWith('loop-')
+          ? { branchSide: 'left', semanticKind: 'negative' }
+          : { branchSide: 'bottom', semanticKind: 'normal' },
+      );
+    } else {
+      const finalMergeId = writer.addFlowNode('merge', '');
 
-    this.removeRedundantMergeNodes();
-	this.reindexEdgeIds();
-	const layoutedGraph = await applyElkLayout(this.nodes, this.edges);
-    return { nodes: layoutedGraph.nodes, edges: layoutedGraph.edges };
+      for (const exit of terminalSources) {
+        writer.addEdge(
+          exit,
+          finalMergeId,
+          exit.startsWith('decision-') || exit.startsWith('loop-') ? 'no' : undefined,
+          false,
+          exit.startsWith('decision-') || exit.startsWith('loop-')
+            ? { branchSide: 'left', semanticKind: 'negative' }
+            : { branchSide: 'bottom', semanticKind: 'normal' },
+        );
+      }
+
+      writer.addEdge(finalMergeId, endId);
+    }
+  } else {
+    writer.addEdge(startId, endId);
   }
 
-  private removeRedundantMergeNodes(): void {
-    while (true) {
-      const redundantMerge = this.nodes.find((node) => {
-        if (node.type !== 'merge') {
-          return false;
-        }
+  this.normalizeGraphStructure();
+  this.reindexEdgeIds();
 
-        const incomingCount = this.edges.filter((edge) => edge.target === node.id).length;
-        return incomingCount < 2;
-      });
+  const layoutedGraph = await applyElkLayout(this.nodes, this.edges);
+  const adjustedEdges = adjustDecisionEdgeHandles(layoutedGraph.nodes, layoutedGraph.edges);
+  return { nodes: layoutedGraph.nodes, edges: adjustedEdges };
+}
 
-      if (!redundantMerge) {
-        return;
+  private normalizeGraphStructure(): void {
+    this.removeDuplicateEdges();
+    this.removeDanglingEdges();
+    this.removeDuplicateEdges();
+  }
+
+  private removeDuplicateEdges(): void {
+    const seen = new Set<string>();
+    const normalized: Edge[] = [];
+
+    for (const edge of this.edges) {
+      const key = [
+        String(edge.source),
+        String(edge.target),
+        String(edge.label ?? ''),
+        String(edge.type ?? ''),
+        String(edge.sourceHandle ?? ''),
+        String(edge.targetHandle ?? ''),
+      ].join('|');
+
+      if (seen.has(key)) {
+        continue;
       }
 
-      const incomingEdges = this.edges.filter((edge) => edge.target === redundantMerge.id);
-      const outgoingEdges = this.edges.filter((edge) => edge.source === redundantMerge.id);
-
-      const bypassEdges: Edge[] = [];
-      if (incomingEdges.length === 1) {
-        const [incomingEdge] = incomingEdges;
-
-        for (const outgoingEdge of outgoingEdges) {
-          bypassEdges.push({
-            ...outgoingEdge,
-            source: incomingEdge.source,
-            sourceHandle: incomingEdge.sourceHandle,
-            label: outgoingEdge.label ?? incomingEdge.label,
-          });
-        }
-      }
-
-      this.nodes = this.nodes.filter((node) => node.id !== redundantMerge.id);
-      this.edges = this.edges.filter(
-        (edge) => edge.source !== redundantMerge.id && edge.target !== redundantMerge.id,
-      );
-
-      this.edges.push(...bypassEdges);
+      seen.add(key);
+      normalized.push(edge);
     }
+
+    this.edges = normalized;
+  }
+
+  private removeDanglingEdges(): void {
+    const nodeIds = new Set(this.nodes.map((node) => String(node.id)));
+    this.edges = this.edges.filter((edge) => nodeIds.has(String(edge.source)) && nodeIds.has(String(edge.target)));
   }
 
   private reindexEdgeIds(): void {

@@ -62,7 +62,7 @@ test('DiagramBuilder covers core node types', async () => {
 		}
 	`, { overwrite: true });
 	const whileGraph = await new DiagramBuilder().buildStatements(whileSource.getStatements());
-	assert.ok(whileGraph.nodes.some((node) => node.type === 'decision'));
+	assert.ok(whileGraph.nodes.some((node) => node.type === 'loop'));
 	assert.ok(whileGraph.nodes.some((node) => node.type === 'action'));
 	assert.ok(whileGraph.edges.some((edge) => edge.type === 'back'));
 	assert.ok(whileGraph.edges.some((edge) => String(edge.label ?? '') === 'no'));
@@ -74,7 +74,7 @@ test('DiagramBuilder covers core node types', async () => {
 		} while (shouldContinue());
 	`, { overwrite: true });
 	const doWhileGraph = await new DiagramBuilder().buildStatements(doWhileSource.getStatements());
-	assert.ok(doWhileGraph.nodes.some((node) => node.type === 'decision'));
+	assert.ok(doWhileGraph.nodes.some((node) => node.type === 'loop'));
 	assert.ok(doWhileGraph.nodes.some((node) => node.type === 'action'));
 	assert.ok(doWhileGraph.edges.some((edge) => edge.type === 'back'));
 	assert.ok(doWhileGraph.edges.some((edge) => String(edge.label ?? '') === 'no'));
@@ -86,7 +86,7 @@ test('DiagramBuilder covers core node types', async () => {
 		}
 	`, { overwrite: true });
 	const forGraph = await new DiagramBuilder().buildStatements(forSource.getStatements());
-	assert.ok(forGraph.nodes.some((node) => node.type === 'decision'));
+	assert.ok(forGraph.nodes.some((node) => node.type === 'loop'));
 	assert.ok(forGraph.nodes.some((node) => node.type === 'action'));
 	assert.ok(forGraph.edges.some((edge) => edge.type === 'back'));
 	assert.ok(forGraph.edges.some((edge) => String(edge.label ?? '') === 'no'));
@@ -145,7 +145,7 @@ test('DiagramBuilder labels nested loop exits before a for-loop increment as no'
 	const graph = await new DiagramBuilder().buildStatements(sourceFile.getStatements());
 
 	const forDecisionNode = graph.nodes.find((node) => {
-		if (node.type !== 'decision') {
+		if (node.type !== 'loop') {
 			return false;
 		}
 
@@ -155,7 +155,7 @@ test('DiagramBuilder labels nested loop exits before a for-loop increment as no'
 	assert.ok(forDecisionNode);
 
 	const innerDecisionNode = graph.nodes.find((node) => {
-		if (node.type !== 'decision') {
+		if (node.type !== 'loop') {
 			return false;
 		}
 
@@ -237,7 +237,7 @@ test('DiagramBuilder treats forEach-style callbacks as loop cycles', async () =>
 	const graph = await new DiagramBuilder().buildStatements(sourceFile.getStatements());
 
 	const decisionLabels = graph.nodes
-		.filter((node) => node.type === 'decision')
+		.filter((node) => node.type === 'loop')
 		.map((node) => String((node.data as { label?: unknown } | undefined)?.label ?? ''));
 	const cycleEdges = graph.edges.filter((edge) => edge.type === 'back');
 	const loopEntryEdges = graph.edges.filter((edge) => String(edge.label ?? '') === 'each');
@@ -358,7 +358,7 @@ test('DiagramBuilder handles do-while and labels decision-to-end as no', async (
 	const graph = await new DiagramBuilder().buildStatements(sourceFile.getStatements());
 
 	const decisionNode = graph.nodes.find((node) => {
-		if (node.type !== 'decision') {
+		if (node.type !== 'loop') {
 			return false;
 		}
 
@@ -376,8 +376,8 @@ test('DiagramBuilder handles do-while and labels decision-to-end as no', async (
 		return sourceText.includes('index += 1');
 	});
 	assert.ok(bodyNode);
-	assert.ok(graph.edges.some((edge) => edge.source === decisionNode!.id && edge.target === bodyNode!.id && edge.type === 'back' && String(edge.label ?? '') === 'yes'));
 	assert.ok(graph.edges.some((edge) => edge.source === bodyNode!.id && edge.target === decisionNode!.id && edge.type !== 'back'));
+	assert.ok(graph.edges.some((edge) => edge.source === decisionNode!.id && edge.target === bodyNode!.id && edge.type === 'back' && String(edge.label ?? '') === 'yes'));
 	const endNode = graph.nodes.find((node) => node.type === 'end');
 	assert.ok(endNode);
 	assert.ok(graph.edges.some((edge) => edge.source === decisionNode!.id && edge.target === endNode!.id && String(edge.label ?? '') === 'no'));
@@ -397,7 +397,7 @@ test('DiagramBuilder labels do-while no-path to next statement', async () => {
 	const graph = await new DiagramBuilder().buildStatements(sourceFile.getStatements());
 
 	const decisionNode = graph.nodes.find((node) => {
-		if (node.type !== 'decision') {
+		if (node.type !== 'loop') {
 			return false;
 		}
 

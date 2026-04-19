@@ -10,7 +10,7 @@ export function compactLabel(text: string): string {
 }
 
 export function getFallthroughEdgeLabel(sourceId: string): string | undefined {
-  return sourceId.startsWith('decision-') ? 'no' : undefined;
+  return sourceId.startsWith('decision-') || sourceId.startsWith('loop-') ? 'no' : undefined;
 }
 
 function isDecisionKind(kind: SyntaxKind): boolean {

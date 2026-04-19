@@ -11,10 +11,70 @@ export interface LayoutResult {
   edges: Edge[];
 }
 
+type EdgeSemanticKind = 'positive' | 'negative' | 'case' | 'default' | 'loop-back' | 'normal';
+
+function getEdgeSemanticKind(edge: Edge): EdgeSemanticKind | undefined {
+  const raw = (edge.data as { semanticKind?: unknown } | undefined)?.semanticKind;
+  if (typeof raw !== 'string') {
+    return undefined;
+  }
+
+  const normalized = raw.trim().toLowerCase();
+  if (
+    normalized === 'positive' ||
+    normalized === 'negative' ||
+    normalized === 'case' ||
+    normalized === 'default' ||
+    normalized === 'loop-back' ||
+    normalized === 'normal'
+  ) {
+    return normalized;
+  }
+
+  return undefined;
+}
+
+export function adjustDecisionEdgeHandles(nodes: Node[], edges: Edge[]): Edge[] {
+  const nodeById = new Map(nodes.map((node) => [String(node.id), node]));
+
+  return edges.map((edge) => {
+    if (edge.type === 'back') {
+      return edge;
+    }
+
+    const semanticKind = getEdgeSemanticKind(edge);
+    if (semanticKind !== 'positive' && semanticKind !== 'negative') {
+      return edge;
+    }
+
+    const sourceNode = nodeById.get(String(edge.source));
+    if (!sourceNode || (sourceNode.type !== 'decision' && sourceNode.type !== 'loop')) {
+      return edge;
+    }
+
+    const targetNode = nodeById.get(String(edge.target));
+    if (!targetNode) {
+      return edge;
+    }
+
+    let sourceHandle: string = 'source-bottom';
+    if (targetNode.position.x < sourceNode.position.x) {
+      sourceHandle = 'source-left';
+    } else if (targetNode.position.x > sourceNode.position.x) {
+      sourceHandle = 'source-right';
+    }
+
+    return {
+      ...edge,
+      sourceHandle,
+    };
+  });
+}
+
 const elkBaseOptions: ElkLayoutOptions = {
   'elk.algorithm': 'layered',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '70',
-  'elk.spacing.nodeNode': '24',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '100',
+  'elk.spacing.nodeNode': '45',
   'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
   'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
   'elk.layered.nodePlacement.favorStraightEdges': 'true',
@@ -27,7 +87,7 @@ const elkBaseOptions: ElkLayoutOptions = {
 
 function estimateNodeSize(node: Node): { width: number; height: number } {
 
-  return { width: 500, height: 56 };
+  return { width: 200, height: 56 };
 }
 
 /**

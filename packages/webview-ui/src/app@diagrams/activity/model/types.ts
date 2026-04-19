@@ -5,7 +5,7 @@ import type {
 	ActivityExtensionToWebviewMessage,
 } from '@react-diagrams/core/app@vscode';
 
-export type ActivityNodeType = 'start' | 'action' | 'expandable' | 'decision' | 'merge' | 'end';
+export type ActivityNodeType = 'start' | 'action' | 'expandable' | 'decision' | 'loop' | 'merge' | 'end';
 
 export type PreviewSnapshot = {
 	title: string;

@@ -10,5 +10,10 @@ export function convertDiagramToCode(
 	funcName = "generatedFromDiagram",
 	funcArgs: FuncArg[] = [],
 ): string {
-	return new CodeGenerator(nodes, edges).generate(funcName, funcArgs);
+	try {
+		return new CodeGenerator(nodes, edges).generate(funcName, funcArgs);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : "Diagram conversion failed.";
+		return `function ${funcName}() {\n  throw new Error(${JSON.stringify(`Diagram conversion failed: ${message}`)});\n}`;
+	}
 }

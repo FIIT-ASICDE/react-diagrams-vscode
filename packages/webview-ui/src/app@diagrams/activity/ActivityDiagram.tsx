@@ -44,6 +44,7 @@ const customNode = {
 	action: nodeTypes.action,
 	expandable: nodeTypes.expandable,
 	decision: nodeTypes.decision,
+	loop: nodeTypes.loop,
 	merge: nodeTypes.merge,
 	initial: nodeTypes.initial,
 	end: nodeTypes.end,
@@ -458,7 +459,7 @@ export default function ActivityDiagram() {
 			<ReactFlow
 				nodes={displayedNodes}
 				edges={displayedEdges}
-				style={{ background: '#eef0f3' }}
+				style={{ background: '#ffffff' }}
 				onInit={(instance) => {
 					reactFlowRef.current = instance;
 				}}

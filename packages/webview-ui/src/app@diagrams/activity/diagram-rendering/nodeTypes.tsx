@@ -153,6 +153,24 @@ function commonSourceHandles(isConnectable: boolean, sideInset = 0) {
     </>
   );
 }
+function decisionLoopTargetHandles(isConnectable: boolean, sideInset = 0) {
+  return (
+    <>
+      <Handle id="target-top" type="target" position={Position.Top} isConnectable={isConnectable} />
+      <Handle id="target-left" type="target" position={Position.Left} isConnectable={isConnectable} style={{ left: sideInset }} />
+      <Handle id="target-right" type="target" position={Position.Right} isConnectable={isConnectable} style={{ right: sideInset }} />
+    </>
+  );
+}
+
+function decisionLoopSourceHandles(isConnectable: boolean, sideInset = 0) {
+  return (
+    <>
+      <Handle id="source-left" type="source" position={Position.Left} isConnectable={isConnectable} style={{ left: sideInset }} />
+      <Handle id="source-right" type="source" position={Position.Right} isConnectable={isConnectable} style={{ right: sideInset }} />
+    </>
+  );
+}
 
 // Action Node
 const ActionNode = memo(({ data, isConnectable }: NodeProps) => (
@@ -193,11 +211,22 @@ const MergeNode = memo(({ data, isConnectable }: NodeProps) => (
 // Decision Node
 const DecisionNode = memo(({ data, isConnectable }: NodeProps) => (
   <NodeShell>
-    {commonTargetHandles(isConnectable, 25)}
+    {decisionLoopTargetHandles(isConnectable, 25)}
     <div style={{ ...nodeStyles.decision }}>
       {data.label || 'Decision'}
     </div>
-    {commonSourceHandles(isConnectable, 25)}
+    {decisionLoopSourceHandles(isConnectable, 25)}
+  </NodeShell>
+));
+
+// Loop Node
+const LoopNode = memo(({ data, isConnectable }: NodeProps) => (
+  <NodeShell>
+    {decisionLoopTargetHandles(isConnectable, 25)}
+    <div style={{ ...nodeStyles.decision }}>
+      {data.label || 'Loop'}
+    </div>
+    {decisionLoopSourceHandles(isConnectable, 25)}
   </NodeShell>
 ));
 
@@ -246,6 +275,7 @@ export const nodeTypes = {
   expandable: ExpandableNode,
   merge: MergeNode,
   decision: DecisionNode,
+  loop: LoopNode,
   initial: InitialNode,
   end: FinalNode,
   textPreview: TextPreviewNode,

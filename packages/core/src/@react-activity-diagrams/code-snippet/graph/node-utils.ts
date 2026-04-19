@@ -44,6 +44,30 @@ export function checkStructure(nodes: Node[], edges: Edge[]): void {
 			throw new Error(`Edge target '${String(edge.target)}' does not exist.`);
 		}
 	}
+
+	const hasStartNode = nodes.some((node) => node.type === "start" || node.type === "initial");
+	const hasEndNode = nodes.some((node) => node.type === "end");
+
+	if (!hasStartNode) {
+		throw new Error("Diagram must contain a Start/Initial node.");
+	}
+
+	if (!hasEndNode) {
+		throw new Error("Diagram must contain an End node.");
+	}
+
+	const hasStartFlow = edges.some((edge) => {
+		if (String(edge.source) === START_EDGE_SOURCE_ID) {
+			return true;
+		}
+
+		const sourceNode = nodes.find((node) => String(node.id) === String(edge.source));
+		return sourceNode?.type === "start" || sourceNode?.type === "initial";
+	});
+
+	if (!hasStartFlow) {
+		throw new Error("Start node must have an outgoing edge.");
+	}
 }
 
 export function formatFunctionHeader(funcName: string, funcArgs: FuncArg[], asyncMode: boolean): string {
