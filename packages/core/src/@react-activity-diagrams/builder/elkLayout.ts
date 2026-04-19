@@ -73,7 +73,7 @@ export function adjustDecisionEdgeHandles(nodes: Node[], edges: Edge[]): Edge[] 
 
 const elkBaseOptions: ElkLayoutOptions = {
   'elk.algorithm': 'layered',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '75',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '50',
   'elk.spacing.nodeNode': '25',
   'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
   'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',

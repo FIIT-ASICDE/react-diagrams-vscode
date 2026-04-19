@@ -1,26 +1,11 @@
 import * as vscode from "vscode";
 import { ComponentActivityPanel } from "../app@panels/ComponentActivityPanel";
-
+import {ChatContextSnapshot, DiagramContext} from "./types";
+import {selectModelByType, MODEL_TYPE} from "./utils";
 const DIAGRAM_CHAT_PARTICIPANT_ID = "vs-code-ext.diagram";
-const MODEL_TYPE = "copilot";
-const RESPONSE_LANGUAGE = "Slovak";
+const RESPONSE_LANGUAGE = "English";
 
-type ChatContextSnapshot = {
-	userPrompt: string;
-	activeFilePath?: string;
-	selectedOrFullCode: string;
-	codeContextKind: "selected" | "full-file" | "none";
-	diagramContext: DiagramContext;
-};
 
-type DiagramContext = {
-	availability: "available-visible" | "unavailable";
-	json: string;
-	nodeCount: number;
-	edgeCount: number;
-	nodeTypes: string[];
-	warning?: string;
-};
 
 export function registerDiagramChatParticipant(context: vscode.ExtensionContext): vscode.Disposable {
 	const participant = vscode.chat.createChatParticipant(
@@ -54,34 +39,6 @@ export function registerDiagramChatParticipant(context: vscode.ExtensionContext)
 	participant.iconPath = new vscode.ThemeIcon("graph-line");
 	context.subscriptions.push(participant);
 	return participant;
-}
-
-async function selectModelByType(modelType: string): Promise<vscode.LanguageModelChat | undefined> {
-	const normalized = modelType.trim();
-
-	if (!normalized || normalized === "copilot") {
-		const [defaultModel] = await vscode.lm.selectChatModels({ vendor: "copilot" });
-		return defaultModel;
-	}
-
-	if (normalized.includes(":")) {
-		const [vendorPart, familyPart] = normalized.split(":", 2);
-		const vendor = vendorPart?.trim();
-		const family = familyPart?.trim();
-
-		if (vendor && family) {
-			const [exactModel] = await vscode.lm.selectChatModels({ vendor, family });
-			if (exactModel)
-				return exactModel;
-		}
-	}
-
-	const [familyModel] = await vscode.lm.selectChatModels({ vendor: "copilot", family: normalized });
-	if (familyModel)
-		return familyModel;
-
-	const [fallbackModel] = await vscode.lm.selectChatModels({ vendor: "copilot" });
-	return fallbackModel;
 }
 
 async function getChatContextSnapshot(userPrompt: string): Promise<ChatContextSnapshot> {

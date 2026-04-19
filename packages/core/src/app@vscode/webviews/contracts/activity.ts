@@ -3,6 +3,7 @@ export type DiagramType = "activity";
 export type ActivityGraphPayload = {
 	nodes: unknown[];
 	edges: unknown[];
+	sourceFile?: string;
 };
 
 export type ActivityNodePreviewRequestPayload = {
@@ -20,8 +21,8 @@ export type ActivityNodePreviewDataPayload = {
 export type ActivityWebviewToExtensionMessage =
 	| { type: "diagram/requestType" }
 	| { type: "diagram/visibleGraph"; data: ActivityGraphPayload }
+	| { type: "diagram/generateSkeleton"; data: ActivityGraphPayload }
 	| { type: "code/request" }
-	| { type: "code/generateSkeleton"; data: ActivityGraphPayload }
 	| { type: "code/nodePreview"; data: ActivityNodePreviewRequestPayload };
 
 export type ActivityExtensionToWebviewMessage =
@@ -34,8 +35,8 @@ export type ActivityExtensionToWebviewMessage =
 const ACTIVITY_WEBVIEW_TO_EXTENSION_TYPES = new Set<string>([
 	"diagram/requestType",
 	"diagram/visibleGraph",
+	"diagram/generateSkeleton",
 	"code/request",
-	"code/generateSkeleton",
 	"code/nodePreview",
 ]);
 

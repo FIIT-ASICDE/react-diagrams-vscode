@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ReactFlow, Background, type Node, type Edge, type ReactFlowInstance } from '@xyflow/react';
+import { ReactFlow, Background, type Node, type Edge, type ReactFlowInstance, useReactFlow, Controls } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { VSCodeButton } from '@vscode/webview-ui-toolkit/react';
 import { vscode } from '../../app@vscode/api';
@@ -55,6 +55,26 @@ const customEdge = {
 	back: BackEdge,
 };
 
+function AutoFitOnSnapshotChange({ snapshotKey, nodesCount }: { snapshotKey: number; nodesCount: number }) {
+	const { fitView } = useReactFlow();
+	const lastSnapshotKeyRef = useRef<number | undefined>(undefined);
+
+	useEffect(() => {
+		if (lastSnapshotKeyRef.current === undefined) {
+			lastSnapshotKeyRef.current = snapshotKey;
+			return;
+		}
+
+		if (lastSnapshotKeyRef.current !== snapshotKey && nodesCount > 0) {
+			void fitView({ padding: 0.2, duration: 150 });
+		}
+
+		lastSnapshotKeyRef.current = snapshotKey;
+	}, [fitView, nodesCount, snapshotKey]);
+
+	return null;
+}
+
 function truncate(text: string, maxLength: number) {
 	return text.length <= maxLength ? text : `${text.slice(0, maxLength - 3)}...`;
 }
@@ -64,10 +84,10 @@ export default function ActivityDiagram() {
 	const [edges, setEdges] = useState<Edge[]>([]);
 	const [renameDraft, setRenameDraft] = useState<DiagramRenameDraft | null>(null);
 	const [previewStack, setPreviewStack] = useState<PreviewSnapshot[]>([]);
-	const [fitViewRevision, setFitViewRevision] = useState(0);
 	const nodeCounter = useRef(1);
 	const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
 	const previewClickTimeoutRef = useRef<number | null>(null);
+	const currentSourceFileRef = useRef<string | undefined>(undefined);
 
 	const inPreview = previewStack.length > 0;
 	const currentPreview = inPreview ? previewStack[previewStack.length - 1] : null;
@@ -115,7 +135,7 @@ export default function ActivityDiagram() {
 	}, [inPreview]);
 
 	const generateSkeleton = useCallback(() => {
-		generateCodeFromDiagram(vscode, diagramNodes, diagramEdges);
+		generateCodeFromDiagram(vscode, diagramNodes, diagramEdges, currentSourceFileRef.current);
 	}, [diagramNodes, diagramEdges]);
 
 	const openNodePreview = useCallback((node: Node) => {
@@ -159,10 +179,14 @@ export default function ActivityDiagram() {
 
 			if (message.type === 'code/data') {
 				const payload = message.data as ActivityGraphPayload;
+				const incomingFile = payload.sourceFile;
+				const fileChanged = incomingFile !== undefined && incomingFile !== currentSourceFileRef.current;
+				currentSourceFileRef.current = incomingFile;
 				setNodes(Array.isArray(payload.nodes) ? payload.nodes as Node[] : []);
 				setEdges(Array.isArray(payload.edges) ? payload.edges as Edge[] : []);
-				setPreviewStack([]);
-				setFitViewRevision((revision) => revision + 1);
+				if (fileChanged) {
+					setPreviewStack([]);
+				}
 				nodeCounter.current = (Array.isArray(payload.nodes) ? payload.nodes.length : 0) + 1;
 				return;
 			}
@@ -176,7 +200,6 @@ export default function ActivityDiagram() {
 
 				setEdges([{ id: 'n1-n2', source: 'n1', target: 'n2' }]);
 				setPreviewStack([]);
-				setFitViewRevision((revision) => revision + 1);
 				return;
 			}
 
@@ -188,14 +211,12 @@ export default function ActivityDiagram() {
 					nodes: Array.isArray(previewMessage.nodes) ? previewMessage.nodes as Node[] : [],
 					edges: Array.isArray(previewMessage.edges) ? previewMessage.edges as Edge[] : [],
 				}));
-				setFitViewRevision((revision) => revision + 1);
 				return;
 			}
 
 			if (message.type === 'code/nodePreviewError') {
 				const errorMessage = message.data as { message?: string };
 				setPreviewStack((stackSnapshot) => appendSnapshot(stackSnapshot, { title: 'Preview unavailable', sourceText: errorMessage.message, nodes: [], edges: [] }));
-				setFitViewRevision((revision) => revision + 1);
 				return;
 			}
 		};
@@ -212,30 +233,6 @@ export default function ActivityDiagram() {
 		};
 	}, []);
 
-	useEffect(() => {
-		if (!reactFlowRef.current) {
-			return;
-		}
-
-		if (displayedNodes.length === 0) {
-			return;
-		}
-
-		requestAnimationFrame(() => {
-			const viewportOffsetY = -150;
-			const startNodes = getStartNodes(displayedNodes);
-			if (startNodes.length === 0) {
-				return;
-			}
-
-			void reactFlowRef.current?.fitView({
-				nodes: startNodes,
-				padding: 0,
-				maxZoom: 0.85,
-				duration: 500,
-			})
-		});
-	}, [fitViewRevision, getStartNodes, inPreview]);
 
 	useEffect(() => {
 		vscode.postMessage('diagram/visibleGraph', {
@@ -317,7 +314,6 @@ export default function ActivityDiagram() {
 
 	const navigateTo = useCallback((stackIndex: number) => {
 		setPreviewStack((stackSnapshot) => truncateSnapshots(stackSnapshot, stackIndex));
-		setFitViewRevision((revision) => revision + 1);
 	}, []);
 
 	const applyRename = useCallback(() => {
@@ -459,7 +455,7 @@ export default function ActivityDiagram() {
 			<ReactFlow
 				nodes={displayedNodes}
 				edges={displayedEdges}
-				style={{ background: '#ffffff' }}
+				style={{backgroundColor: 'white'}}
 				onInit={(instance) => {
 					reactFlowRef.current = instance;
 				}}
@@ -473,7 +469,9 @@ export default function ActivityDiagram() {
 				edgeTypes={customEdge}
 				fitView
 			>
-				<Background gap={18} size={1} color="#cfd4dc" />
+			<AutoFitOnSnapshotChange snapshotKey={previewStack.length} nodesCount={displayedNodes.length} />
+			<Controls />
+			<Background gap={18} size={1} />
 			</ReactFlow>
 		</div>
 	);

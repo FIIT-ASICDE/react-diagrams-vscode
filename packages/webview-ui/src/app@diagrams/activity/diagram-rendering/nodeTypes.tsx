@@ -24,22 +24,24 @@ const nodeStyles = {
   action: {
     width: 200,
     padding: '10px 14px',
-    background: '#f3f4f6',
-    borderRadius: 0,
-    border: '2px solid #111111',
-    color: '#1f2937',
+    background: 'var(--vscode-input-background)',
+    borderRadius: 8,
+    border: '1px solid var(--vscode-button-border)',
+    color: 'var(--vscode-foreground)',
     textAlign: 'center' as const,
     boxSizing: 'border-box' as const,
+    fontSize: 12,
   },
   expandable: {
     width: 200,
     padding: '10px 14px',
-    background: '#e5e7eb',
-    borderRadius: 0,
-    border: '2px solid #111111',
-    color: '#0f172a',
+    background: 'color-mix(in srgb, var(--vscode-testing-iconPassed) 12%, transparent)',
+    borderRadius: 8,
+    border: '1px solid var(--vscode-testing-iconPassed)',
+    color: 'var(--vscode-foreground)',
     textAlign: 'center' as const,
     boxSizing: 'border-box' as const,
+    fontSize: 12,
   },
   expandableLabel: {
     display: 'block',
@@ -49,7 +51,7 @@ const nodeStyles = {
     display: 'block',
     marginTop: 6,
     fontSize: 11,
-    color: '#334155',
+    color: 'var(--vscode-descriptionForeground)',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     whiteSpace: 'normal' as const,
     overflowWrap: 'anywhere' as const,
@@ -59,23 +61,24 @@ const nodeStyles = {
     width: 150,
     height: 80,
     padding: 0,
-    background: '#f3f4f6',
-    border: '2px solid #111111',
-    color: '#1f2937',
+    background: 'var(--vscode-input-background)',
+    border: '1px solid var(--vscode-button-border)',
+    color: 'var(--vscode-foreground)',
     textAlign: 'center' as const,
     boxSizing: 'border-box' as const,
     clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    fontSize: 12,
   },
   merge: {
     width: 50,
     height: 50,
     padding: 0,
-    background: '#d1d5db',
-    border: '2px solid #111111',
-    color: '#1f2937',
+    background: 'var(--vscode-input-background)',
+    border: '1px solid var(--vscode-button-border)',
+    color: 'var(--vscode-foreground)',
     textAlign: 'center' as const,
     boxSizing: 'border-box' as const,
     clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
@@ -101,15 +104,16 @@ const nodeStyles = {
     width: 700,
     minHeight: 220,
     padding: '14px 16px',
-    background: '#f3f4f6',
-    borderRadius: 0,
-    border: '2px solid #111111',
-    color: '#0f172a',
+    background: 'var(--vscode-input-background)',
+    borderRadius: 8,
+    border: '1px solid var(--vscode-button-border)',
+    color: 'var(--vscode-foreground)',
     textAlign: 'left' as const,
     boxSizing: 'border-box' as const,
     whiteSpace: 'pre-wrap' as const,
     overflowWrap: 'anywhere' as const,
     lineHeight: 1.4,
+    fontSize: 12,
   },
 } as const;
 
@@ -237,7 +241,7 @@ const InitialNode = memo(({ data, isConnectable }: NodeProps) => (
   <NodeShell>
     {commonTargetHandles(isConnectable, 75)}
     <div style={{ ...nodeStyles.initial }}>
-      <div style={{ width: 40, height: 40, background: '#111111', borderRadius: '50%', border: '2px solid #111111' }} />
+      <div style={{ width: 40, height: 40, background: 'var(--vscode-foreground)', borderRadius: '50%', border: '1px solid var(--vscode-foreground)' }} />
     </div>
     {commonSourceHandles(isConnectable, 75)}
   </NodeShell>
@@ -248,7 +252,7 @@ const FinalNode = memo(({ data, isConnectable }: NodeProps) => (
   <NodeShell>
     {commonTargetHandles(isConnectable, 75)}
     <div style={{ ...nodeStyles.final }}>
-      <div style={{ width: 40, height: 40, background: '#f3f4f6', borderRadius: '50%', border: '2px solid #111111' }} />
+      <div style={{ width: 40, height: 40, background: 'var(--vscode-editor-background)', borderRadius: '50%', border: '3px solid var(--vscode-foreground)' }} />
     </div>
     {commonSourceHandles(isConnectable, 75)}
   </NodeShell>

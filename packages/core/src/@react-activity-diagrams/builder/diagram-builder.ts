@@ -4,7 +4,7 @@ import {
   SourceFile,
 } from 'ts-morph';
 import { GraphWriter } from './graph-writer';
-import { StatementVisitor } from './visitors';
+import { StatementVisitor } from './visitor';
 import { adjustDecisionEdgeHandles, applyElkLayout } from './elkLayout';
 
 export class DiagramBuilder {
