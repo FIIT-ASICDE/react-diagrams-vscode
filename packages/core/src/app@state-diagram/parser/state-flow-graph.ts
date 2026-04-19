@@ -1,6 +1,8 @@
 import {
 	Block,
+	BreakStatement,
 	CallExpression,
+	ContinueStatement,
 	DoStatement,
 	ForStatement,
 	IfStatement,
@@ -83,10 +85,17 @@ export const isRelevant = (node: Node, setterName: string, hasSetterAhead = fals
 	return node.getDescendants().some(n => Node.isReturnStatement(n) || Node.isThrowStatement(n));
 };
 
+const withKind = (edges: OpenEdge[], kind: StateTransitionKind): OpenEdge[] => edges.map(edge => ({ ...edge, kind }));
+
 export interface OpenEdge { // We dont yet know "to", remember type and from...
 	from: StateGraphNode;
 	kind: StateTransitionKind;
 	rawConditionText?: string;
+}
+
+interface VisitContext {
+	breakCollector?: OpenEdge[];
+	continueCollector?: OpenEdge[];
 }
 
 export class GraphBuilder {
@@ -136,6 +145,26 @@ export class GraphBuilder {
 		return created;
 	}
 
+	private withKind(edges: OpenEdge[], kind: StateTransitionKind): OpenEdge[] {
+		return edges.map(edge => ({
+			from: edge.from,
+			kind,
+			rawConditionText: edge.rawConditionText,
+		}));
+	}
+
+	private collapseWithMerge(node: Node, openEdges: OpenEdge[]) {
+		if (!openEdges.length)
+			return [];
+
+		if (openEdges.length == 1)
+			return openEdges;
+
+		const mergeNode = this.appendFlowNode('merge', node);
+		this.connect(mergeNode, openEdges);
+		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
+	}
+
 	visitReturn(statement: ReturnStatement, incoming: OpenEdge[]) {
 		let current = incoming;
 		const setterCalls = getAllCalls(statement, this.stateVariable.setterName) as CallExpression[];
@@ -159,7 +188,7 @@ export class GraphBuilder {
 		return [];
 	}
 
-	visitIf(statement: IfStatement, incoming: OpenEdge[], hasSetterAhead = false): OpenEdge[] {
+	visitIf(statement: IfStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: VisitContext): OpenEdge[] {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
 
@@ -169,32 +198,23 @@ export class GraphBuilder {
 
 		const thenIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Then, /*rawConditionText: conditionText*/ }];
 		const thenBody = statement.getThenStatement();
-		const thenOpen = this.visit(thenBody, thenIncoming, hasSetterAhead)
+		const thenOpen = this.visit(thenBody, thenIncoming, hasSetterAhead, context)
 
 		const elseIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Else, /*rawConditionText: `!(${conditionText})`*/ }];
 		const elseBody = statement.getElseStatement();
-		var elseOpen = !elseBody ? elseIncoming : Node.isIfStatement(elseBody) ? this.visitIf(elseBody, elseIncoming, hasSetterAhead) : this.visit(elseBody, elseIncoming, hasSetterAhead);
+		var elseOpen = !elseBody ? elseIncoming : Node.isIfStatement(elseBody) ? this.visitIf(elseBody, elseIncoming, hasSetterAhead, context) : this.visit(elseBody, elseIncoming, hasSetterAhead, context);
 
-		const allOpen = [...thenOpen, ...elseOpen];
-		if (!allOpen.length)
-			return [];
-
-		if (allOpen.length == 1)
-			return allOpen;
-
-		const mergeNode = this.appendFlowNode('merge', statement);
-		this.connect(mergeNode, allOpen);
-		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
+		return this.collapseWithMerge(statement, [...thenOpen, ...elseOpen]);
 	}
 
-	visitTry(statement: TryStatement, incoming: OpenEdge[], hasSetterAhead = false) {
+	visitTry(statement: TryStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: VisitContext) {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
 
 		const decisionNode = this.appendFlowNode('try-decision', statement, 'try');
 		this.connect(decisionNode, incoming);
 
-		const tryOpen = this.visit(statement.getTryBlock(), [{ from: decisionNode, kind: StateTransitionKind.Normal }], hasSetterAhead);
+		const tryOpen = this.visit(statement.getTryBlock(), [{ from: decisionNode, kind: StateTransitionKind.Normal }], hasSetterAhead, context);
 
 		const catchClause = statement.getCatchClause();
 		let catchOpen: OpenEdge[] = [];
@@ -204,7 +224,7 @@ export class GraphBuilder {
 				from: decisionNode,
 				kind: StateTransitionKind.Catch,
 				rawConditionText: catchParam,
-			}], hasSetterAhead);
+			}], hasSetterAhead, context);
 		}
 
 		const finallyBlock = statement.getFinallyBlock();
@@ -212,51 +232,176 @@ export class GraphBuilder {
 		if (finallyBlock) {
 			const toFinally = [...tryOpen, ...catchOpen];
 			const finallyIncoming = toFinally.length ? toFinally : [{ from: decisionNode, kind: StateTransitionKind.Finally }];
-			finalOpen = this.visit(finallyBlock, finallyIncoming, hasSetterAhead);
+			finalOpen = this.visit(finallyBlock, finallyIncoming, hasSetterAhead, context);
 		}
 		else {
 			finalOpen = [...tryOpen, ...catchOpen];
 		}
 
-		if (!finalOpen.length)
-			return [];
-
-		if (finalOpen.length == 1)
-			return finalOpen;
-
-		const mergeNode = this.appendFlowNode('merge', statement);
-		this.connect(mergeNode, finalOpen);
-		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
+		return this.collapseWithMerge(statement, finalOpen);
 	}
 
-	// TODO Later add loops and switch when time comes...
+	visitBreak(_statement: BreakStatement, incoming: OpenEdge[], context?: VisitContext) {
+		if (!context?.breakCollector)
+			return incoming;
 
-	visitSwitch(statement: SwitchStatement, incoming: OpenEdge[], hasSetterAhead = false) {
+		context.breakCollector.push(...incoming);
+		return [];
+	}
+
+	visitContinue(_statement: ContinueStatement, incoming: OpenEdge[], context?: VisitContext) {
+		if (!context?.continueCollector)
+			return incoming;
+
+		context.continueCollector.push(...incoming);
+		return [];
+	}
+
+	visitSwitch(statement: SwitchStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: VisitContext) {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
-		return incoming; // TODO Implement
+
+		const decisionNode = this.appendFlowNode('switch-decision', statement, truncate(statement.getExpression().getText(), 80));
+		this.connect(decisionNode, incoming);
+
+		const clauses = statement.getCaseBlock().getClauses();
+		const hasSetterAfterClause: boolean[] = new Array(clauses.length);
+		let seenSetterAhead = hasSetterAhead;
+
+		for (let i = clauses.length - 1; i >= 0; i--) {
+			hasSetterAfterClause[i] = seenSetterAhead;
+			if (getAllCalls(clauses[i], this.stateVariable.setterName, 'some'))
+				seenSetterAhead = true;
+		}
+
+		let fallthroughOpen: OpenEdge[] = [];
+		const switchBreakEdges: OpenEdge[] = [];
+
+		for (let i = 0; i < clauses.length; i++) {
+			const clause = clauses[i];
+			const clauseHasSetterAhead = hasSetterAfterClause[i];
+			const clauseRelevant = isRelevant(clause, this.stateVariable.setterName, clauseHasSetterAhead);
+
+			const clauseIncoming: OpenEdge[] = [...fallthroughOpen];
+			if (clauseRelevant) {
+				const caseLabel = Node.isCaseClause(clause) ? normText(clause.getExpression()) : 'default';
+				clauseIncoming.push({
+					from: decisionNode,
+					kind: StateTransitionKind.Case,
+					rawConditionText: caseLabel,
+				});
+			}
+
+			if (!clauseIncoming.length) {
+				fallthroughOpen = [];
+				continue;
+			}
+
+			let current = clauseIncoming;
+			const statements = clause.getStatements();
+			const hasSetterAfterStmt: boolean[] = new Array(statements.length);
+			let seenSetterInClause = clauseHasSetterAhead;
+
+			for (let j = statements.length - 1; j >= 0; j--) {
+				hasSetterAfterStmt[j] = seenSetterInClause;
+				if (getAllCalls(statements[j], this.stateVariable.setterName, 'some'))
+					seenSetterInClause = true;
+			}
+
+			for (let j = 0; j < statements.length; j++) {
+				current = this.visit(statements[j], current, hasSetterAfterStmt[j], {
+					breakCollector: switchBreakEdges,
+					continueCollector: context?.continueCollector,
+				});
+				if (!current.length)
+					break;
+			}
+
+			fallthroughOpen = current;
+		}
+
+		return this.collapseWithMerge(statement, [...switchBreakEdges, ...fallthroughOpen]);
 	}
 
 	visitFor(statement: ForStatement, incoming: OpenEdge[], hasSetterAhead = false) {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
-		return incoming; // TODO Implement
+
+		const conditionText = statement.getCondition()?.getText() ?? 'for';
+		const decisionNode = this.appendFlowNode('loop-decision', statement, truncate(conditionText, 80));
+		this.connect(decisionNode, incoming);
+
+		const loopBreakEdges: OpenEdge[] = [];
+		const loopContinueEdges: OpenEdge[] = [];
+
+		const bodyOpen = this.visit(
+			statement.getStatement(),
+			[{ from: decisionNode, kind: StateTransitionKind.Then }],
+			hasSetterAhead,
+			{ breakCollector: loopBreakEdges, continueCollector: loopContinueEdges },
+		);
+
+		const loopBack = this.withKind([...bodyOpen, ...loopContinueEdges], StateTransitionKind.Loop);
+		if (loopBack.length)
+			this.connect(decisionNode, loopBack);
+
+		return this.collapseWithMerge(statement, [{ from: decisionNode, kind: StateTransitionKind.Else }, ...loopBreakEdges]);
 	}
 
 	visitWhile(statement: WhileStatement, incoming: OpenEdge[], hasSetterAhead = false) { // May be used one "visitLoop" for both while and for...of loops, for simplicity
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
 
-		return incoming; // TODO Implement
+		const conditionText = statement.getExpression().getText();
+		const decisionNode = this.appendFlowNode('loop-decision', statement, truncate(conditionText, 80));
+		this.connect(decisionNode, incoming);
+
+		const loopBreakEdges: OpenEdge[] = [];
+		const loopContinueEdges: OpenEdge[] = [];
+
+		const bodyOpen = this.visit(
+			statement.getStatement(),
+			[{ from: decisionNode, kind: StateTransitionKind.Then }],
+			hasSetterAhead,
+			{ breakCollector: loopBreakEdges, continueCollector: loopContinueEdges },
+		);
+
+		const loopBack = this.withKind([...bodyOpen, ...loopContinueEdges], StateTransitionKind.Loop);
+		if (loopBack.length)
+			this.connect(decisionNode, loopBack);
+
+		return this.collapseWithMerge(statement, [{ from: decisionNode, kind: StateTransitionKind.Else }, ...loopBreakEdges]);
 	}
 
 	visitDoWhile(statement: DoStatement, incoming: OpenEdge[], hasSetterAhead = false) {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
-		return incoming; // TODO Implement
+
+		const bodyEntry = this.appendFlowNode('merge', statement);
+		this.connect(bodyEntry, incoming);
+
+		const loopBreakEdges: OpenEdge[] = [];
+		const loopContinueEdges: OpenEdge[] = [];
+
+		const bodyOpen = this.visit(
+			statement.getStatement(),
+			[{ from: bodyEntry, kind: StateTransitionKind.Normal }],
+			hasSetterAhead,
+			{ breakCollector: loopBreakEdges, continueCollector: loopContinueEdges },
+		);
+
+		const conditionText = statement.getExpression().getText();
+		const decisionNode = this.appendFlowNode('loop-decision', statement, truncate(conditionText, 80));
+		const toDecision = [...bodyOpen, ...loopContinueEdges];
+		if (toDecision.length)
+			this.connect(decisionNode, toDecision);
+
+		this.connect(bodyEntry, [{ from: decisionNode, kind: StateTransitionKind.Loop }]);
+
+		return this.collapseWithMerge(statement, [{ from: decisionNode, kind: StateTransitionKind.Else }, ...loopBreakEdges]);
 	}
 
-	visit(what: Statement | Block, incoming: OpenEdge[], hasSetterAhead = false) {
+	visit(what: Statement | Block, incoming: OpenEdge[], hasSetterAhead = false, context?: VisitContext) {
 		let current = incoming;
 		if (Node.isBlock(what)) {
 			const statements = what.getStatements();
@@ -270,7 +415,7 @@ export class GraphBuilder {
 			}
 
 			for (let i = 0; i < statements.length; i++) {
-				current = this.visit(statements[i], current, hasSetterAfter[i]);
+				current = this.visit(statements[i], current, hasSetterAfter[i], context);
 				if (!current.length)
 					return current;
 			}
@@ -278,13 +423,13 @@ export class GraphBuilder {
 		}
 
 		if (Node.isIfStatement(what))
-			return this.visitIf(what, incoming, hasSetterAhead);
+			return this.visitIf(what, incoming, hasSetterAhead, context);
 
 		if (Node.isTryStatement(what))
-			return this.visitTry(what, incoming, hasSetterAhead);
+			return this.visitTry(what, incoming, hasSetterAhead, context);
 
 		if (Node.isSwitchStatement(what))
-			return this.visitSwitch(what, incoming, hasSetterAhead);
+			return this.visitSwitch(what, incoming, hasSetterAhead, context);
 
 		if (Node.isForStatement(what))
 			return this.visitFor(what, incoming, hasSetterAhead);
@@ -294,6 +439,12 @@ export class GraphBuilder {
 
 		if (Node.isDoStatement(what))
 			return this.visitDoWhile(what, incoming, hasSetterAhead);
+
+		if (Node.isBreakStatement(what))
+			return this.visitBreak(what, incoming, context);
+
+		if (Node.isContinueStatement(what))
+			return this.visitContinue(what, incoming, context);
 
 		if (Node.isReturnStatement(what))
 			return this.visitReturn(what, incoming);

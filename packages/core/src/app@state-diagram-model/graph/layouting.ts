@@ -12,13 +12,13 @@ const LAYOUT = {
 	
 	state: {
 		gap: 24,
-		pad: 16,
+		pad: 20,
 		minWidth: 200,
 		minHeight: 100,
 	},
 	mutator: {
 		gap: 18,
-		pad: 24,
+		pad: 28,
 		minWidth: 200,
 		minHeight: 100,
 	},
@@ -51,14 +51,12 @@ export const ELK_BOX_ROW_OPTIONS = {
 	'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
 };
 
-export function getGraphNodeSize(graphNode: StateGraphNode) {
-	if (graphNode.nodeType == 'state-update') {
+export function getGraphNodeSize({ nodeType, kind, ...node }: StateGraphNode) {
+	if (nodeType == 'state-update')
 		return { width: LAYOUT.graphNodeWidth, height: LAYOUT.graphNodeHeight };
-	}
 
-	if (graphNode.kind == 'decision' || graphNode.kind == 'try-decision' || graphNode.kind == 'merge') {
+	if (kind == 'decision' || kind == 'try-decision' || kind == 'switch-decision' || kind == 'loop-decision' || kind == 'merge')
 		return { width: 54, height: 38 };
-	}
 
 	return { width: 38, height: 38 };
 }
@@ -67,7 +65,7 @@ export async function layoutMutator(mutator: StateMutatingFunction, elkLayout = 
 	const graph = {
 		id: `elk-${mutator.id}`,
 		layoutOptions: { ...ELK_OPTIONS, ...elkLayout },
-		children: mutator.nodes.map(node => ({ ...getGraphNodeSize(node), ...node })),
+		children: mutator.nodes.map(node => ({ ...node, ...getGraphNodeSize(node) })),
 		edges: mutator.transitions.map(transition => ({
 			sources: [transition.fromNodeId],
 			targets: [transition.toNodeId],

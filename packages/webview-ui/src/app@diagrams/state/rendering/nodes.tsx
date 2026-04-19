@@ -2,6 +2,7 @@ import LabeledGroupNode from '@/app@components/xyflow-react/components/LabeledGr
 import { memo, type CSSProperties, type ReactNode } from 'react';
 import { Handle, Position, type NodeTypes } from '@xyflow/react';
 import { getColor } from '@/app@utils/utils';
+import { commonSourceHandles, commonTargetHandles } from '@/app@diagrams/activity/diagram-rendering/nodeTypes';
 
 export type StateVisualNodeData = {
 	label?: string;
@@ -13,17 +14,17 @@ export type StateVisualNodeData = {
 function NodeShell({ width, height, children }: { width: number; height: number; children: ReactNode }) {
 	return (
 		<>
+			{commonSourceHandles(false, 0, 0)}
 			<div
 				className="relative flex items-center justify-center box-border overflow-visible"
 				style={{
 					width,
 					height,
 				}}
-			>
+				>
 				{children}
 			</div>
-			<Handle type="source" position={Position.Top} />
-			<Handle type="target" position={Position.Bottom} />
+			{commonTargetHandles(false, 0, 0)}
 		</>
 	);
 }
@@ -31,6 +32,10 @@ function NodeShell({ width, height, children }: { width: number; height: number;
 function CenteredLabel({ label }: { label?: string }) {
 	if (!label?.length)
 		return null;
+
+	const onEnter = () => {
+		console.log(true)
+	}
 
 	return (
 		<span
@@ -74,6 +79,8 @@ const DecisionNode = memo(({ data }: RFNodeProps) => {
 
 	return (
 		<NodeShell width={width} height={height}>
+			{/* <p>{width}</p>
+			<p>{height}</p> */}
 			<div
 				className="box-border border"
 				style={{
@@ -262,9 +269,11 @@ export const nodeTypes: NodeTypes = {
 };
 
 const NODE_COLORS = {
-	neutral: 'var(--vscode-input-background)',
+	neutral: 'color-mix(in srgb, #454545 88%, transparent)',
 	decision: 'color-mix(in srgb, var(--vscode-testing-iconPassed) 64%, transparent)',
 	tryDecision: 'color-mix(in srgb, var(--vscode-testing-iconQueued, #f59e0b) 64%, transparent)',
+	switchDecision: 'color-mix(in srgb, #a5c93e 64%, transparent)',
+	loopDecision: 'color-mix(in srgb, #00c6d7 64%, transparent)',
 	throw: 'var(--vscode-errorForeground, #ef4444)',
 	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 80, blockedHueRanges: [ [350, 20] ] })} 64%, transparent)`,
 };
@@ -302,6 +311,20 @@ export function getGraphNodeVisual(graphNode): { type: string; data: any } {
 		return {
 			type: 'decisionNode',
 			data: { label: graphNode.label, color: getNodeColor('tryDecision', graphNode.label) },
+		};
+	}
+
+	if (graphNode.kind == 'switch-decision') {
+		return {
+			type: 'decisionNode',
+			data: { label: graphNode.label, color: getNodeColor('switchDecision', graphNode.label) },
+		};
+	}
+
+	if (graphNode.kind == 'loop-decision') {
+		return {
+			type: 'decisionNode',
+			data: { label: graphNode.label, color: getNodeColor('loopDecision', graphNode.label) },
 		};
 	}
 

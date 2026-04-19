@@ -15,6 +15,7 @@
       "node"
     ],
     "noImplicitAny": false,
+    "allowUnreachableCode": false
     // "paths": { // dsnt work for god knows what reason...
     //   "#/*": ["./src/*"]
     // }

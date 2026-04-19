@@ -88,6 +88,7 @@ export enum StateTransitionKind {
 	Then = 'then',
 	Else = 'else',
 	Case = 'case',
+	Loop = 'loop',
 	Catch = 'catch',
 	Finally = 'finally',
 	Return = 'return',

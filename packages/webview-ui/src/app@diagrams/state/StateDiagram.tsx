@@ -47,12 +47,13 @@ async function toFlow(model?: StateDiagramModel) {
 				className: 'rounded-lg border-0 text-(--vscode-foreground)',
 			});
 
-			const mutatorNodes: Node[] = [];
+			const mutatorNodes = new Map<string, Node>();
 			for (const { id: nodeId, ...graphNode } of mutatorLayout.layoutedNodes) {
 				const { x, y, width, height } = graphNode;
 				const visual = getGraphNodeVisual(graphNode);
-				
-				mutatorNodes.push({
+				// console.log(graphNode.kind, width, height)
+
+				const node: Node = {
 					id: nodeId,
 					type: visual.type,
 					// position: { x: x + mutatorLayout.x + stateVar.x, y: y + mutatorLayout.y + stateVar.y },
@@ -67,23 +68,26 @@ async function toFlow(model?: StateDiagramModel) {
 					height,
 					className: 'bg-transparent border-0 shadow-none z-20',
 					draggable: true,
-				});
+				}
+				nodes.push(node);
+				mutatorNodes.set(nodeId, node);
 			}
-			nodes.push(...mutatorNodes);
 
-			for (const { id, fromNodeId: source, toNodeId: target, ...transition } of mutatorLayout.transitions) {
-				if (!source || !target)
-					continue;
-
+			for (const { id, fromNodeId: source, toNodeId: target, kind, ...transition } of mutatorLayout.transitions) {
+				const loopBack = kind == 'loop';
+				const scaleSign = (x) => x == 0 ? 0 : (x > 0 ? Math.exp(-x/80) : -Math.exp(x/80));
+				const dir = scaleSign(mutatorNodes.get(source)!.position.x - mutatorNodes.get(target)!.position.x);
 				edges.push({
 					id,
 					source,
 					target,
+					sourceHandle: loopBack ? `source-${dir < 0 ? 'left' : 'right'}` : undefined,
+					targetHandle: loopBack ? `target-${dir < 0 ? 'left' : 'right'}` : undefined,
 					label: transition.label,
 					type: 'floating',
-					// animated: transition.kind != 'normal',
+					animated: loopBack,
 					markerEnd: { type: MarkerType.ArrowClosed },
-					// data: { nodes: mutatorNodes }
+					data: { backEdge: loopBack ? dir : undefined },
 				});
 			}
 		}
@@ -103,6 +107,9 @@ function AutoFitView({ ready }: { ready: boolean }) {
 
 	return null;
 }
+
+const minimapNodeColor = node => node.type == 'labeledGroupNode' ? 'transparent' : node.data?.color ?? 'gray';
+const minimapNodeStrokeColor = node => node.type == 'labeledGroupNode' ? node.data?.color ?? 'gray' : 'transparent';
 
 export default function StateDiagram({ model }: StateDiagramProps) {
 	const [flowState, setFlowState] = useState<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
@@ -155,7 +162,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 			>
 				<AutoFitView ready={flowState.nodes.length > 0} />
 				<Controls />
-				<MiniMap pannable zoomable style={{width: 150, height: 98 }} />
+				<MiniMap pannable zoomable style={{width: 150, height: 100 }} nodeColor={minimapNodeColor} nodeStrokeColor={minimapNodeStrokeColor} />
 				<Background gap={18} size={1} />
 			</ReactFlow>
 		</div>

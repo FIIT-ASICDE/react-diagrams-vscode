@@ -4,53 +4,82 @@ export default function SwitchWithLoops() {
   const [mode, setMode] = useState<"idle" | "scan" | "match" | "skip" | "error" | "complete">("idle");
   const [index, setIndex] = useState(0);
 
-  function processItems(kind: string, items: number[]) {
+  function processItems(type: string, items?: number[]) {
     setMode("scan");
     setIndex(0);
+
+    if (!items) {
+      console.warn("No items provided");
+      return;
+    }
 
 	if (items.length === 0) {
 	  console.log("No items to process", items.length);
 	}
 
-    switch (kind) {
+    switch (type) { // TESTING "return bug"
+      // Order of cases does not seem to affect the "return bug"
+
       case "fast":
-        setMode("match");
-        break;
-
+        return; // This always breaks it, no diagram generated from this point on unless...
+  
       case "slow":
-        setMode("skip");
+        // setMode("skip"); // When any setMode is present, diagram for "mode" will continue to be generated correctly
+        break;
+        
+      case "slow":
+        // setIndex(0); // When any setIndex is present, diagram for "index" will continue to be generated correctly
         break;
 
-      case "broken":
-        setMode("error");
-        return;
+      // If both setMode and setIndex are present, both diagrams will continue to be generated correctly even with the "return" 
 
-      case "error":
-        console.error("An error occurred while processing items");
-        break;
-
+      //...
       default:
-        setMode("idle");
+        break;
     }
 
-    for (let i = 0; i < items.length; i++) {
-      if (i)
-        console.debug(`Processed item ${i}: ${items[i]}`);
+    // switch (type) {
+    //   case "fast":
+    //     setMode("match");
+    //     break;
 
-      setIndex(i);
+    //   case "slow":
+    //     setMode("skip");
+    //     return;
 
-      if (items[i] < 0) {
-        setMode("error");
-        break;
-      }
+    //   case "broken":
+    //     setMode("error");
+    //     break;
 
-      if (items[i] === 0) {
-        setMode("skip");
-        continue;
-      }
+    //   case "error":
+    //     console.error("An error occurred while processing items");
+    //     break;
 
-      if (items[i] % 2 === 0) {
-        setMode("match");
+    //   default:
+    //     setMode("idle");
+    // }
+
+    var count = 2;
+    while (count-- > 0) {
+      for (let i = 0; i < items.length; i++) {
+        if (i)
+          console.debug(`Processed item ${i}: ${items[i]}`);
+  
+        setIndex(i);
+  
+        if (items[i] < 0) {
+          setMode("error");
+          break;
+        }
+  
+        if (items[i] === 0) {
+          setMode("skip");
+          continue;
+        }
+  
+        if (items[i] % 2 === 0) {
+          setMode("match");
+        }
       }
     }
 

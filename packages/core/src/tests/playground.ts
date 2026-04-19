@@ -4,7 +4,8 @@ import { join } from 'path';
 
 import { inspect } from "util";
 
-const reactForm = readFileSync(join(__dirname, 'samples', 'form.jsx')).toString();
+// const reactForm = readFileSync(join(__dirname, 'samples', 'form.jsx')).toString();
+const reactForm = join(__dirname, 'samples', 'switchNLoops.tsx');
 
 // for (let i = 0; i < 10; i++) {
 // 	console.time(`parseReactComponent ${i}`);
