@@ -1,15 +1,19 @@
 import {
 	Block,
 	CallExpression,
+	DoStatement,
+	ForStatement,
 	IfStatement,
 	Node,
 	ReturnStatement,
 	SourceFile,
 	Statement,
+	SwitchStatement,
 	SyntaxKind,
 	ThrowStatement,
 	TryStatement,
 	ts,
+	WhileStatement,
 } from 'ts-morph';
 import {
 	ControlFlowNode,
@@ -145,15 +149,6 @@ export class GraphBuilder {
 		return this.visitEnd(statement, current, 'return');
 	}
 
-	// visitThrow(statement: ThrowStatement, incoming: OpenEdge[]) {
-	// 	const txt = statement.getExpression().getText();
-	// 	const currNode = incoming.length == 1 ? incoming[0].from : undefined;
-	// 	const exitNode = this.appendFlowNode('throw', statement, `throw ${truncate(txt, 80)}`, currNode?.kind == 'merge' ? currNode : undefined);
-	// 	if (currNode != exitNode)
-	// 		this.connect(exitNode, incoming);
-	// 	return [];
-	// }
-
 	visitEnd(statement: ThrowStatement | ReturnStatement, incoming: OpenEdge[], what: 'return' | 'throw') {
 		const txt = statement.getExpression()?.getText();
 
@@ -236,6 +231,31 @@ export class GraphBuilder {
 
 	// TODO Later add loops and switch when time comes...
 
+	visitSwitch(statement: SwitchStatement, incoming: OpenEdge[], hasSetterAhead = false) {
+		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+			return incoming;
+		return incoming; // TODO Implement
+	}
+
+	visitFor(statement: ForStatement, incoming: OpenEdge[], hasSetterAhead = false) {
+		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+			return incoming;
+		return incoming; // TODO Implement
+	}
+
+	visitWhile(statement: WhileStatement, incoming: OpenEdge[], hasSetterAhead = false) { // May be used one "visitLoop" for both while and for...of loops, for simplicity
+		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+			return incoming;
+
+		return incoming; // TODO Implement
+	}
+
+	visitDoWhile(statement: DoStatement, incoming: OpenEdge[], hasSetterAhead = false) {
+		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+			return incoming;
+		return incoming; // TODO Implement
+	}
+
 	visit(what: Statement | Block, incoming: OpenEdge[], hasSetterAhead = false) {
 		let current = incoming;
 		if (Node.isBlock(what)) {
@@ -262,6 +282,18 @@ export class GraphBuilder {
 
 		if (Node.isTryStatement(what))
 			return this.visitTry(what, incoming, hasSetterAhead);
+
+		if (Node.isSwitchStatement(what))
+			return this.visitSwitch(what, incoming, hasSetterAhead);
+
+		if (Node.isForStatement(what))
+			return this.visitFor(what, incoming, hasSetterAhead);
+
+		if (Node.isWhileStatement(what))
+			return this.visitWhile(what, incoming, hasSetterAhead);
+
+		if (Node.isDoStatement(what))
+			return this.visitDoWhile(what, incoming, hasSetterAhead);
 
 		if (Node.isReturnStatement(what))
 			return this.visitReturn(what, incoming);

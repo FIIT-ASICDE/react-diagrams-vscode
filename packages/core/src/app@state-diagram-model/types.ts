@@ -53,6 +53,8 @@ export type ControlFlowNodeKind =
 	'entry' |
 	'decision' |
 	'try-decision' |
+	'switch-decision' |
+	'loop-decision' |
 	'merge' |
 	'exit' |
 	'throw';
@@ -85,6 +87,7 @@ export enum StateTransitionKind {
 	Normal = 'normal',
 	Then = 'then',
 	Else = 'else',
+	Case = 'case',
 	Catch = 'catch',
 	Finally = 'finally',
 	Return = 'return',
@@ -95,6 +98,7 @@ export enum StateTransitionKind {
 // 	'normal' |
 // 	'then' |
 // 	'else' |
+// 	'case' |
 // 	'catch' |
 // 	'finally' |
 // 	'return' |

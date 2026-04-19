@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function IfElseWithEarlyReturn() {
 	const [state1, setState1] = useState<number>(0);
@@ -6,13 +6,21 @@ export default function IfElseWithEarlyReturn() {
 
 	const arr = [1, 2, 3, 4, 5];
 
+	let smting = true;
+
+	useEffect(() => {
+		if (arr.length && state1 == 0) {
+			setState1(arr[0]);
+		}
+	}, []);
+
 	// ...
 
 	function dontCare() {
-		if (condition1)
+		if (arr[0])
 			return "1";
 
-		if (condition2)
+		if (arr[1])
 		{
 			return "2";
 		}
@@ -30,17 +38,17 @@ export default function IfElseWithEarlyReturn() {
 	function doSomething() {
 		setState1(0);
 
-		if (condition1)
+		if (arr[0] == 1)
 			return
 
-		if (condition2)
+		if (arr[1] == 2)
 		{
 			setState1(2);
 			if (smting)
 				console.debug("Something");
 		}
 
-		if (condition3)
+		if (arr[0] == 3)
 			setState1(3);
 
 		for (let i = 0; i < arr.length; i++) {

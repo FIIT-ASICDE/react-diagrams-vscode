@@ -9,14 +9,12 @@ export class ComponentStatePanel {
 	private static readonly SUPPORTED_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx"];
 	// private static readonly modelCache = new Map<string, any>();
 
-	public static currentPanel?: ComponentStatePanel;
+	public static current?: ComponentStatePanel;
 
 	private readonly panel: WebviewPanel;
 	private disposables: Disposable[] = [];
 	// private currentFilePath?: string;
 	private refreshRequestId = 0;
-
-	private initialDocument?: TextDocument;
 
 	/**
 	 * The ComponentStatePanel class private constructor (called only from the render method).
@@ -24,9 +22,8 @@ export class ComponentStatePanel {
 	 * @param panel A reference to the webview panel
 	 * @param extensionUri The URI of the directory containing the extension
 	 */
-	private constructor(panel: WebviewPanel, extensionUri: Uri, initialDocument?: TextDocument) {
+	private constructor(panel: WebviewPanel, extensionUri: Uri) {
 		this.panel = panel;
-		this.initialDocument = initialDocument;
 
 		this.panel.onDidDispose(() => this.dispose(), null, this.disposables); // when the user closes, or closed programmatically...
 
@@ -41,36 +38,34 @@ export class ComponentStatePanel {
 	 *
 	 * @param extensionUri The URI of the directory containing the extension.
 	 */
-	public static render(extensionUri: Uri) {
-		if (ComponentStatePanel.currentPanel) { // Already exists, show it
+	public static async render(extensionUri: Uri) {
+		const config = workspace.getConfiguration('state.diagram');
+		const openOnSide = config.get<boolean>('openStatePanelOnTheSide', true);
+
+		if (ComponentStatePanel.current) { // Already exists, show it
 			console.debug("ComponentStatePanel already exists, showing existing panel");
-			ComponentStatePanel.currentPanel.panel.reveal(ViewColumn.Beside, true);
-			ComponentStatePanel.refreshCurrentPanel();
+			ComponentStatePanel.current.panel.reveal(openOnSide ? ViewColumn.Beside : ViewColumn.Active, true);
+			ComponentStatePanel.current.refresh();
 			return;
 		}
 
-		const result = ComponentStatePanel.doCommonChecksAndGet();
-		if (!result)
+		if (!ComponentStatePanel.updateCache())
 			return;
 
 		const panel = window.createWebviewPanel(
 			"componentState",
 			ComponentStatePanel.NAME,
-			{ viewColumn: ViewColumn.Beside, preserveFocus: true },
+			{ viewColumn: openOnSide ? ViewColumn.Beside : ViewColumn.Active, preserveFocus: true },
 			{ // Extra panel configurations
 				enableScripts: true,
 				localResourceRoots: [Uri.joinPath(extensionUri, "out"), Uri.joinPath(extensionUri, ComponentStatePanel.WEBVIEW_DIR)],
 			}
 		);
 
-		ComponentStatePanel.currentPanel = new ComponentStatePanel(panel, extensionUri, result.targetDocument);
+		ComponentStatePanel.current = new ComponentStatePanel(panel, extensionUri);
 	}
 
-	public static async refreshCurrentPanel(document?: TextDocument) {
-		await ComponentStatePanel.currentPanel?.refresh(document);
-	}
-
-	public static updateCache(document: TextDocument, forceUpdate?) {
+	public static updateCache(document?: TextDocument, forceUpdate?) {
 		const result = ComponentStatePanel.doCommonChecksAndGet(document);
 		if (!result)
 			return;
@@ -80,7 +75,7 @@ export class ComponentStatePanel {
 	}
 
 	// public static isShowingDocument(document: TextDocument) {
-	// 	return ComponentStatePanel.currentPanel?.isShowingDocument(document) ?? false;
+	// 	return ComponentStatePanel.current?.isShowingDocument(document) ?? false;
 	// }
 
 	public async refresh(document?: TextDocument, forceUpdate?) {
@@ -94,7 +89,7 @@ export class ComponentStatePanel {
 		this.panel.title = `${ComponentStatePanel.NAME} (${basename(activeFilePath)})`;
 
 		try {
-			const model = componentStateCache.update(targetDocument, rootPath, forceUpdate);
+			const model = await componentStateCache.update(targetDocument, rootPath, forceUpdate);
 
 			if (requestId != this.refreshRequestId) // Ignore if a newer refresh started while this parse was running.
 				return console.debug("Outdated refresh result discarded");
@@ -114,7 +109,7 @@ export class ComponentStatePanel {
 	 * Cleans up and disposes of webview resources when the webview panel is closed.
 	 */
 	public dispose() {
-		ComponentStatePanel.currentPanel = undefined;
+		ComponentStatePanel.current = undefined;
 		this.panel.dispose();
 
 		while (this.disposables.length) {
@@ -214,8 +209,8 @@ export class ComponentStatePanel {
 
 		switch (type) {
 			case "refresh":
-				void this.refresh(this.initialDocument);
-				this.initialDocument = undefined;
+				console.debug("Refresh requested from webview");
+				void this.refresh(componentStateCache.getCurrentDocument());
 				return;
 			case "nodeDblClick":
 				const uri = componentStateCache?.getCurrentDocument()?.uri;

@@ -25,27 +25,34 @@ export default function SwitchWithLoops() {
         setMode("error");
         return;
 
+      case "error":
+        console.error("An error occurred while processing items");
+        break;
+
       default:
         setMode("idle");
     }
 
-    // for (let i = 0; i < items.length; i++) {
-    //   setIndex(i);
+    for (let i = 0; i < items.length; i++) {
+      if (i)
+        console.debug(`Processed item ${i}: ${items[i]}`);
 
-    //   if (items[i] < 0) {
-    //     setMode("error");
-    //     break;
-    //   }
+      setIndex(i);
 
-    //   if (items[i] === 0) {
-    //     setMode("skip");
-    //     continue;
-    //   }
+      if (items[i] < 0) {
+        setMode("error");
+        break;
+      }
 
-    //   if (items[i] % 2 === 0) {
-    //     setMode("match");
-    //   }
-    // }
+      if (items[i] === 0) {
+        setMode("skip");
+        continue;
+      }
+
+      if (items[i] % 2 === 0) {
+        setMode("match");
+      }
+    }
 
 	if (Math.random() > 0.5) {
 	  console.log("Random log");

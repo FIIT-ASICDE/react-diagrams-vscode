@@ -14,7 +14,7 @@ export function activate(context: ExtensionContext) {
 	});
 
 	const refreshCurrentPanelOnSave = workspace.onDidSaveTextDocument((document) => {
-		if (!ComponentStatePanel.currentPanel) {
+		if (!ComponentStatePanel.current) {
 			return;
 		}
 
@@ -27,7 +27,7 @@ export function activate(context: ExtensionContext) {
 		if (normalizeFilePath(activeDocument.uri.fsPath) != normalizeFilePath(document.uri.fsPath))
 			return;
 
-		void ComponentStatePanel.refreshCurrentPanel(activeDocument);
+		void ComponentStatePanel.current.refresh(activeDocument);
 	});
 
 	const diagramChatParticipant = registerDiagramChatParticipant(context);

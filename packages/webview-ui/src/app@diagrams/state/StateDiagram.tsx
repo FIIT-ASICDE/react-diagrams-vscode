@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Background, Controls, MarkerType, ReactFlow, useReactFlow, type Edge, type Node } from '@xyflow/react';
+import { Background, Controls, MarkerType, MiniMap, ReactFlow, useReactFlow, type Edge, type Node } from '@xyflow/react';
 import type { StateDiagram as StateDiagramModel } from '@react-diagrams/core/app@state-diagram';
 // import FloatingConnectionLine from '@/app@components/xyflow-react/components/FloatingConnectionLine';
 import { nodeTypes, getGraphNodeVisual } from './rendering/nodes';
@@ -23,18 +23,18 @@ async function toFlow(model?: StateDiagramModel) {
 	const stateVariableLayouts = await Promise.all(model.stateVariables.map(layoutStateVariable));
 	const { layoutedItems: layoutedStateVariables } = await layoutBoxRow(stateVariableLayouts, { gap: LAYOUT.state.gap, padding: elkPadd(LAYOUT.canvasPadding, LAYOUT.canvasPadding) });
 
-	for (const { id: stateVarId, ...stateVar } of layoutedStateVariables) {
+	for (const { id: stateVarId, layoutedMutators, ...stateVar } of layoutedStateVariables) {
 		nodes.push({
 			id: stateVarId,
 			type: 'labeledGroupNode',
 			position: { x: stateVar.x, y: stateVar.y },
-			data: { ...stateVar, color: getColor(stateVar.name, 24), children: !stateVar.mutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No mutators found</p> } as GroupNodeProps,
+			data: { name: <><b>{stateVar.name}</b> : {stateVar.hook}</>, color: getColor(stateVar.name, 24), children: !layoutedMutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No mutators found</p> } as GroupNodeProps,
 			width: stateVar.width,
 			height: stateVar.height,
 			className: 'rounded-lg border-0 text-(--vscode-foreground)',
 		});
 
-		for (const { id: mutatorId, ...mutatorLayout } of stateVar.layoutedMutators) {
+		for (const { id: mutatorId, ...mutatorLayout } of layoutedMutators) {
 			nodes.push({
 				id: mutatorId,
 				type: 'labeledGroupNode',
@@ -155,6 +155,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 			>
 				<AutoFitView ready={flowState.nodes.length > 0} />
 				<Controls />
+				<MiniMap pannable zoomable style={{width: 150, height: 98 }} />
 				<Background gap={18} size={1} />
 			</ReactFlow>
 		</div>

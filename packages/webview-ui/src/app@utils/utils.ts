@@ -13,13 +13,12 @@ export function shiftHue(hue, blockedRanges) {
 	return newHue;
 }
 
-export function getColor(text, options: { lightness?: number; saturation?: number; blockedHueRanges?: [number, number][] } | number = {}) {
+export function getColor(text: string, options: { lightness?: number; saturation?: number; blockedHueRanges?: [number, number][] } | number = {}) {
 	const { lightness = 75, saturation = 60, blockedHueRanges = [] } = typeof options == 'number' ? { lightness: options } : options;
 
 	let h = 0;
-	for (let i = 0; i < text.length; i++) {
+	for (let i = 0; i < text.length; i++)
 		h = (h * 31 + text.charCodeAt(i)) >>> 0;
-	}
 
 	const hue = shiftHue(h % 360, blockedHueRanges);
 	return chroma.lch(lightness, saturation, hue).hex();

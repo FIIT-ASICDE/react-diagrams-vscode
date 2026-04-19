@@ -2,7 +2,7 @@ import { TextDocument, workspace } from "vscode";
 import { normalizeFilePath } from "../index";
 
 export type CacheEntry<T> = {
-	data: T;
+	data: Promise<T>;
 	documentVersion: number;
 	document: TextDocument;
 	updatedAt: number;
@@ -17,6 +17,10 @@ export class ParsingCache<T = any> {
 	) 
 	{}
 
+	async parseAsync(source: string, rootPath?: string) {
+		return this.parseFunction(source, rootPath);	
+	}
+
 	updateEntry(document: TextDocument, rootPath?: string, forceUpdate = false) {
 		const cacheKey = normalizeFilePath(document.uri.fsPath);
 		this.currentDocument = document;
@@ -28,9 +32,10 @@ export class ParsingCache<T = any> {
 			return cached;
 		}
 
-		console.time("Parsing React component");
-		const data = this.parseFunction(document.uri.fsPath, rootPath ?? getRootPath(document));
-		console.timeEnd("Parsing React component");
+		console.time(`Parsing React component {${cacheKey}}`);
+		const data = this.parseAsync(document.uri.fsPath, rootPath ?? getRootPath(document));
+		console.timeEnd(`Parsing React component {${cacheKey}}`);
+		// console.trace();
 
 		const entry: CacheEntry<T> = {
 			data,
@@ -42,9 +47,9 @@ export class ParsingCache<T = any> {
 		return entry;
 	}
 
-	update(document: TextDocument, rootPath?: string, forceUpdate = false) {
+	async update(document: TextDocument, rootPath?: string, forceUpdate = false) {
 		const { data } = this.updateEntry(document, rootPath, forceUpdate);
-		return data;
+		return await data;
 	}
 
 	getCurrentDocument() {

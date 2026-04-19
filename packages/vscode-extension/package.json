@@ -32,7 +32,17 @@
         "command": "vs-code-ext.componentActivity",
         "title": "React Component Activity"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "React diagrams", 
+      "properties": {
+        "state.diagram.openStatePanelOnTheSide": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the State Diagram panel on the side instead of the main area"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build:webview && npm run package",

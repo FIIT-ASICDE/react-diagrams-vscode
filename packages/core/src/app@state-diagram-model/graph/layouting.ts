@@ -23,7 +23,7 @@ const LAYOUT = {
 		minHeight: 100,
 	},
 
-	graphNodeWidth: 190,
+	graphNodeWidth: 165,
 	graphNodeHeight: 48,
 };
 
