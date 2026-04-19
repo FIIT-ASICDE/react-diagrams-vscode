@@ -159,6 +159,7 @@ function decisionLoopTargetHandles(isConnectable: boolean, sideInset = 0) {
       <Handle id="target-top" type="target" position={Position.Top} isConnectable={isConnectable} />
       <Handle id="target-left" type="target" position={Position.Left} isConnectable={isConnectable} style={{ left: sideInset }} />
       <Handle id="target-right" type="target" position={Position.Right} isConnectable={isConnectable} style={{ right: sideInset }} />
+      
     </>
   );
 }
@@ -166,6 +167,7 @@ function decisionLoopTargetHandles(isConnectable: boolean, sideInset = 0) {
 function decisionLoopSourceHandles(isConnectable: boolean, sideInset = 0) {
   return (
     <>
+      <Handle id="source-bottom" type="source" position={Position.Bottom} isConnectable={isConnectable} />
       <Handle id="source-left" type="source" position={Position.Left} isConnectable={isConnectable} style={{ left: sideInset }} />
       <Handle id="source-right" type="source" position={Position.Right} isConnectable={isConnectable} style={{ right: sideInset }} />
     </>

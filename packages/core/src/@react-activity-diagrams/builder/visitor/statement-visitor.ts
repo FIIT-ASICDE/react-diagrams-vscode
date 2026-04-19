@@ -12,6 +12,7 @@ import {
   Statement,
   SwitchStatement,
   SyntaxKind,
+  ThrowStatement,
   TryStatement,
   WhileStatement,
 } from 'ts-morph';
@@ -173,6 +174,10 @@ export class StatementVisitor {
       return this.visitReturn(stmt as ReturnStatement);
     }
 
+    if (stmt.getKind() === SyntaxKind.ThrowStatement) {
+      return this.visitThrow(stmt as ThrowStatement);
+    }
+
     if (stmt.getKind() === SyntaxKind.Block) {
       return this.visitStatements((stmt as Block).getStatements());
     }
@@ -223,6 +228,17 @@ export class StatementVisitor {
   visitReturn(stmt: ReturnStatement): BuildResult {
     const expressionText = stmt.getExpression()?.getText();
     const label = expressionText ? `return ${expressionText}` : 'return';
+    const id = this.writer.addFlowNode('action', compactLabel(label), {
+      sourceText: stmt.getText(),
+      nodeKind: 'action',
+    });
+
+    return { entry: id, exits: [], endExits: [id] };
+  }
+
+  visitThrow(stmt: ThrowStatement): BuildResult {
+    const expressionText = stmt.getExpression()?.getText();
+    const label = expressionText ? `throw ${expressionText}` : 'throw';
     const id = this.writer.addFlowNode('action', compactLabel(label), {
       sourceText: stmt.getText(),
       nodeKind: 'action',
@@ -483,103 +499,158 @@ visitFor(stmt: ForStatement): BuildResult {
     };
   }
 
+  private containsBreakForCurrentSwitch(node: MorphNode): boolean {
+    if (node.getKind() === SyntaxKind.BreakStatement) {
+      return true;
+    }
+
+    if (
+      MorphNode.isSwitchStatement(node) ||
+      MorphNode.isForStatement(node) ||
+      MorphNode.isForInStatement(node) ||
+      MorphNode.isForOfStatement(node) ||
+      MorphNode.isWhileStatement(node) ||
+      MorphNode.isDoStatement(node)
+    ) {
+      return false;
+    }
+
+    for (const child of node.getChildren()) {
+      if (this.containsBreakForCurrentSwitch(child)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private analyzeStatementsSemantics(statements: Statement[]): BuildResult {
+    const scratchNodes: import('@xyflow/react').Node[] = [];
+    const scratchEdges: import('@xyflow/react').Edge[] = [];
+    const scratchVisitor = new StatementVisitor(new GraphWriter(scratchNodes, scratchEdges));
+    return scratchVisitor.visitStatements(statements);
+  }
+
+  private formatSwitchGroupLabel(labels: string[]): string {
+    const caseValues = labels
+      .filter((label) => label !== 'default')
+      .map((label) => label.replace(/^case\s+/i, ''));
+    const hasDefault = labels.includes('default');
+
+    if (caseValues.length === 0) {
+      return 'default';
+    }
+
+    const caseLabel = `case: ${caseValues.join(' | ')}`;
+    return hasDefault ? `default | ${caseLabel}` : caseLabel;
+  }
+
   visitSwitch(stmt: SwitchStatement): BuildResult {
+    interface SwitchCaseGroup {
+      labels: string[];
+      clauseStatements: Statement[];
+      executableStatements: Statement[];
+      hasBreak: boolean;
+    }
+
     const expressionText = stmt.getExpression().getText();
     const decisionId = this.createDecisionNode(compactLabel(expressionText), expressionText);
-    const mergeSources: string[] = [];
     const clauses = stmt.getCaseBlock().getClauses();
+    const groups: SwitchCaseGroup[] = [];
     let pendingLabels: string[] = [];
-    let pendingFallthroughExits: string[] = [];
-    const endExits: string[] = [];
 
     for (const clause of clauses) {
       const caseClause = clause.asKind(SyntaxKind.CaseClause);
       const label = caseClause
         ? `case ${compactLabel(caseClause.getExpression().getText())}`
         : 'default';
-
       pendingLabels.push(label);
 
       const clauseStatements = clause.getStatements();
-      const hasTopLevelBreak = clauseStatements.some(
-        (statement) => statement.getKind() === SyntaxKind.BreakStatement,
-      );
+      const hasBreak = clauseStatements.some((statement) => this.containsBreakForCurrentSwitch(statement));
       const executableStatements = clauseStatements.filter(
         (statement) => statement.getKind() !== SyntaxKind.BreakStatement,
       );
 
-      if (executableStatements.length === 0) {
-        if (hasTopLevelBreak) {
-          mergeSources.push(...pendingFallthroughExits);
-          pendingFallthroughExits = [];
-          const lowerLabels = pendingLabels.map((entry) => entry.toLowerCase());
-          const isDefaultOnly = lowerLabels.every((entry) => entry === 'default');
-          mergeSources.push(this.createContinuationFrom(
-            decisionId,
-            pendingLabels.join(' / '),
-            this.edgeMeta(isDefaultOnly ? 'bottom' : 'right', isDefaultOnly ? 'default' : 'case'),
-          ));
-          pendingLabels = [];
+      if (executableStatements.length > 0 || hasBreak) {
+        groups.push({
+          labels: pendingLabels,
+          clauseStatements,
+          executableStatements,
+          hasBreak,
+        });
+        pendingLabels = [];
+      }
+    }
+
+    const normalExitSources: string[] = [];
+    const endExits: string[] = [];
+    const directBreakBranches: Array<{ label: string; semanticKind: 'case' | 'default' }> = [];
+
+    const mergeId = this.writer.addFlowNode('merge', '');
+
+    for (const group of groups) {
+      const isDefaultOnly = group.labels.every((label) => label === 'default');
+      const semanticKind = isDefaultOnly ? 'default' as const : 'case' as const;
+      const displayLabelBase = this.formatSwitchGroupLabel(group.labels);
+
+      if (group.executableStatements.length === 0) {
+        if (group.hasBreak) {
+          directBreakBranches.push({ label: displayLabelBase, semanticKind });
         }
         continue;
       }
 
-      const body = this.visitStatements(executableStatements);
+      const analysis = this.analyzeStatementsSemantics(group.executableStatements);
+      const displayLabel = analysis.exits.length > 0 && !group.hasBreak
+        ? `${displayLabelBase} (falls through)`
+        : displayLabelBase;
 
-      if (body.entry) {
-        for (const fallthroughExit of pendingFallthroughExits) {
-          this.writer.addEdge(fallthroughExit, body.entry, getFallthroughEdgeLabel(fallthroughExit));
-        }
-        pendingFallthroughExits = [];
+      const caseNodeId = this.writer.addFlowNode('expandable', compactLabel(displayLabel), {
+        sourceText: group.clauseStatements.map((statement) => statement.getText()).join('\n'),
+        nodeKind: 'switch-case',
+      });
 
-        for (const branchLabel of pendingLabels) {
-          const isDefault = branchLabel.toLowerCase() === 'default';
-          this.writer.addEdge(
-            decisionId,
-            body.entry,
-            branchLabel,
-            false,
-            this.edgeMeta(isDefault ? 'bottom' : 'right', isDefault ? 'default' : 'case'),
-          );
-        }
+      this.writer.addEdge(
+        decisionId,
+        caseNodeId,
+        "",
+        false,
+        this.edgeMeta('bottom', semanticKind),
+      );
 
-        if (hasTopLevelBreak) {
-          mergeSources.push(...body.exits);
-        } else {
-          pendingFallthroughExits.push(...body.exits);
-        }
-
-        endExits.push(...body.endExits);
-      } else {
-        const lowerLabels = pendingLabels.map((entry) => entry.toLowerCase());
-        const isDefaultOnly = lowerLabels.every((entry) => entry === 'default');
-        mergeSources.push(this.createContinuationFrom(
-          decisionId,
-          pendingLabels.join(' / '),
-          this.edgeMeta(isDefaultOnly ? 'bottom' : 'right', isDefaultOnly ? 'default' : 'case'),
-        ));
+      if (analysis.endExits.length > 0 && analysis.exits.length === 0) {
+        endExits.push(caseNodeId);
       }
 
-      pendingLabels = [];
+      if (analysis.exits.length > 0) {
+        this.writer.addEdge(caseNodeId, mergeId);
+        normalExitSources.push(caseNodeId);
+      }
     }
 
-    if (pendingFallthroughExits.length > 0) {
-      mergeSources.push(...pendingFallthroughExits);
+    const normalPathCount = normalExitSources.length + directBreakBranches.length;
+    if (normalPathCount === 0) {
+      return {
+        entry: decisionId,
+        exits: [],
+        endExits: [...new Set(endExits)],
+      };
     }
 
-    if (pendingLabels.length > 0) {
-      const lowerLabels = pendingLabels.map((entry) => entry.toLowerCase());
-      const isDefaultOnly = lowerLabels.every((entry) => entry === 'default');
-      mergeSources.push(this.createContinuationFrom(
+    for (const branch of directBreakBranches) {
+      this.writer.addEdge(
         decisionId,
-        pendingLabels.join(' / '),
-        this.edgeMeta(isDefaultOnly ? 'bottom' : 'right', isDefaultOnly ? 'default' : 'case'),
-      ));
+        mergeId,
+        "",
+        false,
+        this.edgeMeta('bottom', branch.semanticKind),
+      );
     }
 
     return {
       entry: decisionId,
-      exits: this.resolveExitSources(mergeSources),
+      exits: [mergeId],
       endExits: [...new Set(endExits)],
     };
   }
