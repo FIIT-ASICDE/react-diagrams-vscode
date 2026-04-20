@@ -8,7 +8,7 @@ import { BaseEdge, EdgeLabelRenderer, getBezierPath, getSmoothStepPath, getStrai
 import { getEdgeParams } from '../initialElements';
 import { useState } from 'react';
 
-function buildBackEdge({ sourceX, sourceY, targetX, targetY, detourDistance = 150, detourDir = -1 }: { sourceX: number, sourceY: number, targetX: number, targetY: number, detourDistance?: number, detourDir?: number }): [string, number, number] {
+function buildBackEdge({ sourceX, sourceY, targetX, targetY, detourDistance = 150, detourDir = -1, labelPos = 0.9 }: { sourceX: number, sourceY: number, targetX: number, targetY: number, detourDistance?: number, detourDir?: number, labelPos?: number }): [string, number, number] {
     const detourX = sourceX + detourDistance * detourDir;
 
     return [`
@@ -16,7 +16,7 @@ function buildBackEdge({ sourceX, sourceY, targetX, targetY, detourDistance = 15
       L ${detourX} ${sourceY}
       L ${detourX} ${targetY}
       L ${targetX} ${targetY}
-    `, detourX, sourceY*0.1 + targetY*0.9];
+    `, detourX, sourceY*(1-labelPos) + targetY*labelPos];
 }
 
 function FloatingEdge({ id, source, target, sourceX, sourceY, targetX, targetY, sourceHandleId, targetHandleId, markerEnd, style, label, data }: EdgeProps) {
@@ -39,7 +39,7 @@ function FloatingEdge({ id, source, target, sourceX, sourceY, targetX, targetY, 
 
   const isLongEdge = distance > 250;
   if (data?.backEdge) {
-    var [edgePath, labelX, labelY] = buildBackEdge({ sourceX, sourceY, targetX, targetY, detourDir: data?.backEdge as number });
+    var [edgePath, labelX, labelY] = buildBackEdge({ sourceX, sourceY, targetX, targetY, detourDir: +data?.backEdge * (isLongEdge ? 1 : 0.25), labelPos: isLongEdge ? 0.9 : 0.5 });
   }
   else if (isLongEdge) {
     var [edgePath, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, stepPosition: 1 })
@@ -94,7 +94,7 @@ function FloatingEdge({ id, source, target, sourceX, sourceY, targetX, targetY, 
               transform: `translate(-50%, 0%) translate(${sourceX}px, ${sourceY}px)`,
               background: hover ? `var(--vscode-editor-background)` : `color-mix(in srgb, var(--vscode-editor-background) 80%, transparent)`,
               zIndex: hover ? 30 : 10,
-              filter: hover ? 'drop-shadow(0 2px 8px rgba(60,60,70,0.5))' : 'none',
+              filter: hover ? 'drop-shadow(0 2px 8px rgba(65,65,75,0.5))' : 'none',
             }}
           >
             {label}
@@ -105,7 +105,7 @@ function FloatingEdge({ id, source, target, sourceX, sourceY, targetX, targetY, 
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               background: hover ? `var(--vscode-editor-background)` : `color-mix(in srgb, var(--vscode-editor-background) 80%, transparent)`,
               zIndex: hover ? 30 : 10,
-              filter: hover ? 'drop-shadow(0 2px 8px rgba(60,60,70,0.5))' : 'none',
+              filter: hover ? 'drop-shadow(0 2px 8px rgba(65,65,75,0.5))' : 'none',
             }}
           >
             {label}

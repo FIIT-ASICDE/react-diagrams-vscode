@@ -5,59 +5,45 @@ export default function SwitchWithLoops() {
   const [index, setIndex] = useState(0);
 
   function processItems(type: string, items?: number[]) {
-    setMode("scan");
-    setIndex(0);
+    // setMode("scan");
+    // setIndex(0);
 
-    if (!items) {
-      console.warn("No items provided");
-      return;
-    }
+    // if (!items) {
+    //   console.warn("No items provided");
+    //   return;
+    // }
 
 	if (items.length === 0) {
 	  console.log("No items to process", items.length);
 	}
 
-    switch (type) { // TESTING "return bug"
-      // Order of cases does not seem to affect the "return bug"
-
+    switch (type) {
+      case "something":
+      case "otherthingggggggg":
       case "fast":
-        return; // This always breaks it, no diagram generated from this point on unless...
-  
-      case "slow":
-        // setMode("skip"); // When any setMode is present, diagram for "mode" will continue to be generated correctly
-        break;
-        
-      case "slow":
-        // setIndex(0); // When any setIndex is present, diagram for "index" will continue to be generated correctly
+        setMode("match");
         break;
 
-      // If both setMode and setIndex are present, both diagrams will continue to be generated correctly even with the "return" 
+      case "slow":
+        setMode("skip");
+        return;
 
-      //...
+      case "broken":
+        setMode("error");
+        break;
+
+      case "error":
+        if (items.length > 100) {
+          console.error("An error occurred while processing alot of items");
+        }
+        else {
+          console.error("An error occurred while processing items");
+        }
+        break;
+
       default:
-        break;
+        setMode("idle");
     }
-
-    // switch (type) {
-    //   case "fast":
-    //     setMode("match");
-    //     break;
-
-    //   case "slow":
-    //     setMode("skip");
-    //     return;
-
-    //   case "broken":
-    //     setMode("error");
-    //     break;
-
-    //   case "error":
-    //     console.error("An error occurred while processing items");
-    //     break;
-
-    //   default:
-    //     setMode("idle");
-    // }
 
     var count = 2;
     while (count-- > 0) {
@@ -67,20 +53,29 @@ export default function SwitchWithLoops() {
   
         setIndex(i);
   
-        if (items[i] < 0) {
-          setMode("error");
-          break;
-        }
+        // if (items[i] < 0) {
+        //   setMode("error");
+        //   break;
+        // }
   
-        if (items[i] === 0) {
-          setMode("skip");
-          continue;
-        }
+        // if (items[i] === 0) {
+        //   setMode("skip");
+        //   continue;
+        // }
   
-        if (items[i] % 2 === 0) {
-          setMode("match");
-        }
+        // if (items[i] % 2 === 0) {
+        //   setMode("match");
+        // }
       }
+    }
+
+    switch (type) {
+      case "fast":
+        console.log("Finished processing items quickly");
+        break;
+
+      default:
+        console.log("Finished");
     }
 
 	if (Math.random() > 0.5) {

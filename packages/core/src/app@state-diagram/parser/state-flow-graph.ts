@@ -280,18 +280,16 @@ export class GraphBuilder {
 		for (let i = 0; i < clauses.length; i++) {
 			const clause = clauses[i];
 			const clauseHasSetterAhead = hasSetterAfterClause[i];
-			const clauseRelevant = isRelevant(clause, this.stateVariable.setterName, clauseHasSetterAhead);
+			// const clauseRelevant = isRelevant(clause, this.stateVariable.setterName, clauseHasSetterAhead);
 
-			const clauseIncoming: OpenEdge[] = [...fallthroughOpen];
-			if (clauseRelevant) {
-				const caseLabel = Node.isCaseClause(clause) ? normText(clause.getExpression()) : 'default';
-				clauseIncoming.push({
-					from: decisionNode,
-					kind: StateTransitionKind.Case,
-					rawConditionText: caseLabel,
-				});
-			}
+			const caseLabel = Node.isCaseClause(clause) ? normText(clause.getExpression()) : 'default';
+			const caseEdge: OpenEdge = {
+				from: decisionNode,
+				kind: StateTransitionKind.Case,
+				rawConditionText: caseLabel,
+			};
 
+			const clauseIncoming: OpenEdge[] = [...fallthroughOpen, caseEdge]; 	// always reachable from decision, or via fallthrough from previous case
 			if (!clauseIncoming.length) {
 				fallthroughOpen = [];
 				continue;

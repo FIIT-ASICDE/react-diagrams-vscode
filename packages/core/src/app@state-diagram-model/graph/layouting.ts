@@ -24,7 +24,7 @@ const LAYOUT = {
 	},
 
 	graphNodeWidth: 165,
-	graphNodeHeight: 48,
+	graphNodeHeight: 46,
 };
 
 export const STATE_DIAGRAM_LAYOUT = LAYOUT;

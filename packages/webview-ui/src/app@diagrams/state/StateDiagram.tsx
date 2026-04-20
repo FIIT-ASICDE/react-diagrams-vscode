@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Background, Controls, MarkerType, MiniMap, ReactFlow, useReactFlow, type Edge, type Node } from '@xyflow/react';
+import { Background, Controls, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState, useReactFlow, type Edge, type Node } from '@xyflow/react';
 import type { StateDiagram as StateDiagramModel } from '@react-diagrams/core/app@state-diagram';
 // import FloatingConnectionLine from '@/app@components/xyflow-react/components/FloatingConnectionLine';
 import { nodeTypes, getGraphNodeVisual } from './rendering/nodes';
@@ -74,6 +74,9 @@ async function toFlow(model?: StateDiagramModel) {
 			}
 
 			for (const { id, fromNodeId: source, toNodeId: target, kind, ...transition } of mutatorLayout.transitions) {
+				if (!source || !target)
+					continue;
+
 				const loopBack = kind == 'loop';
 				const scaleSign = (x) => x == 0 ? 0 : (x > 0 ? Math.exp(-x/80) : -Math.exp(x/80));
 				const dir = scaleSign(mutatorNodes.get(source)!.position.x - mutatorNodes.get(target)!.position.x);
@@ -112,19 +115,25 @@ const minimapNodeColor = node => node.type == 'labeledGroupNode' ? 'transparent'
 const minimapNodeStrokeColor = node => node.type == 'labeledGroupNode' ? node.data?.color ?? 'gray' : 'transparent';
 
 export default function StateDiagram({ model }: StateDiagramProps) {
-	const [flowState, setFlowState] = useState<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
+	const [nodes, setNodes] = useNodesState<Node>([]);
+	const [edges, setEdges] = useEdgesState<Edge>([]);
 	const hasModel = useMemo(() => Boolean(model?.stateVariables?.length), [model]);
 
 	useEffect(() => {
 		let cancelled = false;
 
-		toFlow(model).then((nextFlowState) => {
-			if (!cancelled)
-				setFlowState(nextFlowState);
+		toFlow(model).then((newState) => {
+			if (!cancelled) {
+				setNodes(newState.nodes);
+				setEdges(newState.edges);
+				console.log(newState.nodes, newState.edges);
+			}
 		}).catch((error) => {
 			console.error('Failed to layout state diagram with ELK', error);
-			if (!cancelled)
-				setFlowState({ nodes: [], edges: [] });
+			if (!cancelled) {
+				setNodes([]);
+				setEdges([]);
+			}
 		});
 
 		return () => {
@@ -144,8 +153,8 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 				</div>
 			)}
 			<ReactFlow
-				nodes={flowState.nodes}
-				edges={flowState.edges}
+				nodes={nodes}
+				edges={edges}
 				nodesConnectable={false}
 				elementsSelectable
 				nodeTypes={nodeTypes}
@@ -158,9 +167,8 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 				}}
 				className='floating-edges'
 				onNodeDoubleClick={onDoubleClick}
-				snapToGrid={true}
 			>
-				<AutoFitView ready={flowState.nodes.length > 0} />
+				<AutoFitView ready={nodes.length > 0} />
 				<Controls />
 				<MiniMap pannable zoomable style={{width: 150, height: 100 }} nodeColor={minimapNodeColor} nodeStrokeColor={minimapNodeStrokeColor} />
 				<Background gap={18} size={1} />
