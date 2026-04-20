@@ -126,7 +126,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 			if (!cancelled) {
 				setNodes(newState.nodes);
 				setEdges(newState.edges);
-				console.log(newState.nodes, newState.edges);
+				// console.log(newState.nodes, newState.edges);
 			}
 		}).catch((error) => {
 			console.error('Failed to layout state diagram with ELK', error);

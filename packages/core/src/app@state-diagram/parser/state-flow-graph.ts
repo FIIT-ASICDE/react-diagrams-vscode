@@ -58,6 +58,49 @@ export function createTransition(from: StateGraphNode, to: StateGraphNode, kind:
 	};
 }
 
+function truncCaseLabels(existing?: string, incoming?: string, maxLength = 30) {
+	if (!existing)
+		return incoming;
+	if (!incoming || existing.includes('<others>') || existing.includes(incoming))
+		return existing;
+
+	const combined = `${existing} | ${incoming}`;
+	return combined.length <= maxLength ? combined : `${existing.split(' | ')[0]} | <others>`;
+}
+
+export function normalizeOpenEdges(openEdges: OpenEdge[], to?: StateGraphNode) { // necessary evil to dedup case fallthroughs and rm unecessary...
+	const result: OpenEdge[] = [];
+	const caseByFromId = new Map<string, OpenEdge>();
+	for (const edge of openEdges) {
+		if (edge.kind != StateTransitionKind.Case && edge.kind != StateTransitionKind.Default) {
+			result.push(edge);
+			continue;
+		}
+
+		if (edge.from.kind == 'switch-decision' && to?.kind == 'merge')
+			continue;
+
+		const existing = caseByFromId.get(edge.from.id);
+		if (!existing) {
+			caseByFromId.set(edge.from.id, edge);
+			result.push(edge);
+			continue;
+		}
+
+		if (existing.kind == StateTransitionKind.Default)
+			continue;
+
+		if (edge.kind == StateTransitionKind.Default) {
+			existing.kind = StateTransitionKind.Default;
+			existing.rawConditionText = undefined;
+			continue;
+		}
+
+		existing.rawConditionText = truncCaseLabels(existing.rawConditionText, edge.rawConditionText);
+	}
+	return result;
+}
+
 export function createOccurrenceUpdateNode(call: CallExpression, stateVariable: StateVariable/*, sourceFile: SourceFile*/): StateUpdate {
 	const pos = getCodePos(call);
 	const arg = call.getArguments()[0];
@@ -117,7 +160,7 @@ export class GraphBuilder {
 	}
 
 	private connect(to: StateGraphNode, edges: OpenEdge[]) {
-		for (const edge of edges)
+		for (const edge of normalizeOpenEdges(edges, to))
 			this.transitions.push(createTransition(edge.from, to, edge.kind, edge.rawConditionText));
 	}
 
@@ -154,14 +197,15 @@ export class GraphBuilder {
 	}
 
 	private collapseWithMerge(node: Node, openEdges: OpenEdge[]) {
-		if (!openEdges.length)
+		const normalizedOpen = normalizeOpenEdges(openEdges);
+		if (!normalizedOpen.length)
 			return [];
 
-		if (openEdges.length == 1)
-			return openEdges;
+		if (normalizedOpen.length == 1)
+			return normalizedOpen;
 
 		const mergeNode = this.appendFlowNode('merge', node);
-		this.connect(mergeNode, openEdges);
+		this.connect(mergeNode, normalizedOpen);
 		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
 	}
 
@@ -279,23 +323,19 @@ export class GraphBuilder {
 
 		for (let i = 0; i < clauses.length; i++) {
 			const clause = clauses[i];
-			const clauseHasSetterAhead = hasSetterAfterClause[i];
-			// const clauseRelevant = isRelevant(clause, this.stateVariable.setterName, clauseHasSetterAhead);
-
-			const caseLabel = Node.isCaseClause(clause) ? normText(clause.getExpression()) : 'default';
-			const caseEdge: OpenEdge = {
-				from: decisionNode,
-				kind: StateTransitionKind.Case,
-				rawConditionText: caseLabel,
-			};
-
-			const clauseIncoming: OpenEdge[] = [...fallthroughOpen, caseEdge]; 	// always reachable from decision, or via fallthrough from previous case
+			
+			const caseEdge = Node.isCaseClause(clause) ? 
+				{ from: decisionNode, kind: StateTransitionKind.Case, rawConditionText: clause.getExpression().getText() } : 
+				{ from: decisionNode, kind: StateTransitionKind.Default };
+			
+			const clauseIncoming: OpenEdge[] = [...fallthroughOpen, caseEdge];
 			if (!clauseIncoming.length) {
 				fallthroughOpen = [];
 				continue;
 			}
-
+			
 			let current = clauseIncoming;
+			const clauseHasSetterAhead = hasSetterAfterClause[i];
 			const statements = clause.getStatements();
 			const hasSetterAfterStmt: boolean[] = new Array(statements.length);
 			let seenSetterInClause = clauseHasSetterAhead;
