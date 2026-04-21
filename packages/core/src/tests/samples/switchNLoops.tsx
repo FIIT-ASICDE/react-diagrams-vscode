@@ -1,8 +1,17 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 export default function SwitchWithLoops() {
   const [mode, setMode] = useState<"idle" | "scan" | "match" | "skip" | "error" | "complete">("idle");
   const [index, setIndex] = useState(0);
+
+
+  const func12 = useCallback((idk: string) => {
+    console.debug(idk)
+
+    if (mode == "complete") {
+      setMode("idle");
+    }
+  }, [mode]);
 
   function processItems(type: string, items?: number[]) {
     setMode("scan");
@@ -16,28 +25,6 @@ export default function SwitchWithLoops() {
 	if (items.length === 0) {
 	  console.log("No items to process", items.length);
 	}
-
-   switch (type) { // TESTING "return bug"
-      // Order of cases does not seem to affect the "return bug"
-
-      case "fast":
-        return; // This always breaks it, no diagram generated from this point on unless...
-  
-      case "slow":
-        // setMode("skip"); // When any setMode is present, diagram for "mode" will continue to be generated correctly
-        break;
-        
-      case "idk":
-        // setIndex(0); // When any setIndex is present, diagram for "index" will continue to be generated correctly
-        break;
-
-      // If both setMode and setIndex are present, both diagrams will continue to be generated correctly even with the "return" 
-
-      //...
-      default:
-        break;
-    }
-
     switch (type) {
       case "something":
         console.log("Processing something");
@@ -109,5 +96,8 @@ export default function SwitchWithLoops() {
 	console.debug("Processing complete");
   }
 
-  return <button onClick={() => processItems("fast", [1, 2, 0, 4])}>Process</button>;
+  return <>
+    <button onClick={() => processItems("fast", [1, 2, 0, 4])}>Process</button>
+    <button onClick={() => func12("reset")}>Rst</button>
+  </>;
 }

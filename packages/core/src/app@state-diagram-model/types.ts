@@ -34,6 +34,7 @@ export interface StateVariable {
 export interface StateMutatingFunction { // A function that mutates a specific StateVariable.
 	id: Id;
 	name: string;
+	args?: string; 
 	pos: CodePos;
 	type: FunctionDeclarationKind;
 	// Add more info if needed, like parameters, etc. 

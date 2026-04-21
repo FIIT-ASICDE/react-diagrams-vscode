@@ -28,20 +28,21 @@ async function toFlow(model?: StateDiagramModel) {
 			id: stateVarId,
 			type: 'labeledGroupNode',
 			position: { x: stateVar.x, y: stateVar.y },
-			data: { name: <><b>{stateVar.name}</b> : {stateVar.hook}</>, color: getColor(stateVar.name, 24), children: !layoutedMutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No mutators found</p> } as GroupNodeProps,
+			data: { name: `${stateVar.name} : ${stateVar.hook}`, color: getColor(stateVar.name, 24), children: !layoutedMutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No mutators found</p> } as GroupNodeProps,
 			width: stateVar.width,
 			height: stateVar.height,
 			className: 'rounded-lg border-0 text-(--vscode-foreground)',
 		});
 
 		for (const { id: mutatorId, ...mutatorLayout } of layoutedMutators) {
+			const mutatorArgs = `${mutatorLayout.args ?? '...'}`;
 			nodes.push({
 				id: mutatorId,
 				type: 'labeledGroupNode',
 				position: { x: mutatorLayout.x, y: mutatorLayout.y },
 				parentId: stateVarId,
 				extent: 'parent',
-				data: { ...mutatorLayout, name: `${mutatorLayout.name}(...)`, color: getColor(mutatorLayout.name, 40) } as GroupNodeProps,
+				data: { ...mutatorLayout, name: `${mutatorLayout.name}${mutatorLayout.type == 'arrow-function' ? `((${mutatorArgs}) =>` : `(${mutatorArgs})`}`, color: getColor(mutatorLayout.name, 40) } as GroupNodeProps,
 				width: mutatorLayout.width,
 				height: mutatorLayout.height,
 				className: 'rounded-lg border-0 text-(--vscode-foreground)',
@@ -141,8 +142,8 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		};
 	}, [model]);
 
-	const onDoubleClick = (event: React.MouseEvent, { data }: Node) => {
-		vscode.postMessage("nodeDblClick", { data });
+	const onDoubleClick = (event: React.MouseEvent, node: Node) => {
+		vscode.postMessage("nodeDblClick", { data: node.data });
 	}
 
 	return (

@@ -93,12 +93,15 @@ function getOrCreateMutator(stateVariable: StateVariable, component: SupportedCo
 	if (existing)
 		return existing;
 	
-	const name = getFuncName(funcLike) ?? '<anonymous>';
+	let name = getFuncName(funcLike);
+	name ??= funcLike.getFirstAncestorByKind(SyntaxKind.CallExpression)?.getExpression().getText();
+	name ??= `<anonymous>`;
 	const mutator: StateMutatingFunction = {
 		id: createId('mutator', `${stateVariable.name}:${name}`, pos),
 		name,
 		pos,
 		type,
+		args: funcLike.getText()?.match(/\(([^)]*)\)/)?.[1],
 		// states: [],
 		nodes: [],
 		transitions: [],

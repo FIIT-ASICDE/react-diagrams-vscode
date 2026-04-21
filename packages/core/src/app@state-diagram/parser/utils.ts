@@ -79,7 +79,7 @@ export function getDeclarationKind(decl: SupportedDeclaration): FunctionDeclarat
 	return 'function';
 }
 
-export function getFuncName(fn: SupportedDeclaration | CallExpression): string | undefined {
+export function getFuncName(fn: SupportedDeclaration | CallExpression) {
 	if (Node.isCallExpression(fn)) {
 		const expression = fn.getExpression();
 		if (Node.isIdentifier(expression))
@@ -106,6 +106,8 @@ export function getFuncName(fn: SupportedDeclaration | CallExpression): string |
 		if (attr)
 			return attr.getNameNode().getText();
 	}
+
+	return fn.getFirstAncestorByKind(SyntaxKind.VariableDeclaration)?.getName();
 }
 
 export function getAllCalls(node: Node, funcName: string, filterType: "filter" | "some" = "filter") {
