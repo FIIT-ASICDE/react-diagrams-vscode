@@ -61,11 +61,11 @@ export function createTransition(from: StateGraphNode, to: StateGraphNode, kind:
 function truncCaseLabels(existing?: string, incoming?: string, maxLength = 30) {
 	if (!existing)
 		return incoming;
-	if (!incoming || existing.includes('<others>') || existing.includes(incoming))
+	if (!incoming || existing.includes('...') || existing.includes(incoming))
 		return existing;
 
 	const combined = `${existing} | ${incoming}`;
-	return combined.length <= maxLength ? combined : `${existing.split(' | ')[0]} | <others>`;
+	return combined.length <= maxLength ? combined : `${existing.split(' | ')[0]} | ...`;
 }
 
 export function normalizeOpenEdges(openEdges: OpenEdge[], to?: StateGraphNode) { // necessary evil to dedup case fallthroughs and rm unecessary...
@@ -128,8 +128,6 @@ export const isRelevant = (node: Node, setterName: string, hasSetterAhead = fals
 	return node.getDescendants().some(n => Node.isReturnStatement(n) || Node.isThrowStatement(n));
 };
 
-const withKind = (edges: OpenEdge[], kind: StateTransitionKind): OpenEdge[] => edges.map(edge => ({ ...edge, kind }));
-
 export interface OpenEdge { // We dont yet know "to", remember type and from...
 	from: StateGraphNode;
 	kind: StateTransitionKind;
@@ -186,14 +184,6 @@ export class GraphBuilder {
 		this.nodes.push(created);
 		this.updateNodesByPos.set(key, created);
 		return created;
-	}
-
-	private withKind(edges: OpenEdge[], kind: StateTransitionKind): OpenEdge[] {
-		return edges.map(edge => ({
-			from: edge.from,
-			kind,
-			rawConditionText: edge.rawConditionText,
-		}));
 	}
 
 	private collapseWithMerge(node: Node, openEdges: OpenEdge[]) {
@@ -361,11 +351,11 @@ export class GraphBuilder {
 		return this.collapseWithMerge(statement, [...switchBreakEdges, ...fallthroughOpen]);
 	}
 
-	visitFor(statement: ForStatement, incoming: OpenEdge[], hasSetterAhead = false) {
+	visitLoop(statement: ForStatement | WhileStatement, incoming: OpenEdge[], hasSetterAhead = false) {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
 
-		const conditionText = statement.getCondition()?.getText() ?? 'for';
+		const conditionText = Node.isWhileStatement(statement) ? statement.getExpression().getText() : statement.getCondition()?.getText() ?? 'for';
 		const decisionNode = this.appendFlowNode('loop-decision', statement, truncate(conditionText, 80));
 		this.connect(decisionNode, incoming);
 
@@ -379,32 +369,7 @@ export class GraphBuilder {
 			{ breakCollector: loopBreakEdges, continueCollector: loopContinueEdges },
 		);
 
-		const loopBack = this.withKind([...bodyOpen, ...loopContinueEdges], StateTransitionKind.Loop);
-		if (loopBack.length)
-			this.connect(decisionNode, loopBack);
-
-		return this.collapseWithMerge(statement, [{ from: decisionNode, kind: StateTransitionKind.Else }, ...loopBreakEdges]);
-	}
-
-	visitWhile(statement: WhileStatement, incoming: OpenEdge[], hasSetterAhead = false) { // May be used one "visitLoop" for both while and for...of loops, for simplicity
-		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
-			return incoming;
-
-		const conditionText = statement.getExpression().getText();
-		const decisionNode = this.appendFlowNode('loop-decision', statement, truncate(conditionText, 80));
-		this.connect(decisionNode, incoming);
-
-		const loopBreakEdges: OpenEdge[] = [];
-		const loopContinueEdges: OpenEdge[] = [];
-
-		const bodyOpen = this.visit(
-			statement.getStatement(),
-			[{ from: decisionNode, kind: StateTransitionKind.Then }],
-			hasSetterAhead,
-			{ breakCollector: loopBreakEdges, continueCollector: loopContinueEdges },
-		);
-
-		const loopBack = this.withKind([...bodyOpen, ...loopContinueEdges], StateTransitionKind.Loop);
+		const loopBack = [...bodyOpen, ...loopContinueEdges].map(edge => ({ ...edge, kind: StateTransitionKind.Loop }));
 		if (loopBack.length)
 			this.connect(decisionNode, loopBack);
 
@@ -469,11 +434,8 @@ export class GraphBuilder {
 		if (Node.isSwitchStatement(what))
 			return this.visitSwitch(what, incoming, hasSetterAhead, context);
 
-		if (Node.isForStatement(what))
-			return this.visitFor(what, incoming, hasSetterAhead);
-
-		if (Node.isWhileStatement(what))
-			return this.visitWhile(what, incoming, hasSetterAhead);
+		if (Node.isForStatement(what) || Node.isWhileStatement(what))
+			return this.visitLoop(what, incoming, hasSetterAhead);
 
 		if (Node.isDoStatement(what))
 			return this.visitDoWhile(what, incoming, hasSetterAhead);
@@ -525,14 +487,7 @@ export function buildTransitionFlowGraph(mutatorBodies: Map<Id, Block>, stateVar
 			mutator.nodes = mutator.nodes.filter(({nodeType}) => nodeType == 'state-update');
 			mutator.transitions = [];
 
-			const builder = new GraphBuilder(
-				stateVariable,
-				mutator,
-				mutator.nodes,
-				mutator.transitions,
-				// sourceFile
-			);
-
+			const builder = new GraphBuilder(stateVariable, mutator, mutator.nodes, mutator.transitions);
 			builder.build(body);
 		}
 	}

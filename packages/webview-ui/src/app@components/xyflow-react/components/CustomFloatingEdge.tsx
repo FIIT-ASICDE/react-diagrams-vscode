@@ -41,9 +41,9 @@ function FloatingEdge({ id, source, target, sourceX, sourceY, targetX, targetY, 
   if (data?.backEdge) {
     var [edgePath, labelX, labelY] = buildBackEdge({ sourceX, sourceY, targetX, targetY, detourDir: +data?.backEdge * (isLongEdge ? 1 : 0.25), labelPos: isLongEdge ? 0.9 : 0.5 });
   }
-  else if (isLongEdge) {
-    var [edgePath, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, stepPosition: 1 })
-  }
+  // else if (isLongEdge) {
+  //   var [edgePath, labelX, labelY] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, stepPosition: 1 })
+  // }
   else {
     var [edgePath, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY })
   }

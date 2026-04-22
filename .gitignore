@@ -4,6 +4,7 @@ node_modules
 .vscode-test/
 *.vsix
 *.github
+*.tsbuildinfo
 
 **/.vscode/settings.json
 **/.waylog/

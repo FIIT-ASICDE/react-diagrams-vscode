@@ -27,7 +27,7 @@
     "build": "npm run build:cjs && npm run build:esm",
     "build:cjs": "tsc -p .",
     "build:esm": "tsc -p tsconfig.esm.json",
-    "watch": "tsc -p . -w",
+    "watch": "concurrently \"tsc -p . -w\" \"tsc -p tsconfig.esm.json -w\"",
     "lint": "echo \"No lint task configured for @react-diagrams/core\"",
     "test": "npm run build && node --test dist/tests/**/*.test.js"
   },

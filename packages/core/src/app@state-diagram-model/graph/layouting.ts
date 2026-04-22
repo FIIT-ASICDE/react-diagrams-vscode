@@ -12,13 +12,13 @@ const LAYOUT = {
 	
 	state: {
 		gap: 24,
-		pad: 20,
+		pad: 22,
 		minWidth: 200,
 		minHeight: 100,
 	},
 	mutator: {
 		gap: 18,
-		pad: 28,
+		pad: 38,
 		minWidth: 200,
 		minHeight: 100,
 	},
@@ -32,7 +32,7 @@ export const STATE_DIAGRAM_LAYOUT = LAYOUT;
 export const ELK_OPTIONS = {
 	'elk.algorithm': 'layered',
 	'elk.direction': 'DOWN',
-	'elk.layered.spacing.nodeNodeBetweenLayers': '48',
+	'elk.layered.spacing.nodeNodeBetweenLayers': '60',
 	'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
 	'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
 	'elk.layered.nodePlacement.favorStraightEdges': 'true',
@@ -56,7 +56,7 @@ export function getGraphNodeSize({ nodeType, kind, ...node }: StateGraphNode) {
 		return { width: LAYOUT.graphNodeWidth, height: LAYOUT.graphNodeHeight };
 
 	if (kind == 'decision' || kind == 'try-decision' || kind == 'switch-decision' || kind == 'loop-decision' || kind == 'merge')
-		return { width: 54, height: 38 };
+		return { width: 64, height: 44 };
 
 	return { width: 38, height: 38 };
 }

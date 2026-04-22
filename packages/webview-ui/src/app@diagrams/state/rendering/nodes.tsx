@@ -11,17 +11,14 @@ export type StateVisualNodeData = {
 	height?: number;
 };
 
-function NodeShell({ width, height, children }: { width: number; height: number; children: ReactNode }) {
+function NodeShell({ width, height, children }: { width?: number; height?: number; children: ReactNode }) {
 	return (
 		<>
 			{commonSourceHandles(false, 0, 0)}
 			<div
 				className="relative flex items-center justify-center box-border overflow-visible"
-				style={{
-					width,
-					height,
-				}}
-				>
+				style={{ width, height }}
+			>
 				{children}
 			</div>
 			{commonTargetHandles(false, 0, 0)}
@@ -29,20 +26,14 @@ function NodeShell({ width, height, children }: { width: number; height: number;
 	);
 }
 
-function CenteredLabel({ label }: { label?: string }) {
+function CenteredLabel({ label, color, background }: { label?: string,  color?: string, background?: string }) {
 	if (!label?.length)
 		return null;
 
-	const onEnter = () => {
-		console.log(true)
-	}
-
 	return (
 		<span
-			className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden text-ellipsis whitespace-nowrap text-center text-[10px] leading-none font-semibold z-50"
-			style={{
-				color: 'var(--vscode-foreground)',
-			}}
+			className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden text-ellipsis whitespace-nowrap text-center text-[10px] leading-none font-semibold z-50 px-0.75 py-0.5 rounded"
+			style={{ color: color ?? 'var(--vscode-foreground)', background }}
 		>
 			{label}
 		</span>
@@ -52,8 +43,8 @@ function CenteredLabel({ label }: { label?: string }) {
 type RFNodeProps = { data: StateVisualNodeData };
 
 const StateUpdateNode = memo(({ data }: RFNodeProps) => {
-	const width = data.width ?? 220;
-	const height = data.height ?? 56;
+	const width = data.width;
+	const height = data.height;
 
 	return (
 		<NodeShell width={width} height={height}>
@@ -64,7 +55,7 @@ const StateUpdateNode = memo(({ data }: RFNodeProps) => {
 					height,
 					border: '1px solid var(--vscode-button-border)',
 					background: data.color ?? 'var(--vscode-input-background)',
-					color: 'var(--vscode-foreground)',
+					color: 'white',
 				}}
 			>
 				{data.label}
@@ -74,8 +65,8 @@ const StateUpdateNode = memo(({ data }: RFNodeProps) => {
 });
 
 const DecisionNode = memo(({ data }: RFNodeProps) => {
-	const width = data.width ?? 36;
-	const height = data.height ?? 24;
+	const width = data.width;
+	const height = data.height;
 
 	return (
 		<NodeShell width={width} height={height}>
@@ -92,13 +83,13 @@ const DecisionNode = memo(({ data }: RFNodeProps) => {
 					boxSizing: 'border-box',
 				}}
 			/>
-			<CenteredLabel label={data.label} />
+			<CenteredLabel label={data.label} background={data.color} color="white" />
 		</NodeShell>
 	);
 });
 
 const EntryNode = memo(({ data }: RFNodeProps) => {
-	const size = Math.min(data.width ?? 20, data.height ?? 20);
+	const size = Math.min(data.width ?? 0, data.height ?? 0);
 
 	return (
 		<NodeShell width={size} height={size}>
@@ -182,83 +173,6 @@ const ExceptionNode = memo(({ data }: RFNodeProps) => {
 	);
 });
 
-// function IconNode({ data, children }: { data: StateVisualNodeData; children: ReactNode }) {
-// 	const size = Math.min(data.width ?? 20, data.height ?? 20);
-
-// 	const tintStyle: CSSProperties = {
-// 		width: size,
-// 		height: size,
-// 		color: data.color ?? 'var(--vscode-input-background)',
-// 		display: 'flex',
-// 		alignItems: 'center',
-// 		justifyContent: 'center',
-// 		flexShrink: 0,
-// 	};
-
-// 	return (
-// 		<NodeShell width={size} height={size}>
-// 			<div className="w-full h-full shrink-0" style={tintStyle}>
-// 				{children}
-// 			</div>
-// 			<CenteredLabel label={data.label} />
-// 		</NodeShell>
-// 	);
-// }
-
-// const ExitNode = memo(({ data }: RFNodeProps) => (
-// 	<IconNode data={data}>
-// 		<svg
-// 			xmlns="http://www.w3.org/2000/svg"
-// 			viewBox="0 0 64 64"
-// 			width="100%"
-// 			height="100%"
-// 			preserveAspectRatio="xMidYMid meet"
-// 			style={{ display: 'block' }}
-// 		>
-// 			<circle
-// 				cx="32"
-// 				cy="32"
-// 				r="10"
-// 				fill="none"
-// 				stroke="currentColor"
-// 				strokeWidth="4"
-// 			/>
-// 			<circle
-// 				cx="32"
-// 				cy="32"
-// 				r="6"
-// 				fill="currentColor"
-// 			/>
-// 		</svg>
-// 	</IconNode>
-// ));
-
-// const ExceptionNode = memo(({ data }: RFNodeProps) => (
-// 	<IconNode data={data}>
-// 		<svg
-// 			xmlns="http://www.w3.org/2000/svg"
-// 			viewBox="0 0 82.167 82.167"
-// 			width="100%"
-// 			height="100%"
-// 			preserveAspectRatio="xMidYMid meet"
-// 			style={{ display: 'block' }}
-// 		>
-// 			<path
-// 				d="M4 4 L78 78"
-// 				stroke="currentColor"
-// 				strokeWidth="6"
-// 				strokeLinecap="round"
-// 			/>
-// 			<path
-// 				d="M78 4 L4 78"
-// 				stroke="currentColor"
-// 				strokeWidth="6"
-// 				strokeLinecap="round"
-// 			/>
-// 		</svg>
-// 	</IconNode>
-// ));
-
 export const nodeTypes: NodeTypes = {
 	labeledGroupNode: LabeledGroupNode,
 	stateUpdateNode: StateUpdateNode,
@@ -270,12 +184,12 @@ export const nodeTypes: NodeTypes = {
 
 const NODE_COLORS = {
 	neutral: 'color-mix(in srgb, #454545 88%, transparent)',
-	decision: 'color-mix(in srgb, var(--vscode-testing-iconPassed) 64%, transparent)',
-	tryDecision: 'color-mix(in srgb, var(--vscode-testing-iconQueued, #f59e0b) 64%, transparent)',
-	switchDecision: 'color-mix(in srgb, #a5c93e 64%, transparent)',
-	loopDecision: 'color-mix(in srgb, #00c6d7 64%, transparent)',
+	decision: 'color-mix(in srgb, #24af78 64%, transparent)',
+	tryDecision: 'color-mix(in srgb, #af6b07 64%, transparent)',
+	switchDecision: 'color-mix(in srgb, #7c9b2e 64%, transparent)',
+	loopDecision: 'color-mix(in srgb, #008f9e 64%, transparent)',
 	throw: 'var(--vscode-errorForeground, #ef4444)',
-	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 80, blockedHueRanges: [ [350, 20] ] })} 64%, transparent)`,
+	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 80, blockedHueRanges: [ [350, 20] ] })} 80%, transparent)`,
 };
 
 export function getNodeColor(type: string, text: string) {

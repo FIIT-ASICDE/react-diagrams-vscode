@@ -169,9 +169,9 @@ function buildCapabilitiesIntro(): string {
 		"- @diagram explain this flow",
 		"- @diagram suggest a refactor",
 		"- @diagram compare the code with the diagram",
-		"- @diagram find inconsistencies",
-		"- @diagram improve the generated skeleton",
-		"- @diagram tell me whether the diagram changes your recommendation",
+		"- @diagram point out potential design issues, unnecessary complexity and how to improve them",
+		// "- @diagram improve the generated skeleton",
+		// "- @diagram tell me whether the diagram changes your recommendation",
 		"",
 	].join("\n");
 }
