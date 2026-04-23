@@ -32,7 +32,8 @@ export const STATE_DIAGRAM_LAYOUT = LAYOUT;
 export const ELK_OPTIONS = {
 	'elk.algorithm': 'layered',
 	'elk.direction': 'DOWN',
-	'elk.layered.spacing.nodeNodeBetweenLayers': '60',
+
+	'elk.layered.spacing.nodeNodeBetweenLayers': '64',
 	'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
 	'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
 	'elk.layered.nodePlacement.favorStraightEdges': 'true',
@@ -40,9 +41,22 @@ export const ELK_OPTIONS = {
 	'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
 	'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
 	'elk.layered.feedbackEdges': 'true',
-	'elk.edgeRouting': 'ORTHOGONAL',
-	'elk.spacing.nodeNode': '46',
-	'elk.padding': elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad, LAYOUT.mutator.pad)
+
+	"org.eclipse.elk.spacing.edgeNode": "32",
+	"org.eclipse.elk.layered.spacing.edgeNodeBetweenLayers": "20",
+	"org.eclipse.elk.spacing.portConnection": "30", // dist edge goes down from node
+	'org.eclipse.elk.layered.allowNonFlowPortsToSwitchSides': 'true',
+	'elk.portConstraints': 'FIXED_SIDE',
+	'elk.edgeRouting': 'POLYLINE',
+
+	'elk.spacing.nodeNode': '48',
+	'elk.padding': elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad, LAYOUT.mutator.pad),
+
+	// 'elk.edgeLabels.placement': 'CENTER',
+	// 'elk.edgeLabels.inline': 'true',
+	// 'elk.edgeLabels.sideSelection': 'UNDEFINED',
+	// 'elk.nodeSize.constraints': 'NODE_LABELS',
+	// 'elk.layered.edgeLabels.centerLabelPlacementStrategy': 'MEDIAN_SEGMENT',
 };
 
 export const ELK_BOX_ROW_OPTIONS = {
@@ -62,13 +76,21 @@ export function getGraphNodeSize({ nodeType, kind, ...node }: StateGraphNode) {
 }
 
 export async function layoutMutator(mutator: StateMutatingFunction, elkLayout = {}) {
+	const layoutOptions = { ...ELK_OPTIONS, ...elkLayout };
+	if (mutator.nodes.length < 4)
+		layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] = `${+layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] / 2}`;
+
 	const graph = {
 		id: `elk-${mutator.id}`,
-		layoutOptions: { ...ELK_OPTIONS, ...elkLayout },
-		children: mutator.nodes.map(node => ({ ...node, ...getGraphNodeSize(node) })),
+		layoutOptions,
+		children: mutator.nodes.map(node => ({ 
+			...node, 
+			...getGraphNodeSize(node)
+		})),
 		edges: mutator.transitions.map(transition => ({
 			sources: [transition.fromNodeId],
 			targets: [transition.toNodeId],
+			// labels: transition.label ? [{ id: `elk-label-${transition.fromNodeId}-${transition.toNodeId}`, text: transition.label, width: (transition.label.length * 12*0.6), height: 21 }] : undefined,
 			...transition
 		})),
 	};

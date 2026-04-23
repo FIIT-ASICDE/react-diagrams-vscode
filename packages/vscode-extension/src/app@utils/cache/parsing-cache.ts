@@ -89,8 +89,8 @@ export class ParsingImageCache<T = any> extends ParsingCache<T> {
 		return super.updateEntry(document, rootPath, forceUpdate);
 	}
 
-	updateImageEntry(document: TextDocument, data: Uint8Array, mediaType = "image/png") {
-		const existing = this.getImage(document);
+	updateImageEntry(document: TextDocument, data: Uint8Array, mediaType = "image/png", forceUpdate = false) {
+		const existing = forceUpdate && this.getImage(document);
 		if (existing)
 			return existing;
 
@@ -107,8 +107,8 @@ export class ParsingImageCache<T = any> extends ParsingCache<T> {
 		return entry;
 	}
 
-	updateImage(document: TextDocument, data: Uint8Array, mediaType = "image/png") {
-		return this.updateImageEntry(document, data, mediaType).data;
+	updateImage(document: TextDocument, data: Uint8Array, mediaType = "image/png", forceUpdate = false) {
+		return this.updateImageEntry(document, data, mediaType, forceUpdate).data;
 	}
 
 	getImage(filePath: TextDocument | string | undefined = this.getCurrentDocument()) {
