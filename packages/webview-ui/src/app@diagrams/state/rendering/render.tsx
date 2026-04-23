@@ -82,20 +82,27 @@ export async function renderXyFlow(model?: StateDiagram) {
 				if (!source || !target)
 					continue;
 
+				console.log(transition)
+
+				const section = transition?.sections?.[0];
+				const pathPoints = section && [section.startPoint, ...(section.bendPoints ?? []), section.endPoint]
+					.map(({x, y}) => ({ x: x + mutatorLayout.x + stateVar.x, y: y + mutatorLayout.y + stateVar.y})); // Adjust points to be relative to the diagram...
+
 				const loopBack = kind == 'loop';
-				const scaleSign = x => x == 0 ? 0 : (x > 0 ? Math.exp(-x/80) : -Math.exp(x/80));
-				const dir = scaleSign(mutatorNodes.get(source)!.position.x - mutatorNodes.get(target)!.position.x);
+				// const scaleSign = x => x == 0 ? 0 : (x > 0 ? Math.exp(-x/80) : -Math.exp(x/80));
+				// const dir = scaleSign(mutatorNodes.get(source)!.position.x - mutatorNodes.get(target)!.position.x);
 				edges.push({
 					id,
 					source,
 					target,
-					sourceHandle: loopBack ? `source-${dir < 0 ? 'left' : 'right'}` : undefined,
-					targetHandle: loopBack ? `target-${dir < 0 ? 'left' : 'right'}` : undefined,
+					// sourceHandle: loopBack ? `source-${dir < 0 ? 'left' : 'right'}` : undefined,
+					// targetHandle: loopBack ? `target-${dir < 0 ? 'left' : 'right'}` : undefined,
 					label: transition.label,
-					type: 'floating',
+					type: 'pathable',
 					animated: loopBack,
 					markerEnd: { type: MarkerType.ArrowClosed },
-					data: { backEdge: loopBack ? dir : undefined },
+					style: { strokeWidth: 1.4 },
+					data: { pathPoints },
 				});
 			}
 		}
