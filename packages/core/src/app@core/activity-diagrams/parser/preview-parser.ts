@@ -99,7 +99,6 @@ export async function parseActivityPreview(sourceText: string, rootDir = ".", te
 	const project = createProject(rootDir);
 	const sourceFile = project.createSourceFile(tempFileName, sourceText, { overwrite: true });
 	const diagramBuilder = new DiagramBuilder();
-
 	try {
 		const classDeclaration = sourceFile.getClasses()[0];
 		if (classDeclaration) {

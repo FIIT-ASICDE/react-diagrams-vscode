@@ -19,6 +19,7 @@ const defaultLabelByType: Record<ActivityNodeType, string> = {
 	decision: 'Condition',
 	merge: 'Merge',
 	end: 'End',
+	loop: 'Loop',
 };
 
 export function createActivityNode(type: ActivityNodeType, currentIndex: number, previewMode = false): Node {

@@ -23,14 +23,17 @@ export type ActivityWebviewToExtensionMessage =
 	| { type: "diagram/visibleGraph"; data: ActivityGraphPayload }
 	| { type: "diagram/generateSkeleton"; data: ActivityGraphPayload }
 	| { type: "code/request" }
-	| { type: "code/nodePreview"; data: ActivityNodePreviewRequestPayload };
+	| { type: "code/nodePreview"; data: ActivityNodePreviewRequestPayload }
+	| { type: "diagram/openSourceFile"; data: { message: string } };
 
 export type ActivityExtensionToWebviewMessage =
 	| { type: "diagram/type"; data: { diagramType: DiagramType } }
 	| { type: "code/data"; data: ActivityGraphPayload }
 	| { type: "code/error"; data: { message: string } }
 	| { type: "code/nodePreviewData"; data: ActivityNodePreviewDataPayload }
-	| { type: "code/nodePreviewError"; data: { message: string } };
+	| { type: "code/nodePreviewError"; data: { message: string } }
+	| { type: "self/init" }
+	| { type: "diagram/requestImage"; data: {} };
 
 const ACTIVITY_WEBVIEW_TO_EXTENSION_TYPES = new Set<string>([
 	"diagram/requestType",
@@ -38,6 +41,8 @@ const ACTIVITY_WEBVIEW_TO_EXTENSION_TYPES = new Set<string>([
 	"diagram/generateSkeleton",
 	"code/request",
 	"code/nodePreview",
+	"diagram/openSourceFile",
+	"diagram/requestImage",
 ]);
 
 export function isActivityWebviewToExtensionMessage(

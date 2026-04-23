@@ -32,7 +32,103 @@
         "command": "vs-code-ext.componentActivity",
         "title": "React Component Activity"
       }
-    ]
+    ],
+    "languageModelTools": [
+      {
+        "name": "create_activity_diagram",
+        "displayName": "Create Activity Diagram",
+        "modelDescription": "Creates and displays an activity diagram from the current code file or from a specific function when that helps explain control flow.",
+        "toolReferenceName": "create_activity_diagram",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "functionName": {
+              "type": "string",
+              "description": "Optional function name to focus on."
+            },
+            "sourceText": {
+              "type": "string",
+              "description": "Optional source text to parse directly."
+            },
+            "title": {
+              "type": "string",
+              "description": "Optional diagram title."
+            }
+          }
+        }
+      }
+    ],
+    "configuration": {
+      "title": "Diagram Assistant",
+      "properties": {
+        "diagramAssistant.enableDebug": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show debug information in chat about which sources were available and used."
+        },
+        "diagramAssistant.enableDiagramGeneration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow the assistant to generate an activity diagram when code is visible."
+        },
+        "diagramAssistant.primaryReasoningSource": {
+          "type": "string",
+          "enum": [
+            "code",
+            "diagram",
+            "image"
+          ],
+          "default": "diagram",
+          "description": "Primary source the assistant should prefer during reasoning."
+        },
+        "diagramAssistant.includeCodeContext": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include code context when available."
+        },
+        "diagramAssistant.includeDiagramJson": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include diagram JSON when available."
+        },
+        "diagramAssistant.includeDiagramImage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include rendered diagram image when available."
+        },
+        "diagramAssistant.whenCodeVisible.allowDiagramGeneration": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow diagram generation when the visible surface is code."
+        },
+        "diagramAssistant.whenCodeVisible.includeGeneratedDiagramJson": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include generated diagram JSON after diagram generation from code."
+        },
+        "diagramAssistant.whenCodeVisible.includeGeneratedDiagramImage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include generated diagram image after diagram generation from code."
+        },
+        "diagramAssistant.whenDiagramVisible.includeFullCode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include full code context when a diagram is already visible."
+        },
+        "diagramAssistant.whenDiagramVisible.includeDiagramJson": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include diagram JSON when a diagram is already visible."
+        },
+        "diagramAssistant.whenDiagramVisible.includeDiagramImage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include diagram image when a diagram is already visible."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build:webview && npm run package",

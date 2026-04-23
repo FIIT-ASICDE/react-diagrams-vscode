@@ -34,7 +34,7 @@ export class GraphWriter {
   addEdge(source: string, target: string, label?: string, isBackEdge = false, data?: EdgeBranchData): void {
     const branchSide: BranchSide = data?.branchSide ?? 'bottom';
     const sourceHandle = isBackEdge
-      ? 'source-left'
+      ? 'source-bottom'
       : (branchSide === 'right' ? 'source-left' : branchSide === 'left' ? 'source-right' : 'source-bottom');
 
     this.edges.push({
