@@ -3,14 +3,19 @@ import { Background, Controls, MarkerType, MiniMap, ReactFlow, useEdgesState, us
 import { nodeTypes } from './rendering/nodes';
 import { edgeTypes } from './rendering/edges';
 import { renderXyFlow, type StateDiagramProps } from './rendering/render';
+import { downloadDiagramImage, snapdomToPngDataUrl } from '@/app@utils/utils';
+import { VSCodeButton } from "@vscode/webview-ui-toolkit/react";
 import { vscode } from '@/app@vscode/api';
+// import { toPng } from 'html-to-image';
+
+const fitToViewOptions = { padding: 0.025, duration: 100 };
 
 function AutoFitView({ ready }: { ready: boolean }) {
 	const { fitView } = useReactFlow();
 
 	useEffect(() => {
 		if (ready) {
-			void fitView({ padding: 0.1, duration: 150 });
+			void fitView(fitToViewOptions);
 		}
 	}, [fitView, ready]);
 
@@ -23,6 +28,9 @@ const minimapNodeStrokeColor = node => node.type == 'labeledGroupNode' ? node.da
 export default function StateDiagram({ model }: StateDiagramProps) {
 	const [nodes, setNodes] = useNodesState<Node>([]);
 	const [edges, setEdges] = useEdgesState<Edge>([]);
+	const [cachedImage, setCachedImage] = useState<string | null>(null);
+
+	const modelCacheKey = useMemo(() => JSON.stringify(model ?? null), [model]);
 	const hasModel = useMemo(() => Boolean(model?.stateVariables?.length), [model]);
 
 	useEffect(() => {
@@ -47,10 +55,32 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		};
 	}, [model]);
 
+	useEffect(() => {
+		setCachedImage(null);
+	}, [modelCacheKey]);
+
 	const onDoubleClick = (event: React.MouseEvent, node: Node) => {
 		vscode.postMessage("nodeDblClick", { data: { ...node.data, name: undefined, children: undefined } });
 	}
 
+	let pendingImgRequest: Promise<string | null> | null = null;
+	const onDiagramImage = async () => { 
+		if (cachedImage) {
+			vscode.postMessage("onDiagramImage", { dataUrl: cachedImage });
+			return;
+		}
+
+		try {
+			const dataUrl = await (pendingImgRequest ?? (pendingImgRequest = downloadDiagramImage(nodes, snapdomToPngDataUrl)));
+			setCachedImage(dataUrl);
+			vscode.postMessage("onDiagramImage", { dataUrl }) 
+		}
+		finally {
+			pendingImgRequest = null;
+		}
+	}
+
+	const diagramBg = document.querySelector('meta[name="diagram-bg"]')?.getAttribute('content');
 	return (
 		<div className="h-full w-full">
 			{!hasModel && (
@@ -66,17 +96,26 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 				nodeTypes={nodeTypes}
 				edgeTypes={edgeTypes}
 				// connectionLineComponent={FloatingConnectionLine}
-				fitViewOptions={{ padding: 0.1 }}
+				fitViewOptions={fitToViewOptions}
 				defaultEdgeOptions={{
 					type: 'floating',
 					markerEnd: { type: MarkerType.ArrowClosed },
 				}}
 				className='floating-edges'
 				onNodeDoubleClick={onDoubleClick}
+				style={{ background: diagramBg == 'light' ? '#e8eaed' : (diagramBg == 'dark' ? '#1f1f1f' : undefined) }}
 			>
-				<AutoFitView ready={nodes.length > 0} />
-				<Controls />
-				<MiniMap pannable zoomable style={{width: 150, height: 100 }} nodeColor={minimapNodeColor} nodeStrokeColor={minimapNodeStrokeColor} />
+				{hasModel && <>
+					<VSCodeButton
+						className={`z-10 absolute left-2.25 top-2.5 scale-[0.8]`}
+						onClick={onDiagramImage}
+					>
+						Image
+					</VSCodeButton>
+					<AutoFitView ready={nodes.length > 0} />
+					<Controls fitViewOptions={fitToViewOptions} />
+					<MiniMap pannable zoomable style={{width: 150, height: 100 }} nodeColor={minimapNodeColor} nodeStrokeColor={minimapNodeStrokeColor} />
+				</>}
 				<Background gap={18} size={1} />
 			</ReactFlow>
 		</div>

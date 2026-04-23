@@ -2,7 +2,6 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { VSCodePanels, VSCodePanelTab, VSCodePanelView } from '@vscode/webview-ui-toolkit/react';
 import StateDiagram from '@/app@diagrams/state/StateDiagram';
 import ActivityDiagram from '@/app@diagrams/activity/ActivityDiagram';
-import Tests from '@/app@components/Tests';
 import { vscode } from '@/app@vscode/api';
 
 type DiagramType = 'state' | 'activity';
@@ -42,12 +41,6 @@ function App() {
 					<div className="p-4 text-sm leading-6 text-(--vscode-descriptionForeground)">
 						<h2 className="mb-2 text-base text-(--vscode-foreground)">Details</h2>
 						<p>This is a sample details tab. Add selected node metadata or component state summaries here.</p>
-					</div>
-				</VSCodePanelView>
-
-				<VSCodePanelView id="tests">
-					<div className="p-4 text-sm leading-6 text-(--vscode-descriptionForeground)">
-						<Tests />
 					</div>
 				</VSCodePanelView>
 			</VSCodePanels>

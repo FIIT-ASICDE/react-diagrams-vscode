@@ -1,8 +1,14 @@
 import { TextDocument, workspace } from "vscode";
 import { normalizeFilePath } from "../index";
 
-export type CacheEntry<T> = {
-	data: Promise<T>;
+export function getRootPath(targetDocument?: TextDocument) {
+	if (!targetDocument)
+		return workspace.workspaceFolders?.[0]?.uri.fsPath;
+	return workspace.getWorkspaceFolder(targetDocument.uri)?.uri.fsPath ?? workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+export type CacheEntry<T = any, D = Promise<T>> = {
+	data: D;
 	documentVersion: number;
 	document: TextDocument;
 	updatedAt: number;
@@ -56,20 +62,67 @@ export class ParsingCache<T = any> {
 		return this.currentDocument;
 	}
 
-	get(filePath?: TextDocument | string) {
+	get(filePath: TextDocument | string | undefined = this.getCurrentDocument()) {
 		if (typeof filePath == "string")
 			return this.entries.get(normalizeFilePath(filePath));
 
-		if (!filePath)
+		if (!filePath) 
 			return undefined;
-
 		const normPath = normalizeFilePath(filePath.uri.fsPath);
 		return this.entries.get(normPath) ?? this.updateEntry(filePath);
 	}
 }
 
-export function getRootPath(targetDocument?: TextDocument) {
-	if (!targetDocument)
-		return workspace.workspaceFolders?.[0]?.uri.fsPath;
-	return workspace.getWorkspaceFolder(targetDocument.uri)?.uri.fsPath ?? workspace.workspaceFolders?.[0]?.uri.fsPath;
+export type ImageCacheEntry = CacheEntry<Uint8Array, Uint8Array> & {
+	mediaType: string;
+};
+
+export class ParsingImageCache<T = any> extends ParsingCache<T> {
+	private readonly images = new Map<string, ImageCacheEntry>();
+
+	override updateEntry(document: TextDocument, rootPath?: string, forceUpdate = false) {
+		const cacheKey = normalizeFilePath(document.uri.fsPath);
+		const cached = super.get(document.uri.fsPath);
+
+		if (forceUpdate || cached?.documentVersion != document.version)
+			this.images.delete(cacheKey);
+		return super.updateEntry(document, rootPath, forceUpdate);
+	}
+
+	updateImageEntry(document: TextDocument, data: Uint8Array, mediaType = "image/png") {
+		const existing = this.getImage(document);
+		if (existing)
+			return existing;
+
+		const cacheKey = normalizeFilePath(document.uri.fsPath);
+		const entry: ImageCacheEntry = {
+			data,
+			documentVersion: document.version,
+			document,
+			mediaType,
+			updatedAt: Date.now(),
+		};
+
+		this.images.set(cacheKey, entry);
+		return entry;
+	}
+
+	updateImage(document: TextDocument, data: Uint8Array, mediaType = "image/png") {
+		return this.updateImageEntry(document, data, mediaType).data;
+	}
+
+	getImage(filePath: TextDocument | string | undefined = this.getCurrentDocument()) {
+		if (!filePath)
+			return undefined;
+		if (typeof filePath == "string")
+			return this.images.get(normalizeFilePath(filePath));
+
+		const normPath = normalizeFilePath(filePath.uri.fsPath);
+		const image = this.images.get(normPath);
+		if (image?.documentVersion != filePath.version) {
+			this.images.delete(normPath);
+			return undefined;
+		}
+		return image;
+	}
 }

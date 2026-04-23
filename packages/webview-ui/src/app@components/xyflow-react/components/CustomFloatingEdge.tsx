@@ -89,7 +89,7 @@ function FloatingEdge({ id, source, target, sourceX, sourceY, targetX, targetY, 
       </g>
       {label && (
         <EdgeLabelRenderer>
-          {lblNear && <div className="pointer-events-none absolute rounded border border-(--vscode-widget-border) p-1 leading-none text-[11px] text-(--vscode-foreground) shadow-sm"
+          {lblNear && <div className="text-nowrap pointer-events-none absolute rounded border border-(--vscode-widget-border) p-1 leading-none text-[11px] text-(--vscode-foreground) shadow-sm"
             style={{
               transform: `translate(-50%, 0%) translate(${sourceX}px, ${sourceY}px)`,
               background: hover ? `var(--vscode-editor-background)` : `color-mix(in srgb, var(--vscode-editor-background) 80%, transparent)`,
@@ -99,8 +99,7 @@ function FloatingEdge({ id, source, target, sourceX, sourceY, targetX, targetY, 
           >
             {label}
           </div>}
-          {!lblNear && <div 
-            className="pointer-events-none absolute rounded border border-(--vscode-widget-border) p-1 leading-none text-[11px] text-(--vscode-foreground) shadow-sm"
+          {!lblNear && <div className="text-nowrap pointer-events-none absolute rounded border border-(--vscode-widget-border) p-1 leading-none text-[11px] text-(--vscode-foreground) shadow-sm"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               background: hover ? `var(--vscode-editor-background)` : `color-mix(in srgb, var(--vscode-editor-background) 80%, transparent)`,

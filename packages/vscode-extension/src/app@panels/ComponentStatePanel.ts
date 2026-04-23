@@ -1,5 +1,5 @@
 import { Disposable, TextDocument, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
-import { getNonce, getUri, jumpToPosition } from "../app@utils";
+import { getNonce, getUri, jumpToPosition, saveDiagramImage } from "../app@utils";
 import { basename, extname } from "path";
 import { componentStateCache, getRootPath } from "../app@utils/cache";
 
@@ -168,6 +168,8 @@ export class ComponentStatePanel {
 
 		const nonce = getNonce();
 
+		const config = workspace.getConfiguration('state.diagram');
+		const bgColor = config.get<string>('backgroundColor');
 		return /*html*/ `
 			<!DOCTYPE html>
 			<html lang="en">
@@ -177,7 +179,7 @@ export class ComponentStatePanel {
 				<meta http-equiv="Content-Security-Policy"
 					content="
 						default-src 'none';
-						img-src ${webview.cspSource} https:;
+						img-src ${webview.cspSource} https: data:;
 						style-src ${webview.cspSource};
 						script-src 'nonce-${nonce}';
 					"
@@ -185,6 +187,7 @@ export class ComponentStatePanel {
 				<link rel="stylesheet" type="text/css" href="${stylesUri}">
 				<title>${ComponentStatePanel.NAME}</title>
 				<meta name="diagram-type" content="state" />
+				<meta name="diagram-bg" content="${bgColor}" />
 			</head>
 			<body>
 				<div id="root"></div>
@@ -197,13 +200,6 @@ export class ComponentStatePanel {
 		`;
 	}
 
-	/**
-	 * Sets up an event listener to listen for messages passed from the webview context and
-	 * executes code based on the message that is recieved.
-	 *
-	 * @param webview A reference to the extension webview
-	 * @param context A reference to the extension context
-	 */
 	private webviewMessageListener(message: any) {
 		const { type, data } = message;
 
@@ -219,6 +215,10 @@ export class ComponentStatePanel {
 					// console.debug(pos)
 					jumpToPosition(uri, pos.line - 1, pos.column - 1);
 				}
+				return;
+
+			case "onDiagramImage":
+				void saveDiagramImage(data, componentStateCache);
 				return;
 		}
 	}

@@ -1,7 +1,6 @@
 import { VSCodePanels, VSCodePanelTab, VSCodePanelView } from '@vscode/webview-ui-toolkit/react';
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import StateDiagram from '@/app@diagrams/state/StateDiagram';
-import Tests from '@/app@components/Tests';
 import Debug from '@/app@components/Debug';
 import type { Message } from '@react-diagrams/core/app@vscode';
 import { vscode, type UpdatePayload } from '@/app@vscode/api';
@@ -59,12 +58,6 @@ function App() {
 						<p>This is a sample details tab. Add selected node metadata or component state summaries here.</p>
 					</div>
 				</VSCodePanelView>
-
-				{/* <VSCodePanelView id="tests">
-					<div className="p-4 text-sm leading-6 text-(--vscode-descriptionForeground)">
-						<Tests />
-					</div>
-				</VSCodePanelView> */}
 
 				{showDebugTab && (
 					<VSCodePanelView id="debug">

@@ -1,6 +1,8 @@
 import crypto from "crypto";
-import { normalize } from "path";
-import vscode, { Position, Selection, TextDocumentShowOptions, TextEditorRevealType, Uri, Webview } from "vscode";
+import { basename, dirname, extname, normalize } from "path";
+import vscode, { Position, Selection, TextDocumentShowOptions, TextEditorRevealType, Uri, Webview, window, workspace } from "vscode";
+import { ParsingImageCache } from "./cache";
+import decodeDataUrl from "data-urls";
 
 export function getNonce(size = 11) {
 	return crypto.randomBytes(size).toString("hex");
@@ -21,16 +23,46 @@ export async function jumpToPosition(file: Uri | string, line: number, col: numb
 	const pos = new Position(line, col);
 	const selection = new Selection(pos, pos);
 
-	let existingEditor = vscode.window.visibleTextEditors.find(editor => editor.document.uri.fsPath == uri.fsPath);
+	let existingEditor = window.visibleTextEditors.find(editor => editor.document.uri.fsPath == uri.fsPath);
 
 	if (existingEditor)
-		existingEditor.selection = new vscode.Selection(pos, pos.translate(0, selectCount));
+		existingEditor.selection = new Selection(pos, pos.translate(0, selectCount));
 	else {
-		existingEditor = await vscode.window.showTextDocument(uri, {
+		existingEditor = await window.showTextDocument(uri, {
 			selection: selection,
 			...options
 		});
 	}
 	
 	existingEditor.revealRange(selection, TextEditorRevealType.InCenter);
+}
+
+export async function saveDiagramImage(data: { dataUrl?: string; }, cache: ParsingImageCache<any>) {
+	const document = cache.getCurrentDocument();
+	if (!document) {
+		window.showWarningMessage("No active React component file found for this diagram image.");
+		return;
+	}
+	
+	const image = decodeDataUrl(data.dataUrl ?? "");
+	if (!image) {
+		window.showWarningMessage("Could not create the diagram image.");
+		return;
+	}
+
+	const cachedImage = cache.updateImage(document, image.body, image.mimeType.toString());
+	const fileName = `${basename(document.uri.fsPath, extname(document.uri.fsPath))}.state-diagram.png`;
+	const defaultUri = Uri.joinPath(Uri.file(dirname(document.uri.fsPath)), fileName);
+	const targetUri = await window.showSaveDialog({
+		defaultUri,
+		filters: { "PNG Image": ["png"] },
+		saveLabel: "Save Diagram Image",
+		title: "Save State Diagram Image",
+	});
+
+	if (!targetUri)
+		return;
+
+	await workspace.fs.writeFile(targetUri, cachedImage);
+	window.showInformationMessage(`Diagram image saved to ${targetUri.fsPath}`);
 }
