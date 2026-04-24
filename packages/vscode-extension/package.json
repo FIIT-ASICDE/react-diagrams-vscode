@@ -75,6 +75,30 @@
             "Combination of POLYLINE and ORTHOGONAL."
           ],
           "description": "Specifies the routing algorithm for transitions in the state diagram."
+        },
+        "state.diagram.chatParticipantCapabilities": {
+          "type": "array",
+          "description": "Select the State Diagram chat participant capabilities.",
+          "uniqueItems": true,
+          "default": ["code", "diagram"],
+          "items": {
+            "type": "string",
+            "enum": [
+              "code",
+              "diagram",
+              "diagramImage"
+            ],
+            "enumItemLabels": [
+              "Code",
+              "Diagram",
+              "Diagram Image"
+            ],
+            "enumDescriptions": [
+              "Enable participant to view current source file.",
+              "Enable participant to utilize serialized diagram representation.",
+              "Enable participant to view diagram as image."
+            ]
+          }
         }
       }
     }
