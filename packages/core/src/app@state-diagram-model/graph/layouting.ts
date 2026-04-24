@@ -1,6 +1,7 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode } from 'elkjs/lib/elk-api';
 import type { StateGraphNode, StateMutatingFunction, StateVariable } from '../types';
+import { LayoutOptions } from './ElkLayoutOptions';
 
 const elk = new ELK();
 
@@ -29,7 +30,7 @@ const LAYOUT = {
 
 export const STATE_DIAGRAM_LAYOUT = LAYOUT;
 
-export const ELK_OPTIONS = {
+export const ELK_OPTIONS: LayoutOptions = {
 	'elk.algorithm': 'layered',
 	'elk.direction': 'DOWN',
 
@@ -42,10 +43,10 @@ export const ELK_OPTIONS = {
 	'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
 	'elk.layered.feedbackEdges': 'true',
 
-	"org.eclipse.elk.spacing.edgeNode": "32",
-	"org.eclipse.elk.layered.spacing.edgeNodeBetweenLayers": "20",
-	"org.eclipse.elk.spacing.portConnection": "30", // dist edge goes down from node
-	'org.eclipse.elk.layered.allowNonFlowPortsToSwitchSides': 'true',
+	"elk.spacing.edgeNode": "32",
+	"elk.layered.spacing.edgeNodeBetweenLayers": "20",
+	"elk.spacing.portConnection": "30", // dist edge goes down from node
+	'elk.layered.allowNonFlowPortsToSwitchSides': 'true',
 	'elk.portConstraints': 'FIXED_SIDE',
 	'elk.edgeRouting': 'POLYLINE',
 
@@ -59,7 +60,7 @@ export const ELK_OPTIONS = {
 	// 'elk.layered.edgeLabels.centerLabelPlacementStrategy': 'MEDIAN_SEGMENT',
 };
 
-export const ELK_BOX_ROW_OPTIONS = {
+export const ELK_BOX_ROW_OPTIONS: LayoutOptions = {
 	'elk.algorithm': 'layered',
 	'elk.direction': 'DOWN',
 	'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
@@ -75,10 +76,10 @@ export function getGraphNodeSize({ nodeType, kind, ...node }: StateGraphNode) {
 	return { width: 38, height: 38 };
 }
 
-export async function layoutMutator(mutator: StateMutatingFunction, elkLayout = {}) {
+export async function layoutMutator(mutator: StateMutatingFunction, elkLayout: LayoutOptions = {}) {
 	const layoutOptions = { ...ELK_OPTIONS, ...elkLayout };
 	if (mutator.nodes.length < 4)
-		layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] = `${+layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] / 2}`;
+		layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] = `${+(layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] ?? 1) / 2}`;
 
 	const graph = {
 		id: `elk-${mutator.id}`,
@@ -135,17 +136,9 @@ export async function layoutBoxRow<T extends ElkNode>(items: T[], { gap, padding
 	};
 }
 
-export async function layoutStateVariable(stateVariable: StateVariable) {
+export async function layoutStateVariable(stateVariable: StateVariable, elkLayout: LayoutOptions = {}) {
 	const mutators = stateVariable.mutators ?? [];
-	// if (!mutators?.length) {
-	// 	return {
-	// 		...stateVariable,
-	// 		width: LAYOUT.state.minWidth,
-	// 		height: LAYOUT.state.minHeight,
-	// 	};
-	// }
-
-	const mutatorLayouts = await Promise.all(mutators.map(layoutMutator));
+	const mutatorLayouts = await Promise.all(mutators.map(mut => layoutMutator(mut, elkLayout)));
 
 	const { layoutedItems: layoutedMutators, width, height } = await layoutBoxRow(mutatorLayouts, {
 		gap: LAYOUT.mutator.gap,

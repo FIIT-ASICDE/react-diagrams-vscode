@@ -8,14 +8,14 @@ export type StateDiagramProps = {
 	model?: StateDiagram;
 };
 
-export async function renderXyFlow(model?: StateDiagram) {
+export async function renderXyFlow(model?: StateDiagram, transitionRouting: string = 'POLYLINE') {
 	const nodes: Node[] = [];
 	const edges: Edge[] = [];
 
 	if (!model?.stateVariables?.length)
 		return { nodes, edges };
 
-	const stateVariableLayouts = await Promise.all(model.stateVariables.map(layoutStateVariable));
+	const stateVariableLayouts = await Promise.all(model.stateVariables.map(stateVar => layoutStateVariable(stateVar, { 'elk.edgeRouting': transitionRouting })));
 	const { layoutedItems: layoutedStateVariables } = await layoutBoxRow(stateVariableLayouts, { gap: LAYOUT.state.gap, padding: elkPadd(LAYOUT.canvasPadding, LAYOUT.canvasPadding) });
 
 	for (const { id: stateVarId, layoutedMutators, ...stateVar } of layoutedStateVariables) {
@@ -25,7 +25,7 @@ export async function renderXyFlow(model?: StateDiagram) {
 			position: { x: stateVar.x, y: stateVar.y },
 			data: {
 				...stateVar,
-				name: <div className='text-white'><b>{stateVar.name}</b> : {stateVar.hook}</div>, 
+				label: <div className='text-white'><b>{stateVar.name}</b> : {stateVar.hook}</div>, 
 				color: getColor(stateVar.name, 24),
 				children: !layoutedMutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No mutators found</p> 
 			} as GroupNodeProps,
@@ -43,16 +43,15 @@ export async function renderXyFlow(model?: StateDiagram) {
 				parentId: stateVarId,
 				extent: 'parent',
 				data: { 
+					label: <div className='text-white'>{mutatorLayout.name}<i>{mutatorLayout.type == 'arrow-function' ? `((${mutatorArgs}) =>` : `(${mutatorArgs})`}</i></div>, 
+					color: getColor(mutatorLayout.name, 40),
 					...mutatorLayout, 
-					name: <div className='text-white'>{mutatorLayout.name}<i>{mutatorLayout.type == 'arrow-function' ? `((${mutatorArgs}) =>` : `(${mutatorArgs})`}</i></div>, 
-					color: getColor(mutatorLayout.name, 40)
 				} as GroupNodeProps,
 				width: mutatorLayout.width,
 				height: mutatorLayout.height,
 				className: 'rounded-lg border-0 text-(--vscode-foreground)',
 			});
 
-			const mutatorNodes = new Map<string, Node>();
 			for (const { id: nodeId, ...graphNode } of mutatorLayout.layoutedNodes) {
 				const { x, y, width, height } = graphNode;
 				const visual = getGraphNodeVisual(graphNode);
@@ -75,21 +74,22 @@ export async function renderXyFlow(model?: StateDiagram) {
 					draggable: true,
 				}
 				nodes.push(node);
-				mutatorNodes.set(nodeId, node);
 			}
 
 			for (const { id, fromNodeId: source, toNodeId: target, kind, ...transition } of mutatorLayout.transitions) {
 				if (!source || !target)
 					continue;
-
-				console.log(transition)
-
-				const labelPos = transition.labels?.map(({ x = 0, y = 0 }) => ({ x: x + mutatorLayout.x + stateVar.x, y: y + mutatorLayout.y + stateVar.y }))[0];
-				const section = transition.sections?.[0];
-				const pathPoints = section && [null, ...(section.bendPoints ?? []), null] // null = autoconnect to node
-					.map(p => p && ({ x: p.x + mutatorLayout.x + stateVar.x, y: p.y + mutatorLayout.y + stateVar.y })); // handle relative/abs pos...
+				// console.debug(transition)
 
 				const loopBack = kind == 'loop';
+
+				const { bendPoints = [], endPoint } = transition.sections?.[0] ?? {};
+				if (transitionRouting == 'SPLINES' && loopBack)
+					bendPoints.pop();
+				const pathPoints = endPoint && [null, ...bendPoints, transitionRouting != 'ORTHOGONAL' ? null : endPoint] // none = autoconnect to node
+					.map(p => p && ({ x: p.x + mutatorLayout.x + stateVar.x, y: p.y + mutatorLayout.y + stateVar.y })); // handle relative/abs pos...
+
+				const labelPos = transition.labels?.map(({ x = 0, y = 0 }) => ({ x: x + mutatorLayout.x + stateVar.x, y: y + mutatorLayout.y + stateVar.y }))[0];
 				edges.push({
 					id,
 					source,

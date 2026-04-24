@@ -4,6 +4,8 @@ import { Handle, Position, type NodeTypes } from '@xyflow/react';
 import { getColor } from '@/app@utils/utils';
 import { commonSourceHandles, commonTargetHandles } from '@/app@diagrams/activity/diagram-rendering/nodeTypes';
 
+const labelClass = "leading-none font-semibold px-0.75 py-0.5 rounded"
+
 export type StateVisualNodeData = {
 	label?: string;
 	color?: string;
@@ -32,7 +34,7 @@ function CenteredLabel({ label, color, background }: { label?: string,  color?: 
 
 	return (
 		<span
-			className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden text-ellipsis whitespace-nowrap text-center text-[10px] leading-none font-semibold z-50 px-0.75 py-0.5 rounded"
+			className={`pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden text-ellipsis whitespace-nowrap text-center text-[10px] z-50 ${labelClass}`}
 			style={{ color: color ?? 'var(--vscode-foreground)', background }}
 		>
 			{label}
@@ -49,7 +51,7 @@ const StateUpdateNode = memo(({ data }: RFNodeProps) => {
 	return (
 		<NodeShell width={width} height={height}>
 			<div
-				className="flex items-center justify-center box-border rounded-lg border px-2 text-center text-[12px]"
+				className="flex items-center justify-center box-border rounded-lg border px-2 text-center text-[12.5px]"
 				style={{
 					width,
 					height,
@@ -58,7 +60,7 @@ const StateUpdateNode = memo(({ data }: RFNodeProps) => {
 					color: 'white',
 				}}
 			>
-				{data.label}
+				<span className={`${labelClass}`} style={{ color: "white", background: data.color }}>{data.label}</span>
 			</div>
 		</NodeShell>
 	);
@@ -184,12 +186,12 @@ export const nodeTypes: NodeTypes = {
 
 const NODE_COLORS = {
 	neutral: 'color-mix(in srgb, #454545 88%, transparent)',
-	decision: 'color-mix(in srgb, #24af78 64%, transparent)',
-	tryDecision: 'color-mix(in srgb, #af6b07 64%, transparent)',
-	switchDecision: 'color-mix(in srgb, #7c9b2e 64%, transparent)',
-	loopDecision: 'color-mix(in srgb, #008f9e 64%, transparent)',
+	decision: 'color-mix(in srgb, #24af78 88%, transparent)',
+	tryDecision: 'color-mix(in srgb, #af6b07 88%, transparent)',
+	switchDecision: 'color-mix(in srgb, #7c9b2e 88%, transparent)',
+	loopDecision: 'color-mix(in srgb, #008f9e 88%, transparent)',
 	throw: 'var(--vscode-errorForeground, #ef4444)',
-	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 80, blockedHueRanges: [ [350, 20] ] })} 80%, transparent)`,
+	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 75, blockedHueRanges: [ [350, 20] ] })} 88%, transparent)`,
 };
 
 export function getNodeColor(type: string, text: string) {

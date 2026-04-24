@@ -71,6 +71,10 @@ export class ParsingCache<T = any> {
 		const normPath = normalizeFilePath(filePath.uri.fsPath);
 		return this.entries.get(normPath) ?? this.updateEntry(filePath);
 	}
+
+	clear() {
+		this.entries.clear();
+	}
 }
 
 export type ImageCacheEntry = CacheEntry<Uint8Array, Uint8Array> & {
@@ -87,6 +91,11 @@ export class ParsingImageCache<T = any> extends ParsingCache<T> {
 		if (forceUpdate || cached?.documentVersion != document.version)
 			this.images.delete(cacheKey);
 		return super.updateEntry(document, rootPath, forceUpdate);
+	}
+
+	override clear() {
+		super.clear();
+		this.images.clear();
 	}
 
 	updateImageEntry(document: TextDocument, data: Uint8Array, mediaType = "image/png", forceUpdate = false) {

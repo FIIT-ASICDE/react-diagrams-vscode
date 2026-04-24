@@ -33,10 +33,12 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	const modelCacheKey = useMemo(() => JSON.stringify(model ?? null), [model]);
 	const hasModel = useMemo(() => Boolean(model?.stateVariables?.length), [model]);
 
+	const { bgColor, transitionRouting } = (window as any).CONFIG;
+
 	useEffect(() => {
 		let cancelled = false;
 
-		renderXyFlow(model).then((newState) => {
+		renderXyFlow(model, transitionRouting).then((newState) => {
 			if (!cancelled) {
 				setNodes(newState.nodes);
 				setEdges(newState.edges);
@@ -80,7 +82,6 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		}
 	}
 
-	const diagramBg = document.querySelector('meta[name="diagram-bg"]')?.getAttribute('content');
 	return (
 		<div className="h-full w-full">
 			{!hasModel && (
@@ -103,7 +104,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 				}}
 				className='floating-edges'
 				onNodeDoubleClick={onDoubleClick}
-				style={{ background: diagramBg == 'light' ? '#e8eaed' : (diagramBg == 'dark' ? '#1f1f1f' : undefined) }}
+				style={{ background: bgColor == 'light' ? '#e8eaed' : (bgColor == 'dark' ? '#1f1f1f' : undefined) }}
 			>
 				{hasModel && <>
 					<VSCodeButton

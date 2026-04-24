@@ -60,6 +60,21 @@
             "Ignore theme and use a dark background."
           ],
           "description": "The background color mode of State Diagram."
+        },
+        "state.diagram.transitionRouting": {
+          "type": "string",
+          "default": "POLYLINE",
+          "enum": [
+            "POLYLINE",
+            "ORTHOGONAL",
+            "SPLINES"
+          ],
+          "enumDescriptions": [
+            "Shorter transition with graceful turns.",
+            "Longer transition with sharp turns.",
+            "Combination of POLYLINE and ORTHOGONAL."
+          ],
+          "description": "Specifies the routing algorithm for transitions in the state diagram."
         }
       }
     }

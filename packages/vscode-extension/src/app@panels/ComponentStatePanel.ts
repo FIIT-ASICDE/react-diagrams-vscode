@@ -167,9 +167,7 @@ export class ComponentStatePanel {
 		const scriptUri = getUri(webview, extensionUri, [ComponentStatePanel.WEBVIEW_DIR, "assets", "index.js"]); // The JS file from the React webview
 
 		const nonce = getNonce();
-
 		const config = workspace.getConfiguration('state.diagram');
-		const bgColor = config.get<string>('backgroundColor');
 		return /*html*/ `
 			<!DOCTYPE html>
 			<html lang="en">
@@ -187,7 +185,12 @@ export class ComponentStatePanel {
 				<link rel="stylesheet" type="text/css" href="${stylesUri}">
 				<title>${ComponentStatePanel.NAME}</title>
 				<meta name="diagram-type" content="state" />
-				<meta name="diagram-bg" content="${bgColor}" />
+				<script nonce="${nonce}">
+					window.CONFIG = ${JSON.stringify({ 
+						bgColor: config.get<string>('backgroundColor'), 
+						transitionRouting: config.get<string>('transitionRouting') 
+					})};
+				</script>
 			</head>
 			<body>
 				<div id="root"></div>
