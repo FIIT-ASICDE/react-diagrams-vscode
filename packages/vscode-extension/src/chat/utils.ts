@@ -27,4 +27,4 @@ export async function selectModelByType(modelType: string): Promise<vscode.Langu
     return fallbackModel;
 }
 
-export const MODEL_TYPE = "copilot";
+

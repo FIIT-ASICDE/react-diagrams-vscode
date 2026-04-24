@@ -22,7 +22,6 @@ import type {
 } from "@react-diagrams/core/app@vscode";
 import { isActivityWebviewToExtensionMessage } from "@react-diagrams/core/app@vscode";
 import { Node, Edge } from "@xyflow/react";
-import { enrichSkeletonWithDiagram } from "../chat/aiService";
 import type { DiagramContext } from "../chat/types";
 import * as ts from "typescript";
 
@@ -31,12 +30,37 @@ type ActivityGraph = {
 	edges: Edge[];
 };
 
+/**
+ * The source of the currently displayed diagram.
+ * - `document`: diagram is derived from an open text document and follows its edits.
+ * - `snippet`: diagram comes from an ad-hoc source text (AI, node preview). Editor edits do NOT overwrite it.
+ * - `none`: nothing is shown yet.
+ */
+type DiagramSource =
+	| { kind: "document"; uri: Uri }
+	| { kind: "snippet"; text: string; sourceFile?: string }
+	| { kind: "none" };
 
+/**
+ * What the panel should do once the webview signals it is ready.
+ * This avoids race conditions when the webview boots while an AI-provided
+ * snippet is already in flight.
+ */
+type PendingIntent =
+	| { kind: "followActiveEditor" }
+	| { kind: "showSnippet"; text: string; sourceFile?: string }
+	| { kind: "none" };
 
 function isVisibleGraphMessage(
 	message: unknown
 ): message is { type: "diagram/visibleGraph"; data: ActivityGraphPayload } {
 	return !!message && typeof message === "object" && (message as { type?: unknown }).type === "diagram/visibleGraph";
+}
+
+function isGraphSnapshotMessage(
+	message: unknown
+): message is { type: "diagram/graphSnapshot"; data: ActivityGraphPayload } {
+	return !!message && typeof message === "object" && (message as { type?: unknown }).type === "diagram/graphSnapshot";
 }
 
 function isWebviewReadyMessage(message: unknown): message is { type: "webview/ready" } {
@@ -56,30 +80,34 @@ export class ComponentActivityPanel {
 	private readonly panel: WebviewPanel;
 	private readonly disposables: Disposable[] = [];
 
-	private currentDocument?: TextDocument;
+	private diagramSource: DiagramSource = { kind: "none" };
+	private pendingIntent: PendingIntent = { kind: "followActiveEditor" };
+
 	private lastKnownActivityGraph?: ActivityGraph;
 	private lastVisibleActivityGraph?: ActivityGraph;
 	private lastDiagramImageDataUrl?: string;
-	private lastDiagramMessage?: ActivityExtensionToWebviewMessage;
 
 	private pendingImageRequest?: {
 		resolve: (dataUrl?: string) => void;
 		timeout: ReturnType<typeof setTimeout>;
 	};
 
+	private pendingGraphRequest?: {
+		resolve: (graph?: ActivityGraph) => void;
+		timeout: ReturnType<typeof setTimeout>;
+	};
+
 	private isWebviewReady = false;
-	private initResolver?: () => void;
+	private readyWaiters: Array<() => void> = [];
+
+	// ───────────────────────── Public static API ─────────────────────────
 
 	public static getCurrentActivityGraph(): ActivityGraph | undefined {
 		const current = ComponentActivityPanel.currentPanel?.lastKnownActivityGraph;
 		if (!current) {
 			return undefined;
 		}
-
-		return {
-			nodes: [...current.nodes],
-			edges: [...current.edges],
-		};
+		return { nodes: [...current.nodes], edges: [...current.edges] };
 	}
 
 	public static getCurrentVisibleActivityGraph(): ActivityGraph | undefined {
@@ -87,51 +115,31 @@ export class ComponentActivityPanel {
 		if (!current) {
 			return undefined;
 		}
-
-		return {
-			nodes: [...current.nodes],
-			edges: [...current.edges],
-		};
+		return { nodes: [...current.nodes], edges: [...current.edges] };
 	}
 
 	public static getCurrentDiagramImageDataUrl(): string | undefined {
 		return ComponentActivityPanel.currentPanel?.lastDiagramImageDataUrl;
 	}
 
-	private constructor(panel: WebviewPanel, extensionUri: Uri, initialDocument?: TextDocument) {
-		this.panel = panel;
-		this.currentDocument = this.toSupportedDocument(initialDocument) ?? this.getPreferredDocument();
-
-		this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
-		this.panel.webview.onDidReceiveMessage(this.webviewMessageListener, this, this.disposables);
-		this.panel.webview.html = this.getWebviewContent(this.panel.webview, extensionUri);
-
-		window.onDidChangeActiveTextEditor(
-			(editor) => this.handleActiveEditorChanged(editor),
-			null,
-			this.disposables
-		);
-
-		workspace.onDidChangeTextDocument(
-			(event) => this.handleDocumentChanged(event.document),
-			null,
-			this.disposables
-		);
-
-		this.postDiagramType();
-
-	}
-
 	public static render(extensionUri: Uri) {
 		const initialDocument = ComponentActivityPanel.getPreferredDocumentStatic();
 
 		if (ComponentActivityPanel.currentPanel) {
-			ComponentActivityPanel.currentPanel.currentDocument =
-				ComponentActivityPanel.currentPanel.toSupportedDocument(initialDocument) ??
-				ComponentActivityPanel.currentPanel.currentDocument;
+			const existing = ComponentActivityPanel.currentPanel;
+			existing.pendingIntent = { kind: "followActiveEditor" };
 
-			ComponentActivityPanel.currentPanel.panel.reveal(ViewColumn.One);
-			ComponentActivityPanel.currentPanel.postDiagramType();
+			const doc = existing.toSupportedDocument(initialDocument);
+			if (doc) {
+				existing.diagramSource = { kind: "document", uri: doc.uri };
+			}
+
+			existing.panel.reveal(ViewColumn.One);
+			existing.postDiagramType();
+
+			if (existing.isWebviewReady) {
+				void existing.publishCurrentDocument();
+			}
 			return;
 		}
 
@@ -157,6 +165,9 @@ export class ComponentActivityPanel {
 		sourceText: string,
 		sourceFile?: string
 	): Promise<void> {
+		// 1) Make sure the panel exists. If we are creating it, pre-set the intent
+		//    BEFORE construction so the first `webview/ready` handles the snippet
+		//    instead of publishing the active editor.
 		if (!ComponentActivityPanel.currentPanel) {
 			ComponentActivityPanel.render(extensionUri);
 		}
@@ -166,32 +177,68 @@ export class ComponentActivityPanel {
 			throw new Error("Activity panel could not be created.");
 		}
 
-		if (sourceFile) {
-			const matchingDocument = workspace.textDocuments.find(
-				(doc) => doc.uri.scheme === "file" && doc.uri.fsPath === sourceFile
-			);
-			if (matchingDocument) {
-				panel.currentDocument = matchingDocument;
-			}
+		panel.diagramSource = { kind: "snippet", text: sourceText, sourceFile };
+		panel.pendingIntent = { kind: "showSnippet", text: sourceText, sourceFile };
+
+		panel.panel.reveal(ViewColumn.One);
+
+		// 2) If the webview is already up, run the intent immediately.
+		//    Otherwise onWebviewReady() will run it when `webview/ready` arrives.
+		if (panel.isWebviewReady) {
+			await panel.runPendingIntent();
+		}
+	}
+
+	// ───────────────────────── Construction / disposal ─────────────────────────
+
+	private constructor(panel: WebviewPanel, extensionUri: Uri, initialDocument?: TextDocument) {
+		this.panel = panel;
+
+		const initialDoc = this.toSupportedDocument(initialDocument) ?? this.getPreferredDocument();
+		if (initialDoc) {
+			this.diagramSource = { kind: "document", uri: initialDoc.uri };
 		}
 
-		await panel.init();
-		await panel.replaceDiagramFromSource(sourceText, sourceFile);
-		panel.panel.reveal(ViewColumn.One);
+		// NOTE: pendingIntent is left at its default `followActiveEditor`.
+		// showDiagramFromSourceText() may override it before the webview boots.
+
+		this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+		this.panel.webview.onDidReceiveMessage(this.webviewMessageListener, this, this.disposables);
+		this.panel.webview.html = this.getWebviewContent(this.panel.webview, extensionUri);
+
+		window.onDidChangeActiveTextEditor(
+			(editor) => this.handleActiveEditorChanged(editor),
+			null,
+			this.disposables
+		);
+
+		workspace.onDidChangeTextDocument(
+			(event) => this.handleDocumentChanged(event.document),
+			null,
+			this.disposables
+		);
 	}
 
 	public dispose() {
 		ComponentActivityPanel.currentPanel = undefined;
 		this.isWebviewReady = false;
-		this.initResolver = undefined;
-		this.lastDiagramMessage = undefined;
-		this.lastDiagramImageDataUrl = undefined;
+		this.readyWaiters = [];
 
 		if (this.pendingImageRequest) {
 			clearTimeout(this.pendingImageRequest.timeout);
 			this.pendingImageRequest.resolve(undefined);
 			this.pendingImageRequest = undefined;
 		}
+
+		if (this.pendingGraphRequest) {
+			clearTimeout(this.pendingGraphRequest.timeout);
+			this.pendingGraphRequest.resolve(undefined);
+			this.pendingGraphRequest = undefined;
+		}
+
+		this.lastDiagramImageDataUrl = undefined;
+		this.pendingIntent = { kind: "none" };
+		this.diagramSource = { kind: "none" };
 
 		this.panel.dispose();
 
@@ -200,6 +247,8 @@ export class ComponentActivityPanel {
 			disposable?.dispose();
 		}
 	}
+
+	// ───────────────────────── Outbound messages ─────────────────────────
 
 	public postMessage(message: ActivityExtensionToWebviewMessage) {
 		void this.panel.webview.postMessage(message);
@@ -213,9 +262,7 @@ export class ComponentActivityPanel {
 	}
 
 	public async requestDiagramImageDataUrl(timeoutMs = 8000): Promise<string | undefined> {
-		if (!this.isWebviewReady) {
-			await this.init();
-		}
+		await this.waitUntilReady();
 
 		if (this.pendingImageRequest) {
 			clearTimeout(this.pendingImageRequest.timeout);
@@ -227,31 +274,104 @@ export class ComponentActivityPanel {
 
 		return new Promise<string | undefined>((resolve) => {
 			const timeout = setTimeout(() => {
-				if (!this.pendingImageRequest) {
-					resolve(this.lastDiagramImageDataUrl);
-					return;
-				}
-
 				const pending = this.pendingImageRequest;
 				this.pendingImageRequest = undefined;
-				pending.resolve(this.lastDiagramImageDataUrl);
+				(pending?.resolve ?? resolve)(this.lastDiagramImageDataUrl);
 			}, timeoutMs);
 
-			this.pendingImageRequest = {
-				resolve,
-				timeout,
-			};
-
+			this.pendingImageRequest = { resolve, timeout };
 			this.requestDiagramImage();
 		});
 	}
+
+	/**
+	 * Ask the webview for its current in-memory graph (possibly with unsaved edits)
+	 * and refresh `lastVisibleActivityGraph`. Useful right before feeding the graph
+	 * to the AI model.
+	 */
+	public async refreshVisibleGraph(timeoutMs = 2000): Promise<ActivityGraph | undefined> {
+		if (!this.isWebviewReady) {
+			return this.lastVisibleActivityGraph;
+		}
+
+		if (this.pendingGraphRequest) {
+			clearTimeout(this.pendingGraphRequest.timeout);
+			this.pendingGraphRequest.resolve(undefined);
+			this.pendingGraphRequest = undefined;
+		}
+
+		return new Promise<ActivityGraph | undefined>((resolve) => {
+			const timeout = setTimeout(() => {
+				const pending = this.pendingGraphRequest;
+				this.pendingGraphRequest = undefined;
+				(pending?.resolve ?? resolve)(this.lastVisibleActivityGraph);
+			}, timeoutMs);
+
+			this.pendingGraphRequest = { resolve, timeout };
+			this.postMessage({
+				type: "diagram/requestGraph",
+				data: {},
+			} as unknown as ActivityExtensionToWebviewMessage);
+		});
+	}
+
+	// ───────────────────────── Ready handling ─────────────────────────
+
+	private waitUntilReady(): Promise<void> {
+		if (this.isWebviewReady) {
+			return Promise.resolve();
+		}
+		return new Promise<void>((resolve) => {
+			this.readyWaiters.push(resolve);
+		});
+	}
+
+	private async onWebviewReady() {
+		if (this.isWebviewReady) {
+			return;
+		}
+		this.isWebviewReady = true;
+
+		// Always tell the webview what kind of diagram it is rendering.
+		this.postDiagramType();
+
+		// Drain ready waiters FIRST so any code awaiting readiness can schedule work.
+		const waiters = this.readyWaiters;
+		this.readyWaiters = [];
+		for (const w of waiters) {
+			w();
+		}
+
+		// Then run whatever the panel was asked to show initially.
+		await this.runPendingIntent();
+	}
+
+	private async runPendingIntent() {
+		const intent = this.pendingIntent;
+		this.pendingIntent = { kind: "none" };
+
+		switch (intent.kind) {
+			case "followActiveEditor":
+				await this.publishCurrentDocument();
+				return;
+
+			case "showSnippet":
+				await this.replaceDiagramFromSource(intent.text, intent.sourceFile);
+				return;
+
+			case "none":
+			default:
+				return;
+		}
+	}
+
+	// ───────────────────────── Document tracking ─────────────────────────
 
 	private static getPreferredDocumentStatic(): TextDocument | undefined {
 		const active = window.activeTextEditor?.document;
 		if (active && active.uri.scheme === "file") {
 			return active;
 		}
-
 		const visible = window.visibleTextEditors.find((editor) => editor.document.uri.scheme === "file");
 		return visible?.document;
 	}
@@ -270,15 +390,13 @@ export class ComponentActivityPanel {
 			return visible;
 		}
 
-		const open = workspace.textDocuments.find((doc) => this.isSupportedDocument(doc));
-		return open;
+		return workspace.textDocuments.find((doc) => this.isSupportedDocument(doc));
 	}
 
 	private toSupportedDocument(document?: TextDocument): TextDocument | undefined {
 		if (!document) {
 			return undefined;
 		}
-
 		return this.isSupportedDocument(document) ? document : undefined;
 	}
 
@@ -286,49 +404,72 @@ export class ComponentActivityPanel {
 		if (!document) {
 			return false;
 		}
-
 		if (document.uri.scheme !== "file") {
 			return false;
 		}
-
 		const extension = path.extname(document.uri.fsPath).toLowerCase();
 		return [".ts", ".tsx", ".js", ".jsx"].includes(extension);
 	}
 
 	private handleActiveEditorChanged(editor: TextEditor | undefined) {
-		const document = this.toSupportedDocument(editor?.document);
-		if (document) {
-			this.currentDocument = document;
+		// Only update the tracked document while we are in "document" mode.
+		// If a snippet (AI / preview) is currently displayed, ignore editor changes.
+		if (this.diagramSource.kind !== "document") {
+			return;
 		}
+
+		const document = this.toSupportedDocument(editor?.document);
+		if (!document) {
+			return;
+		}
+
+		this.diagramSource = { kind: "document", uri: document.uri };
 	}
 
-	private getCurrentDocument(): TextDocument | undefined {
-		return this.currentDocument ?? this.getPreferredDocument();
-	}
-
-	private getCurrentFilePath(): string | undefined {
-		return this.getCurrentDocument()?.uri.fsPath;
-	}
-
-	private sendDiagram(message: ActivityExtensionToWebviewMessage) {
-		this.lastDiagramMessage = message;
-
+	private handleDocumentChanged(document: TextDocument) {
 		if (!this.isWebviewReady) {
 			return;
 		}
 
-		void this.panel.webview.postMessage(message);
-	}
-
-	private async init(): Promise<void> {
-		if (this.isWebviewReady) {
+		// Ignore editor edits while a snippet is displayed.
+		if (this.diagramSource.kind !== "document") {
 			return;
 		}
 
-		return new Promise<void>((resolve) => {
-			this.initResolver = resolve;
-		});
+		if (document.uri.toString() !== this.diagramSource.uri.toString()) {
+			return;
+		}
+
+		if (!this.isSupportedDocument(document)) {
+			return;
+		}
+
+		void this.publishCurrentDocument();
 	}
+
+	private getCurrentDocument(): TextDocument | undefined {
+		if (this.diagramSource.kind === "document") {
+			const match = workspace.textDocuments.find(
+				(doc) => doc.uri.toString() === (this.diagramSource as { uri: Uri }).uri.toString()
+			);
+			if (match) {
+				return match;
+			}
+		}
+		return this.getPreferredDocument();
+	}
+
+	private getCurrentFilePath(): string | undefined {
+		if (this.diagramSource.kind === "document") {
+			return this.diagramSource.uri.fsPath;
+		}
+		if (this.diagramSource.kind === "snippet") {
+			return this.diagramSource.sourceFile;
+		}
+		return this.getCurrentDocument()?.uri.fsPath;
+	}
+
+	// ───────────────────────── Parsing / publishing ─────────────────────────
 
 	private postDiagramType() {
 		this.postMessage({
@@ -336,6 +477,134 @@ export class ComponentActivityPanel {
 			data: { diagramType: "activity" },
 		});
 	}
+
+	private async parseAndSendDiagram(sourceText: string, sourceFile?: string) {
+		const rootDir = sourceFile ? path.dirname(sourceFile) : ".";
+
+		try {
+			const parsedComponent = await parseActivityComponent(sourceText, rootDir);
+
+			this.lastKnownActivityGraph = {
+				nodes: parsedComponent.nodes,
+				edges: parsedComponent.edges,
+			};
+
+			this.postMessage({
+				type: "code/data",
+				data: {
+					nodes: parsedComponent.nodes,
+					edges: parsedComponent.edges,
+					sourceFile,
+				},
+			});
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : "Unable to build diagram from source.";
+
+			this.postMessage({
+				type: "code/error",
+				data: { message },
+			});
+		}
+	}
+
+	private async replaceDiagramFromSource(sourceText: string, sourceFile?: string) {
+		const normalizedSource = this.extractFunctionBodyIfWrapped(sourceText);
+		await this.parseAndSendDiagram(normalizedSource, sourceFile);
+	}
+
+	private async publishCurrentDocument() {
+		const document = this.getCurrentDocument();
+		if (!document) {
+			return;
+		}
+
+		this.diagramSource = { kind: "document", uri: document.uri };
+		await this.parseAndSendDiagram(document.getText(), document.uri.fsPath);
+	}
+
+	// ───────────────────────── Skeleton generation ─────────────────────────
+
+	public static async generateCodeFromCurrentDiagram(): Promise<string> {
+		const panel = ComponentActivityPanel.currentPanel;
+
+		if (!panel) {
+			throw new Error("Activity panel is not open.");
+		}
+
+		const graph =
+			await panel.refreshVisibleGraph(2000) ??
+			ComponentActivityPanel.getCurrentVisibleActivityGraph() ??
+			ComponentActivityPanel.getCurrentActivityGraph();
+
+		if (!graph || graph.nodes.length === 0) {
+			throw new Error("No activity diagram available.");
+		}
+
+		return panel.generateAndEnrichSkeletonFromDiagram(
+			graph.nodes,
+			graph.edges,
+			panel.getCurrentFilePath()
+		);
+	}
+
+	private async generateAndEnrichSkeletonFromDiagram(
+		nodes: Node[],
+		edges: Edge[],
+		activeFilePath?: string
+	): Promise<string> {
+		if (!nodes.length) {
+			void window.showWarningMessage("Cannot generate skeleton: the activity diagram has no nodes.");
+			return "";
+		}
+
+		const generatedCode = convertDiagramToCode(nodes, edges);
+
+		const generatedDocument = await workspace.openTextDocument({
+			language: "typescript",
+			content: generatedCode,
+		});
+
+		await window.showTextDocument(
+			generatedDocument,
+			ViewColumn.Beside,
+			true
+		);
+
+		return generatedCode; // 👈 toto je jediná dôležitá zmena
+	}
+
+	private buildDiagramContext(
+		availability: DiagramContext["availability"],
+		nodes: unknown[],
+		edges: unknown[]
+	): DiagramContext {
+		const nodeTypes = Array.from(
+			new Set(
+				nodes
+					.map((node) => {
+						if (!node || typeof node !== "object") {
+							return "unknown";
+						}
+						const maybeType = (node as { type?: unknown }).type;
+						return typeof maybeType === "string" && maybeType.trim() ? maybeType : "unknown";
+					})
+					.filter((value) => value !== "unknown")
+			)
+		).sort((left, right) => left.localeCompare(right));
+
+		const json = JSON.stringify({ nodes, edges }, null, 2);
+
+		return {
+			availability,
+			json,
+			nodeCount: nodes.length,
+			edgeCount: edges.length,
+			nodeTypes,
+		};
+	}
+
+	// ───────────────────────── AST helper (unchanged) ─────────────────────────
 
 	private extractFunctionBodyIfWrapped(sourceText: string): string {
 		const trimmed = sourceText.trim();
@@ -378,7 +647,6 @@ export class ComponentActivityPanel {
 			if (ts.isConstructorDeclaration(node)) {
 				return "constructor";
 			}
-
 			if (
 				ts.isFunctionDeclaration(node) ||
 				ts.isMethodDeclaration(node) ||
@@ -389,7 +657,6 @@ export class ComponentActivityPanel {
 			) {
 				return node.name?.getText(sourceFile) ?? "anonymous";
 			}
-
 			return "anonymous";
 		};
 
@@ -407,11 +674,9 @@ export class ComponentActivityPanel {
 			if (!body) {
 				return null;
 			}
-
 			if (ts.isBlock(body)) {
 				return body.statements.map((s) => s.getText(sourceFile));
 			}
-
 			return [`return ${body.getText(sourceFile)};`];
 		};
 
@@ -430,7 +695,6 @@ export class ComponentActivityPanel {
 
 			if (ts.isVariableStatement(node)) {
 				const results: ExtractedFn[] = [];
-
 				for (const decl of node.declarationList.declarations) {
 					if (decl.initializer && isSupportedFunctionLike(decl.initializer)) {
 						const statements = getBlockStatements(decl.initializer);
@@ -440,32 +704,27 @@ export class ComponentActivityPanel {
 						}
 					}
 				}
-
 				return results;
 			}
 
 			if (ts.isExpressionStatement(node)) {
 				return collectFunctions(node.expression);
 			}
-
 			if (ts.isParenthesizedExpression(node)) {
 				return collectFunctions(node.expression);
 			}
-
 			if (ts.isCallExpression(node)) {
 				return collectFunctions(node.expression);
 			}
 
 			if (ts.isObjectLiteralExpression(node)) {
 				const results: ExtractedFn[] = [];
-
 				for (const prop of node.properties) {
 					if (ts.isMethodDeclaration(prop) && prop.body) {
 						const statements = prop.body.statements.map((s) => s.getText(sourceFile));
 						results.push({ name: getNodeName(prop), statements });
 						continue;
 					}
-
 					if (ts.isPropertyAssignment(prop) && isSupportedFunctionLike(prop.initializer)) {
 						const statements = getBlockStatements(prop.initializer);
 						if (statements) {
@@ -473,13 +732,11 @@ export class ComponentActivityPanel {
 						}
 					}
 				}
-
 				return results;
 			}
 
 			if (ts.isClassDeclaration(node) || ts.isClassExpression(node)) {
 				const results: ExtractedFn[] = [];
-
 				for (const member of node.members) {
 					if (isSupportedFunctionLike(member)) {
 						const statements = getBlockStatements(member);
@@ -488,7 +745,6 @@ export class ComponentActivityPanel {
 						}
 						continue;
 					}
-
 					if (
 						ts.isPropertyDeclaration(member) &&
 						member.initializer &&
@@ -500,7 +756,6 @@ export class ComponentActivityPanel {
 						}
 					}
 				}
-
 				return results;
 			}
 
@@ -512,184 +767,15 @@ export class ComponentActivityPanel {
 		if (extracted.length === 0) {
 			return trimmed;
 		}
-
 		if (extracted.length === 1) {
 			return extracted[0].statements.join("\n");
 		}
-
 		return extracted
 			.map(({ name, statements }) => `function ${name}() {\n${statements.join("\n")}\n}`)
 			.join("\n\n");
 	}
 
-	private handleDocumentChanged(document: TextDocument) {
-		if (!this.isWebviewReady) {
-			return;
-		}
-
-		if (!this.currentDocument) {
-			return;
-		}
-
-		if (document.uri.toString() !== this.currentDocument.uri.toString()) {
-			return;
-		}
-
-		if (!this.isSupportedDocument(document)) {
-			return;
-		}
-
-		this.currentDocument = document;
-		void this.publishCurrentDocument();
-	}
-
-	private async parseAndSendDiagram(sourceText: string, sourceFile?: string) {
-		const resolvedSourceFile = sourceFile ?? this.getCurrentFilePath();
-		const rootDir = resolvedSourceFile ? path.dirname(resolvedSourceFile) : ".";
-
-		try {
-			const parsedComponent = await parseActivityComponent(sourceText, rootDir);
-
-			this.lastKnownActivityGraph = {
-				nodes: parsedComponent.nodes,
-				edges: parsedComponent.edges,
-			};
-
-			this.sendDiagram({
-				type: "code/data",
-				data: {
-					nodes: parsedComponent.nodes,
-					edges: parsedComponent.edges,
-					sourceFile: resolvedSourceFile,
-				},
-			});
-		} catch (error) {
-			const message =
-				error instanceof Error
-					? error.message
-					: "Unable to build diagram from source.";
-
-			this.postMessage({
-				type: "code/error",
-				data: { message },
-			});
-		}
-	}
-
-	private async replaceDiagramFromSource(sourceText: string, sourceFile?: string) {
-		const normalizedSource = this.extractFunctionBodyIfWrapped(sourceText);
-		await this.parseAndSendDiagram(normalizedSource, sourceFile);
-	}
-
-	private async publishCurrentDocument() {
-		const document = this.getCurrentDocument();
-		if (!document) {
-			return;
-		}
-
-		this.currentDocument = document;
-		await this.parseAndSendDiagram(document.getText(), document.uri.fsPath);
-	}
-
-	private async generateAndEnrichSkeletonFromDiagram(
-		nodes: Node[],
-		edges: Edge[],
-		activeFilePath?: string
-	) {
-		if (!nodes.length) {
-			void window.showWarningMessage("Cannot generate skeleton: the activity diagram has no nodes.");
-			return;
-		}
-
-		const generatedCode = convertDiagramToCode(nodes, edges);
-		const generatedDocument = await workspace.openTextDocument({
-			language: "typescript",
-			content: generatedCode,
-		});
-		const generatedEditor = await window.showTextDocument(
-			generatedDocument,
-			ViewColumn.Beside,
-			true
-		);
-
-		const diagramContext = this.buildDiagramContext("available-visible", nodes, edges);
-		const cts = new CancellationTokenSource();
-
-		try {
-			const enrichedCodeRaw = await enrichSkeletonWithDiagram({
-				code: generatedCode,
-				activeFilePath: generatedEditor.document.uri.fsPath || activeFilePath,
-				diagramContext,
-				token: cts.token,
-			});
-
-			const enrichedCode = this.unwrapCodeFence(enrichedCodeRaw);
-			await generatedEditor.edit((builder) => {
-				const fullRange = new Range(
-					generatedEditor.document.positionAt(0),
-					generatedEditor.document.positionAt(generatedEditor.document.getText().length)
-				);
-				builder.replace(fullRange, enrichedCode || generatedCode);
-			});
-		} catch (error) {
-			const message = error instanceof Error ? error.message : "Unknown error";
-			void window.showErrorMessage(`Skeleton enrichment failed: ${message}`);
-		} finally {
-			cts.dispose();
-		}
-	}
-
-	private unwrapCodeFence(text: string): string {
-		const trimmed = text.trim();
-		const fenceMatch = trimmed.match(
-			/^```(?:typescript|ts|tsx|javascript|js)?\s*\n([\s\S]*?)\n```\s*$/i
-		);
-		if (fenceMatch?.[1]) {
-			return fenceMatch[1].trim();
-		}
-
-		const singleQuoteFenceMatch = trimmed.match(
-			/^'''(?:typescript|ts|tsx|javascript|js)?\s*\n([\s\S]*?)\n'''\s*$/i
-		);
-		if (singleQuoteFenceMatch?.[1]) {
-			return singleQuoteFenceMatch[1].trim();
-		}
-
-		return trimmed;
-	}
-
-	private buildDiagramContext(
-		availability: DiagramContext["availability"],
-		nodes: unknown[],
-		edges: unknown[]
-	): DiagramContext {
-		const nodeTypes = Array.from(
-			new Set(
-				nodes
-					.map((node) => {
-						if (!node || typeof node !== "object") {
-							return "unknown";
-						}
-
-						const maybeType = (node as { type?: unknown }).type;
-						return typeof maybeType === "string" && maybeType.trim()
-							? maybeType
-							: "unknown";
-					})
-					.filter((value) => value !== "unknown")
-			)
-		).sort((left, right) => left.localeCompare(right));
-
-		const json = JSON.stringify({ nodes, edges }, null, 2);
-
-		return {
-			availability,
-			json,
-			nodeCount: nodes.length,
-			edgeCount: edges.length,
-			nodeTypes,
-		};
-	}
+	// ───────────────────────── HTML / messaging ─────────────────────────
 
 	private getWebviewContent(webview: Webview, extensionUri: Uri) {
 		const stylesUri = getUri(webview, extensionUri, [
@@ -726,17 +812,7 @@ export class ComponentActivityPanel {
 
 	private webviewMessageListener(message: unknown) {
 		if (isWebviewReadyMessage(message)) {
-			this.isWebviewReady = true;
-
-			if (this.initResolver) {
-				this.initResolver();
-				this.initResolver = undefined;
-			}
-
-			if (this.lastDiagramMessage) {
-				void this.panel.webview.postMessage(this.lastDiagramMessage);
-			}
-
+			void this.onWebviewReady();
 			return;
 		}
 
@@ -756,14 +832,32 @@ export class ComponentActivityPanel {
 			if (message.data?.error) {
 				console.warn("Diagram image capture failed:", message.data.error);
 			}
-
 			return;
 		}
 
+		// Response to an explicit `diagram/requestGraph` from the panel.
+		if (isGraphSnapshotMessage(message)) {
+			const payload = message.data;
+			const nodes = Array.isArray(payload?.nodes) ? (payload.nodes as Node[]) : [];
+			const edges = Array.isArray(payload?.edges) ? (payload.edges as Edge[]) : [];
+			const graph: ActivityGraph = { nodes, edges };
+			this.lastVisibleActivityGraph = graph;
+
+			if (this.pendingGraphRequest) {
+				const pending = this.pendingGraphRequest;
+				this.pendingGraphRequest = undefined;
+				clearTimeout(pending.timeout);
+				pending.resolve(graph);
+			}
+			return;
+		}
+
+		// Back-compat: some older webview builds may still push this unsolicited.
+		// We accept it as a best-effort cache update but no longer rely on it.
 		if (isVisibleGraphMessage(message)) {
-			const payload = message.data as ActivityGraphPayload;
-			const nodes = Array.isArray(payload.nodes) ? (payload.nodes as Node[]) : [];
-			const edges = Array.isArray(payload.edges) ? (payload.edges as Edge[]) : [];
+			const payload = message.data;
+			const nodes = Array.isArray(payload?.nodes) ? (payload.nodes as Node[]) : [];
+			const edges = Array.isArray(payload?.edges) ? (payload.edges as Edge[]) : [];
 			this.lastVisibleActivityGraph = { nodes, edges };
 			return;
 		}
@@ -778,7 +872,11 @@ export class ComponentActivityPanel {
 				return;
 
 			case "diagram/openSourceFile":
-				void this.publishCurrentDocument();
+				// Back-compat only: older webviews still send this at boot.
+				// We honor it only if nothing else is driving the view.
+				if (this.diagramSource.kind !== "snippet") {
+					void this.publishCurrentDocument();
+				}
 				return;
 
 			case "diagram/generateSkeleton": {
@@ -787,6 +885,7 @@ export class ComponentActivityPanel {
 				const edges = Array.isArray(payload.edges) ? (payload.edges as Edge[]) : [];
 
 				this.lastKnownActivityGraph = { nodes, edges };
+				this.lastVisibleActivityGraph = { nodes, edges };
 
 				void this.generateAndEnrichSkeletonFromDiagram(
 					nodes,
@@ -804,6 +903,13 @@ export class ComponentActivityPanel {
 					return;
 				}
 
+				// Node preview drilldown → switch to snippet mode so editor edits
+				// don't overwrite the drilled-down view.
+				this.diagramSource = {
+					kind: "snippet",
+					text: sourceText,
+					sourceFile: this.getCurrentFilePath(),
+				};
 				void this.replaceDiagramFromSource(sourceText, this.getCurrentFilePath());
 				return;
 			}

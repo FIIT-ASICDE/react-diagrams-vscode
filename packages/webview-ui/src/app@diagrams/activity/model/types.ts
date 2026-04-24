@@ -37,6 +37,7 @@ export type ActivityWebviewMessenger = {
 		(type: 'code/request'): void;
 		(type: 'code/nodePreview', data: ActivityNodePreviewRequestPayload): void;
 		(type: 'diagram/requestImage', data: {}): void;
+		(type: 'diagram/requestGraph', data: {}): void;
 	};
 };
 

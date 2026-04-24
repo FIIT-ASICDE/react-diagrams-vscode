@@ -1,141 +1,331 @@
-import ELK from 'elkjs/lib/elk.bundled';
+// import ELK, { type ElkNode, type ElkExtendedEdge } from 'elkjs/lib/elk.bundled.js';
+// import { Position, type Edge, type Node } from '@xyflow/react';
+
+// type LayoutDirection = 'DOWN' | 'RIGHT';
+
+// export interface LayoutResult {
+//   nodes: Node[];
+//   edges: Edge[];
+// }
+
+// function isBackEdge(edge: Edge): boolean {
+//   return edge.type === 'back';
+// }
+
+// export function adjustDecisionEdgeHandles(_nodes: Node[], edges: Edge[]): Edge[] {
+//   return edges;
+// }
+
+// function estimateNodeSize(_node: Node): { width: number; height: number } {
+//   return { width: 200, height: 56 };
+// }
+
+// const elk = new ELK();
+
+// export async function applyElkLayout(
+//   nodes: Node[],
+//   edges: Edge[],
+//   direction: LayoutDirection = 'DOWN',
+// ): Promise<LayoutResult> {
+//   const isHorizontal = direction === 'RIGHT';
+
+//   // Split: downward edges go to ELK; back edges are routed manually afterwards
+//   // so the layered layout sees a purely acyclic graph and stays top-to-bottom.
+//   const downwardEdges = edges.filter((e) => !isBackEdge(e));
+//   const backEdges = edges.filter((e) => isBackEdge(e));
+
+//   const elkGraph: ElkNode = {
+//     id: 'root',
+//     layoutOptions: {
+//       'elk.algorithm': 'layered',
+//       'elk.direction': isHorizontal ? 'RIGHT' : 'DOWN',
+//       'elk.layered.spacing.nodeNodeBetweenLayers': '90',
+//       'elk.spacing.nodeNode': '50',
+//       'elk.spacing.edgeNode': '40',
+//       'elk.spacing.edgeEdge': '25',
+//       'elk.padding': '[top=20,left=20,bottom=20,right=20]',
+//       'elk.edgeRouting': 'ORTHOGONAL',
+//       'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+//       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+//       'elk.layered.thoroughness': '10',
+//     },
+//     children: nodes.map((node) => {
+//       const { width, height } = estimateNodeSize(node);
+//       return { id: String(node.id), width, height };
+//     }),
+//     edges: downwardEdges.map((edge) => ({
+//       id: String(edge.id),
+//       sources: [String(edge.source)],
+//       targets: [String(edge.target)],
+//     })) satisfies ElkExtendedEdge[],
+//   };
+
+//   const layout = await elk.layout(elkGraph);
+
+//   // Collect node boxes for back-edge routing.
+//   const elkNodeById = new Map<string, ElkNode>();
+//   for (const child of layout.children ?? []) elkNodeById.set(child.id, child);
+
+//   const nodeBoxById = new Map<string, { x: number; y: number; width: number; height: number }>();
+
+//   const layoutedNodes: Node[] = nodes.map((node) => {
+//     const { width, height } = estimateNodeSize(node);
+//     const elkNode = elkNodeById.get(String(node.id));
+//     const x = elkNode?.x ?? 0;
+//     const y = elkNode?.y ?? 0;
+
+//     nodeBoxById.set(String(node.id), { x, y, width, height });
+
+//     return {
+//       id: node.id,
+//       position: { x, y },
+//       data: node.data ?? {},
+//       type: node.type,
+//       draggable: true,
+//       sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
+//       targetPosition: isHorizontal ? Position.Left : Position.Top,
+//       width,
+//       height,
+//     };
+//   });
+
+//   // Downward edges: use ELK's computed points.
+//   const elkEdgeById = new Map<string, ElkExtendedEdge>();
+//   for (const elkEdge of layout.edges ?? []) elkEdgeById.set(elkEdge.id, elkEdge);
+
+//   const layoutedDownwardEdges: Edge[] = downwardEdges.map((edge) => {
+//     const elkEdge = elkEdgeById.get(String(edge.id));
+//     const section = elkEdge?.sections?.[0];
+//     if (!section) return edge;
+
+//     const points = [
+//       { x: section.startPoint.x, y: section.startPoint.y },
+//       ...(section.bendPoints ?? []).map((p) => ({ x: p.x, y: p.y })),
+//       { x: section.endPoint.x, y: section.endPoint.y },
+//     ];
+
+//     return { ...edge, data: { ...(edge.data ?? {}), points } };
+//   });
+
+//   // Back edges: manually route a "C"-shape up the right side of the graph.
+//   // Each back edge gets its own lane so they don't overlap.
+//   const graphRightEdge = Math.max(
+//     0,
+//     ...layoutedNodes.map((n) => n.position.x + (n.width ?? 0)),
+//   );
+//   const firstLaneX = graphRightEdge + 40;
+//   const laneSpacing = 30;
+
+//   const layoutedBackEdges: Edge[] = backEdges.map((edge, idx) => {
+//     const srcBox = nodeBoxById.get(String(edge.source));
+//     const tgtBox = nodeBoxById.get(String(edge.target));
+//     if (!srcBox || !tgtBox) return edge;
+
+//     // Source anchors on its right side; target anchors on its right side.
+//     const srcAnchor = { x: srcBox.x + srcBox.width, y: srcBox.y + srcBox.height / 2 };
+//     const tgtAnchor = { x: tgtBox.x + tgtBox.width, y: tgtBox.y + tgtBox.height / 2 };
+
+//     const laneX = firstLaneX + idx * laneSpacing;
+
+//     const points = [
+//       srcAnchor,
+//       { x: laneX, y: srcAnchor.y },
+//       { x: laneX, y: tgtAnchor.y },
+//       tgtAnchor,
+//     ];
+
+//     return { ...edge, data: { ...(edge.data ?? {}), points } };
+//   });
+
+//   return {
+//     nodes: layoutedNodes,
+//     edges: [...layoutedDownwardEdges, ...layoutedBackEdges],
+//   };
+// }
+
+
+
+
+
+
+
+
+
+
+
+import ELK, { type ElkNode, type ElkExtendedEdge, type ElkPort } from 'elkjs/lib/elk.bundled.js';
 import { Position, type Edge, type Node } from '@xyflow/react';
 
-const elk = new ELK();
-
-type ElkDirection = 'DOWN' | 'RIGHT';
-type ElkLayoutOptions = Record<string, string>;
+type LayoutDirection = 'DOWN' | 'RIGHT';
 
 export interface LayoutResult {
   nodes: Node[];
   edges: Edge[];
 }
 
-type EdgeSemanticKind = 'positive' | 'negative' | 'case' | 'default' | 'loop-back' | 'normal';
-
-function getEdgeSemanticKind(edge: Edge): EdgeSemanticKind | undefined {
-  const raw = (edge.data as { semanticKind?: unknown } | undefined)?.semanticKind;
-  if (typeof raw !== 'string') {
-    return undefined;
-  }
-
-  const normalized = raw.trim().toLowerCase();
-  if (
-    normalized === 'positive' ||
-    normalized === 'negative' ||
-    normalized === 'case' ||
-    normalized === 'default' ||
-    normalized === 'loop-back' ||
-    normalized === 'normal'
-  ) {
-    return normalized;
-  }
-
-  return undefined;
+function isUpwardEdge(edge: Edge): boolean {
+  return edge.type === 'back';
 }
 
-export function adjustDecisionEdgeHandles(nodes: Node[], edges: Edge[]): Edge[] {
-  const nodeById = new Map(nodes.map((node) => [String(node.id), node]));
-
-  return edges.map((edge) => {
-    if (edge.type === 'back') {
-      return edge;
-    }
-
-    const semanticKind = getEdgeSemanticKind(edge);
-    if (semanticKind !== 'positive' && semanticKind !== 'negative') {
-      return edge;
-    }
-
-    const sourceNode = nodeById.get(String(edge.source));
-    if (!sourceNode || (sourceNode.type !== 'decision' && sourceNode.type !== 'loop')) {
-      return edge;
-    }
-
-    const targetNode = nodeById.get(String(edge.target));
-    if (!targetNode) {
-      return edge;
-    }
-
-    let sourceHandle: string = 'source-bottom';
-    if (targetNode.position.x < sourceNode.position.x) {
-      sourceHandle = 'source-left';
-    } else if (targetNode.position.x > sourceNode.position.x) {
-      sourceHandle = 'source-right';
-    }
-
-    return {
-      ...edge,
-      sourceHandle,
-    };
-  });
-}
-
-const elkBaseOptions: ElkLayoutOptions = {
-  'elk.algorithm': 'layered',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '65',
-  'elk.spacing.nodeNode': '75',
-  'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
-  'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-  'elk.layered.nodePlacement.favorStraightEdges': 'true',
-  'elk.layered.nodePlacement.bk.fixedAlignment': 'BALANCED',
-  'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-  'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
-  'elk.layered.feedbackEdges': 'true',
-  'elk.edgeRouting': 'ORTHOGONAL',
-};
-
-function estimateNodeSize(node: Node): { width: number; height: number } {
-
-  return { width: 200, height: 56 };
+function handleToElkSide(handle: string | null | undefined): 'NORTH' | 'SOUTH' | 'EAST' | 'WEST' {
+  if (!handle) return 'SOUTH';
+  if (handle.endsWith('-left')) return 'WEST';
+  if (handle.endsWith('-right')) return 'EAST';
+  if (handle.endsWith('-top')) return 'NORTH';
+  return 'SOUTH';
 }
 
 /**
- * Applies ELK layered layout algorithm to nodes and edges
- * @param nodes - Array of React Flow nodes to layout
- * @param edges - Array of React Flow edges
- * @param direction - Layout direction: 'DOWN' (default) or 'RIGHT'
- * @returns Promise with layouted nodes and edges
+ * Kept for API compatibility. Handles are now picked at edge-creation time
+ * inside GraphWriter, so this is a no-op passthrough.
  */
+export function adjustDecisionEdgeHandles(nodes: Node[], edges: Edge[]): Edge[] {
+  void nodes;
+  return edges;
+}
+
+function estimateNodeSize(_node: Node): { width: number; height: number } {
+  return { width: 200, height: 56 };
+}
+
+const elk = new ELK();
+
 export async function applyElkLayout(
   nodes: Node[],
   edges: Edge[],
-  direction: ElkDirection = 'DOWN',
+  direction: LayoutDirection = 'DOWN',
 ): Promise<LayoutResult> {
   const isHorizontal = direction === 'RIGHT';
 
-  const graph = {
+  // Build ELK ports from the handles the edges already have.
+  const portsByNode = new Map<string, Map<string, ElkPort>>();
+  const ensurePort = (nodeId: string, handle: string): string => {
+    const portId = `${nodeId}__${handle}`;
+    let nodePorts = portsByNode.get(nodeId);
+    if (!nodePorts) {
+      nodePorts = new Map();
+      portsByNode.set(nodeId, nodePorts);
+    }
+    if (!nodePorts.has(portId)) {
+      nodePorts.set(portId, {
+        id: portId,
+        layoutOptions: {
+          'elk.port.side': handleToElkSide(handle),
+        },
+      });
+    }
+    return portId;
+  };
+
+  // Reverse upward edges so ELK sees an acyclic downward graph.
+  const reversedEdgeIds = new Set<string>();
+  const elkEdges: ElkExtendedEdge[] = edges.map((edge) => {
+    const srcHandle = edge.sourceHandle ?? 'source-bottom';
+    const tgtHandle = edge.targetHandle ?? 'target-top';
+
+    if (isUpwardEdge(edge)) {
+      // ELK sees: original TARGET → original SOURCE.
+      // We anchor the reversed edge on the ELK-visible sides:
+      //   - ELK source = bottom of original target node
+      //   - ELK target = top of original source node
+      const sourcePortId = ensurePort(String(edge.target), 'source-bottom');
+      const targetPortId = ensurePort(String(edge.source), 'target-top');
+      reversedEdgeIds.add(String(edge.id));
+      return {
+        id: String(edge.id),
+        sources: [sourcePortId],
+        targets: [targetPortId],
+      };
+    }
+
+    const sourcePortId = ensurePort(String(edge.source), srcHandle);
+    const targetPortId = ensurePort(String(edge.target), tgtHandle);
+    return {
+      id: String(edge.id),
+      sources: [sourcePortId],
+      targets: [targetPortId],
+    };
+  });
+
+  const elkGraph: ElkNode = {
     id: 'root',
     layoutOptions: {
-      ...elkBaseOptions,
+      'elk.algorithm': 'layered',
       'elk.direction': isHorizontal ? 'RIGHT' : 'DOWN',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '90',
+      'elk.spacing.nodeNode': '50',
+      'elk.spacing.edgeNode': '40',
+      'elk.spacing.edgeEdge': '25',
+      'elk.padding': '[top=20,left=20,bottom=20,right=20]',
+      'elk.edgeRouting': 'ORTHOGONAL',
+      'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+      'elk.portConstraints': 'FIXED_SIDE',
+      'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+      'elk.layered.thoroughness': '10',
     },
     children: nodes.map((node) => {
       const { width, height } = estimateNodeSize(node);
+      const ports = Array.from(portsByNode.get(String(node.id))?.values() ?? []);
       return {
-        id: node.id,
+        id: String(node.id),
         width,
         height,
+        ports,
+        layoutOptions: {
+          'elk.portConstraints': 'FIXED_SIDE',
+        },
       };
     }),
-    edges: edges.map((edge) => ({
-      id: edge.id,
-      sources: [edge.source],
-      targets: [edge.target],
-    })),
+    edges: elkEdges,
   };
 
-  const layoutedGraph = await elk.layout(graph);
-  const layoutedChildren = layoutedGraph.children ?? [];
+  const layout = await elk.layout(elkGraph);
 
-  const layoutedNodes: Node[] = layoutedChildren.map((elkNode) => ({
-    id: elkNode.id,
-    position: { x: elkNode.x ?? 0, y: elkNode.y ?? 0 },
-    data: nodes.find((n) => n.id === elkNode.id)?.data ?? {},
-    type: nodes.find((n) => n.id === elkNode.id)?.type,
-    draggable: true,
-    sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
-    targetPosition: isHorizontal ? Position.Left : Position.Top,
-  }));
-  return { nodes: layoutedNodes, edges };
+  const elkNodeById = new Map<string, ElkNode>();
+  for (const child of layout.children ?? []) elkNodeById.set(child.id, child);
+
+  const layoutedNodes: Node[] = nodes.map((node) => {
+    const { width, height } = estimateNodeSize(node);
+    const elkNode = elkNodeById.get(String(node.id));
+    return {
+      id: node.id,
+      position: { x: elkNode?.x ?? 0, y: elkNode?.y ?? 0 },
+      data: node.data ?? {},
+      type: node.type,
+      draggable: true,
+      sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
+      targetPosition: isHorizontal ? Position.Left : Position.Top,
+      width,
+      height,
+    };
+  });
+
+  const elkEdgeById = new Map<string, ElkExtendedEdge>();
+  for (const elkEdge of layout.edges ?? []) elkEdgeById.set(elkEdge.id, elkEdge);
+
+  const layoutedEdges: Edge[] = edges.map((edge) => {
+    const elkEdge = elkEdgeById.get(String(edge.id));
+    const section = elkEdge?.sections?.[0];
+    if (!section) return edge;
+
+    const rawPoints = [
+      { x: section.startPoint.x, y: section.startPoint.y },
+      ...(section.bendPoints ?? []).map((p) => ({ x: p.x, y: p.y })),
+      { x: section.endPoint.x, y: section.endPoint.y },
+    ];
+
+    const points = reversedEdgeIds.has(String(edge.id))
+      ? [...rawPoints].reverse()
+      : rawPoints;
+
+    return {
+      ...edge,
+      data: {
+        ...(edge.data ?? {}),
+        points,
+      },
+    };
+  });
+
+  return { nodes: layoutedNodes, edges: layoutedEdges };
 }

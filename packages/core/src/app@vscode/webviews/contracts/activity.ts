@@ -33,7 +33,8 @@ export type ActivityExtensionToWebviewMessage =
 	| { type: "code/nodePreviewData"; data: ActivityNodePreviewDataPayload }
 	| { type: "code/nodePreviewError"; data: { message: string } }
 	| { type: "self/init" }
-	| { type: "diagram/requestImage"; data: {} };
+	| { type: "diagram/requestImage"; data: {} }
+	| { type: "diagram/requestGraph"; data: {} };
 
 const ACTIVITY_WEBVIEW_TO_EXTENSION_TYPES = new Set<string>([
 	"diagram/requestType",
@@ -43,6 +44,7 @@ const ACTIVITY_WEBVIEW_TO_EXTENSION_TYPES = new Set<string>([
 	"code/nodePreview",
 	"diagram/openSourceFile",
 	"diagram/requestImage",
+	"diagram/requestGraph",
 ]);
 
 export function isActivityWebviewToExtensionMessage(

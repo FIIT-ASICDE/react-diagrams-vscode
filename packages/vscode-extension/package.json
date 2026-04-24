@@ -33,102 +33,95 @@
         "title": "React Component Activity"
       }
     ],
-    "languageModelTools": [
+     "languageModelTools": [
       {
         "name": "create_activity_diagram",
         "displayName": "Create Activity Diagram",
-        "modelDescription": "Creates and displays an activity diagram from the current code file or from a specific function when that helps explain control flow.",
-        "toolReferenceName": "create_activity_diagram",
+        "modelDescription": "Generates an activity diagram from TypeScript/JavaScript source code and displays it in the activity diagram panel. Use this when the user asks to create, generate, show, or visualize an activity diagram from code. Pass the specific function code as 'sourceText' if the user asked about a specific function; otherwise omit it to use the active editor.",
         "canBeReferencedInPrompt": true,
+        "toolReferenceName": "create_activity_diagram",
+        "icon": "$(graph-line)",
         "inputSchema": {
           "type": "object",
           "properties": {
-            "functionName": {
-              "type": "string",
-              "description": "Optional function name to focus on."
-            },
             "sourceText": {
               "type": "string",
-              "description": "Optional source text to parse directly."
+              "description": "The TypeScript/JavaScript source code to turn into an activity diagram. Optional — when omitted, the tool uses the active editor's content."
             },
             "title": {
               "type": "string",
-              "description": "Optional diagram title."
+              "description": "Optional human-readable title for the diagram."
+            }
+          }
+        }
+      },
+      {
+        "name": "create_code_from_activity_diagram",
+        "displayName": "Generate Code from Activity Diagram",
+        "modelDescription": "Generates TypeScript code from the currently open activity diagram. Use this ONLY when the user explicitly asks to generate, create, produce, or build code FROM an existing activity diagram (e.g. 'generate code from this diagram', 'turn this diagram into code', 'create a skeleton from the diagram'). Requires an activity diagram to be open in the panel.",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "create_code_from_activity_diagram",
+        "icon": "$(symbol-method)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Optional title for the generated code file."
             }
           }
         }
       }
     ],
     "configuration": {
-      "title": "Diagram Assistant",
-      "properties": {
-        "diagramAssistant.enableDebug": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show debug information in chat about which sources were available and used."
-        },
-        "diagramAssistant.enableDiagramGeneration": {
-          "type": "boolean",
-          "default": true,
-          "description": "Allow the assistant to generate an activity diagram when code is visible."
-        },
-        "diagramAssistant.primaryReasoningSource": {
-          "type": "string",
-          "enum": [
-            "code",
-            "diagram",
-            "image"
-          ],
-          "default": "diagram",
-          "description": "Primary source the assistant should prefer during reasoning."
-        },
-        "diagramAssistant.includeCodeContext": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include code context when available."
-        },
-        "diagramAssistant.includeDiagramJson": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include diagram JSON when available."
-        },
-        "diagramAssistant.includeDiagramImage": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include rendered diagram image when available."
-        },
-        "diagramAssistant.whenCodeVisible.allowDiagramGeneration": {
-          "type": "boolean",
-          "default": true,
-          "description": "Allow diagram generation when the visible surface is code."
-        },
-        "diagramAssistant.whenCodeVisible.includeGeneratedDiagramJson": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include generated diagram JSON after diagram generation from code."
-        },
-        "diagramAssistant.whenCodeVisible.includeGeneratedDiagramImage": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include generated diagram image after diagram generation from code."
-        },
-        "diagramAssistant.whenDiagramVisible.includeFullCode": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include full code context when a diagram is already visible."
-        },
-        "diagramAssistant.whenDiagramVisible.includeDiagramJson": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include diagram JSON when a diagram is already visible."
-        },
-        "diagramAssistant.whenDiagramVisible.includeDiagramImage": {
-          "type": "boolean",
-          "default": true,
-          "description": "Include diagram image when a diagram is already visible."
-        }
+    "title": "React Diagrams Chat",
+    "properties": {
+      "reactDiagrams.chat.code": {
+        "type": "boolean",
+        "default": true,
+        "description": "Include code context when available."
+      },
+      "reactDiagrams.chat.diagramJson": {
+        "type": "boolean",
+        "default": true,
+        "description": "Include activity diagram JSON when available."
+      },
+      "reactDiagrams.chat.diagramImage": {
+        "type": "boolean",
+        "default": true,
+        "description": "Include rendered diagram image when available."
+      },
+      "reactDiagrams.chat.allowToolCall": {
+        "type": "boolean",
+        "default": true,
+        "description": "Allow the chat participant to call diagram/code generation tools."
+      },
+      "reactDiagrams.chat.maxToolIterations": {
+        "type": "number",
+        "default": 3,
+        "minimum": 0,
+        "maximum": 10,
+        "description": "Maximum number of tool-call iterations per chat request."
+      },
+      "reactDiagrams.chat.diagramImageTimeoutMs": {
+        "type": "number",
+        "default": 15000,
+        "minimum": 1000,
+        "maximum": 60000,
+        "description": "Timeout in milliseconds for capturing the rendered diagram image."
+      },
+      "reactDiagrams.chat.diagramRelevanceCheck": {
+        "type": "boolean",
+        "default": true,
+        "description": "Check whether the current diagram is relevant before sending it to the model."
+      },
+      "reactDiagrams.chat.debug": {
+        "type": "boolean",
+        "default": true,
+        "description": "Show debug information in chat responses."
       }
     }
+  }
   },
   "scripts": {
     "vscode:prepublish": "npm run build:webview && npm run package",

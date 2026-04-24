@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
 	ReactFlow,
 	Background,
@@ -7,12 +7,13 @@ import {
 	type ReactFlowInstance,
 	useReactFlow,
 	Controls,
+	SmoothStepEdge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { VSCodeButton } from '@vscode/webview-ui-toolkit/react';
 import { vscode } from '../../app@vscode/api';
 import { nodeTypes } from './diagram-rendering/nodeTypes';
-import BackEdge, { NormalEdge } from './diagram-rendering/BackEdge';
+import  ElkPathEdge  from './diagram-rendering/BackEdge';
 import { generateCodeFromDiagram } from './logic/diagram-code-generation';
 import { toPng } from 'html-to-image';
 import {
@@ -49,8 +50,8 @@ const customNode = {
 };
 
 const customEdge = {
-	back: BackEdge,
-	smoothstep: NormalEdge,
+  default: ElkPathEdge,
+  back: ElkPathEdge,   // rovnaký komponent aj pre back edges — štýl rieši edge.style
 };
 
 function AutoFitOnSnapshotChange({ nodesCount }: { nodesCount: number }) {
@@ -99,7 +100,7 @@ function truncate(text: string, maxLength: number) {
 
 export default function ActivityDiagram() {
 	const [renameDraft, setRenameDraft] = useState<DiagramRenameDraft | null>(null);
-	const [sourceFile, setSourceFile] = useState<string | undefined>(undefined);
+	const [, setSourceFile] = useState<string | undefined>(undefined);
 
 	const nodeCounter = useRef(1);
 	const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
@@ -107,7 +108,6 @@ export default function ActivityDiagram() {
 
 	const {
 		currentHistoryIndex,
-		currentDiagram,
 		visibleNodes,
 		visibleEdges,
 		currentTitle,
@@ -120,6 +120,15 @@ export default function ActivityDiagram() {
 		goBack,
 	} = useDiagramHistoryNavigator();
 
+	// Keep a ref to the latest visible graph so we can answer on-demand
+	// requestGraph messages without re-subscribing to window events.
+	const visibleGraphRef = useRef<{ nodes: Node[]; edges: Edge[] }>({
+		nodes: visibleNodes,
+		edges: visibleEdges,
+	});
+	useEffect(() => {
+		visibleGraphRef.current = { nodes: visibleNodes, edges: visibleEdges };
+	}, [visibleNodes, visibleEdges]);
 
 	const postMessage = useCallback((type: string, data: unknown = {}) => {
 		vscode.postMessage(type, data);
@@ -136,6 +145,12 @@ export default function ActivityDiagram() {
 					error: error instanceof Error ? error.message : 'Image capture failed',
 				});
 			}
+			return;
+		}
+
+		if (message?.type === 'diagram/requestGraph') {
+			const { nodes, edges } = visibleGraphRef.current;
+			postMessage('diagram/graphSnapshot', { nodes, edges });
 			return;
 		}
 
@@ -193,9 +208,10 @@ export default function ActivityDiagram() {
 
 		window.addEventListener('message', onMessage);
 
+		// The only boot-time message the webview sends. The panel decides what
+		// (if anything) to push back. We no longer ask for the active document here —
+		// that caused a race with AI-driven showDiagramFromSourceText().
 		postMessage('webview/ready');
-		// postMessage('diagram/openSourceFile', {
-		// });
 
 		return () => {
 			if (previewClickTimeoutRef.current !== null) {
@@ -205,15 +221,6 @@ export default function ActivityDiagram() {
 			window.removeEventListener('message', onMessage);
 		};
 	}, [handleIncomingMessage, postMessage]);
-
-
-
-	useEffect(() => {
-		postMessage('diagram/visibleGraph', {
-			nodes: visibleNodes,
-			edges: visibleEdges,
-		});
-	}, [postMessage, visibleEdges, visibleNodes]);
 
 	useEffect(() => {
 		nodeCounter.current = visibleNodes.length + 1;

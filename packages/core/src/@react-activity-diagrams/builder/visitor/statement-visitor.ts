@@ -13,7 +13,7 @@ import {
 	TryStatement,
 	WhileStatement,
 } from 'ts-morph';
-import { EdgeBranchData, GraphWriter } from '../graph-writer';
+import { GraphWriter } from '../graph-writer';
 import { getExpandableMeta, getHookMeta } from './metadata';
 import type { BuildResult } from './types';
 import { compactLabel, getFallthroughEdgeLabel } from './utils';
@@ -38,31 +38,6 @@ import { visitSwitch } from './handlers/switch-flow';
 
 export class StatementVisitor implements StatementVisitorHost {
 	constructor(public writer: GraphWriter) {}
-
-	edgeMeta(
-		branchSide: 'left' | 'right' | 'bottom',
-		semanticKind: 'positive' | 'negative' | 'case' | 'default' | 'loop-back' | 'normal',
-		extra?: Record<string, unknown>,
-	): EdgeBranchData {
-		return {
-			branchSide,
-			semanticKind,
-			...extra,
-		};
-	}
-
-	private createContinuation(label = 'Continue'): string {
-		return this.writer.addFlowNode('action', label, {
-			sourceText: '',
-			nodeKind: 'continuation',
-		});
-	}
-
-	createContinuationFrom(sourceId: string, edgeLabel?: string, edgeData?: EdgeBranchData): string {
-		const continuationId = this.createContinuation();
-		this.writer.addEdge(sourceId, continuationId, edgeLabel, false, edgeData);
-		return continuationId;
-	}
 
 	private createMergeForSources(sources: string[]): string | undefined {
 		const uniqueSources = [...new Set(sources)].filter(Boolean);
@@ -215,16 +190,11 @@ export class StatementVisitor implements StatementVisitorHost {
 	}
 
 	connectLoopBackEdges(exits: string[], loopId: string, innerDecisionCount: number): void {
+		void innerDecisionCount;
 		const uniqueExits = [...new Set(exits)].filter((exit) => exit && exit !== loopId);
 
 		for (const exit of uniqueExits) {
-			this.writer.addEdge(
-				exit,
-				loopId,
-				'',
-				true,
-				this.edgeMeta('left', 'loop-back', { innerDecisionCount }),
-			);
+			this.writer.addEdge(exit, loopId, '', true);
 		}
 	}
 

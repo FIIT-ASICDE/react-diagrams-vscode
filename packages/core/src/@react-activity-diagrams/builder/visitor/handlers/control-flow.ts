@@ -24,23 +24,23 @@ export function visitIf(host: StatementVisitorHost, stmt: IfStatement): BuildRes
   const endExits: string[] = [];
 
   if (thenResult.entry) {
-    host.writer.addEdge(decisionId, thenResult.entry, 'yes', false, host.edgeMeta('right', 'positive'));
+    host.writer.addEdge(decisionId, thenResult.entry, 'yes', false);
     mergeSources.push(...thenResult.exits);
     endExits.push(...thenResult.endExits);
   } else {
-    mergeSources.push(host.createContinuationFrom(decisionId, 'yes', host.edgeMeta('right', 'positive')));
+    mergeSources.push(decisionId);
   }
 
   if (elseResult) {
     if (elseResult.entry) {
-      host.writer.addEdge(decisionId, elseResult.entry, 'no', false, host.edgeMeta('left', 'negative'));
+      host.writer.addEdge(decisionId, elseResult.entry, 'no', false);
       mergeSources.push(...elseResult.exits);
       endExits.push(...elseResult.endExits);
     } else {
-      mergeSources.push(host.createContinuationFrom(decisionId, 'no', host.edgeMeta('left', 'negative')));
+      mergeSources.push(decisionId);
     }
   } else {
-    mergeSources.push(host.createContinuationFrom(decisionId, 'no', host.edgeMeta('left', 'negative')));
+    mergeSources.push(decisionId);
   }
 
   return {
@@ -59,7 +59,6 @@ export function visitWhile(host: StatementVisitorHost, stmt: WhileStatement): Bu
     ),
     stmt.getStatement(),
     'yes',
-    'no',
   );
 }
 
@@ -74,34 +73,19 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
   const body = host.visitBranch(loopBranch);
 
   if (!body.entry) {
-    host.writer.addEdge(
-      loopId,
-      loopId,
-      'yes',
-      true,
-      host.edgeMeta('left', 'loop-back', { innerDecisionCount }),
-    );
-    const exitId = host.createContinuationFrom(loopId, 'no', host.edgeMeta('left', 'negative'));
-    return { entry: loopId, exits: [exitId], endExits: [] };
+    host.writer.addEdge(loopId, loopId, 'yes', true);
+    return { entry: loopId, exits: [loopId], endExits: [] };
   }
 
   for (const exit of body.exits) {
     host.writer.addEdge(exit, loopId, getFallthroughEdgeLabel(exit));
   }
 
-  host.writer.addEdge(
-    loopId,
-    body.entry,
-    'yes',
-    true,
-    host.edgeMeta('left', 'loop-back', { innerDecisionCount }),
-  );
-
-  const exitId = host.createContinuationFrom(loopId, 'no', host.edgeMeta('left', 'negative'));
+  host.writer.addEdge(loopId, body.entry, 'yes', true);
 
   return {
     entry: body.entry,
-    exits: [exitId],
+    exits: [loopId],
     endExits: [...new Set(body.endExits)],
   };
 }
@@ -142,17 +126,11 @@ export function visitFor(host: StatementVisitorHost, stmt: ForStatement): BuildR
   }
 
   if (body.entry) {
-    host.writer.addEdge(loopId, body.entry, 'yes', false, host.edgeMeta('right', 'positive'));
+    host.writer.addEdge(loopId, body.entry, 'yes', false);
   } else if (incrementId) {
-    host.writer.addEdge(loopId, incrementId, 'yes', false, host.edgeMeta('right', 'positive'));
+    host.writer.addEdge(loopId, incrementId, 'yes', false);
   } else {
-    host.writer.addEdge(
-      loopId,
-      loopId,
-      'yes',
-      true,
-      host.edgeMeta('left', 'loop-back', { innerDecisionCount }),
-    );
+    host.writer.addEdge(loopId, loopId, 'yes', true);
   }
 
   if (incrementId) {
@@ -163,22 +141,14 @@ export function visitFor(host: StatementVisitorHost, stmt: ForStatement): BuildR
       }
     }
 
-    host.writer.addEdge(
-      incrementId,
-      loopId,
-      '',
-      true,
-      host.edgeMeta('left', 'loop-back', { innerDecisionCount }),
-    );
+    host.writer.addEdge(incrementId, loopId, '', true);
   } else if (body.entry) {
     host.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
   }
 
-  const exitId = host.createContinuationFrom(loopId, 'no', host.edgeMeta('left', 'negative'));
-
   return {
     entry: firstEntry,
-    exits: [exitId],
+    exits: [loopId],
     endExits: [...new Set(body.endExits)],
   };
 }
@@ -192,72 +162,53 @@ export function visitForIn(host: StatementVisitorHost, stmt: ForInStatement): Bu
 }
 
 export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildResult {
-  const decisionId = host.createDecisionNode('try', stmt.getText());
 
-  const normalSources: string[] = [];
-  const abruptSources: string[] = [];
+  const tryStartId = host.writer.addFlowNode('action', 'try', {
+    sourceText: stmt.getTryBlock().getText(),
+    nodeKind: 'action',
+  });
 
   const tryResult = host.visitBranch(stmt.getTryBlock());
+
   if (tryResult.entry) {
-    host.writer.addEdge(
-      decisionId,
-      tryResult.entry,
-      'try',
-      false,
-      host.edgeMeta('right', 'positive'),
-    );
-    normalSources.push(...tryResult.exits);
-    abruptSources.push(...tryResult.endExits);
-  } else {
-    normalSources.push(
-      host.createContinuationFrom(
-        decisionId,
-        'try',
-        host.edgeMeta('right', 'positive'),
-      ),
-    );
+    host.writer.addEdge(tryStartId, tryResult.entry, '', false);
   }
 
+  const trySuccessExits = tryResult.entry
+    ? host.resolveExitSources(tryResult.exits)
+    : [tryStartId];
+
+
   const catchClause = stmt.getCatchClause();
-  if (catchClause) {
-    const catchResult = host.visitBranch(catchClause.getBlock());
-    if (catchResult.entry) {
-      host.writer.addEdge(
-        decisionId,
-        catchResult.entry,
-        'catch',
-        false,
-        host.edgeMeta('left', 'negative'),
-      );
-      normalSources.push(...catchResult.exits);
-      abruptSources.push(...catchResult.endExits);
-    } else {
-      normalSources.push(
-        host.createContinuationFrom(
-          decisionId,
-          'catch',
-          host.edgeMeta('left', 'negative'),
-        ),
-      );
-    }
+  const catchResult = catchClause
+    ? host.visitBranch(catchClause.getBlock())
+    : undefined;
+
+  const catchSuccessExits: string[] = [];
+
+  if (catchClause && catchResult?.entry) {
+    host.writer.addEdge(tryStartId, catchResult.entry, 'exception', false);
+
+    catchSuccessExits.push(...host.resolveExitSources(catchResult.exits));
   }
+
+
+  const innerEndExits = [
+    ...tryResult.endExits,
+    ...(catchResult?.endExits ?? []),
+  ];
+
+  const normalExits = [...trySuccessExits, ...catchSuccessExits];
+  const uniqueNormalExits = [...new Set(normalExits)];
 
   const finallyBlock = stmt.getFinallyBlock();
 
+  // Case A: No finally block.
   if (!finallyBlock) {
     return {
-      entry: decisionId,
-      exits: host.resolveExitSources(normalSources),
-      endExits: [...new Set(abruptSources)],
-    };
-  }
-
-  const allIncoming = [...new Set([...normalSources, ...abruptSources])];
-  if (allIncoming.length === 0) {
-    return {
-      entry: decisionId,
-      exits: [],
-      endExits: [],
+      entry: tryStartId,
+      exits: host.resolveExitSources(uniqueNormalExits),
+      endExits: [...new Set(innerEndExits)],
     };
   }
 
@@ -265,41 +216,56 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
 
   if (!finallyResult.entry) {
     return {
-      entry: decisionId,
-      exits: host.resolveExitSources(normalSources),
-      endExits: [...new Set(abruptSources)],
+      entry: tryStartId,
+      exits: host.resolveExitSources(uniqueNormalExits),
+      endExits: [...new Set(innerEndExits)],
     };
   }
 
-  const finallyInput =
-    allIncoming.length > 1
-      ? (() => {
-          const mergeId = host.writer.addFlowNode('merge', '');
-          for (const source of allIncoming) {
-            host.writer.addEdge(source, mergeId);
-          }
-          return mergeId;
-        })()
-      : allIncoming[0];
 
-  host.writer.addEdge(finallyInput, finallyResult.entry);
+  const allPathsIntoFinally = [...new Set([...uniqueNormalExits, ...innerEndExits])];
+
+  let finallyInputId: string | undefined;
+  if (allPathsIntoFinally.length === 0) {
+    finallyInputId = undefined;
+  } else if (allPathsIntoFinally.length === 1) {
+    finallyInputId = allPathsIntoFinally[0];
+  } else {
+    finallyInputId = host.writer.addFlowNode('merge', '');
+    for (const source of allPathsIntoFinally) {
+      host.writer.addEdge(source, finallyInputId);
+    }
+  }
+
+  if (finallyInputId) {
+    host.writer.addEdge(finallyInputId, finallyResult.entry, 'finally', false);
+  }
+
+  const finallyNormalExits = host.resolveExitSources(finallyResult.exits);
 
   if (finallyResult.endExits.length > 0) {
     return {
-      entry: decisionId,
+      entry: tryStartId,
       exits: [],
       endExits: [...new Set(finallyResult.endExits)],
     };
   }
 
-  const exits = normalSources.length > 0 ? host.resolveExitSources(finallyResult.exits) : [];
+  const hadEndExits = innerEndExits.length > 0;
+  const hadNormalExits = uniqueNormalExits.length > 0;
 
-  const endExits = abruptSources.length > 0 ? [...new Set(finallyResult.exits)] : [];
+  if (hadEndExits && !hadNormalExits) {
+    return {
+      entry: tryStartId,
+      exits: [],
+      endExits: [...new Set(finallyNormalExits)],
+    };
+  }
 
   return {
-    entry: decisionId,
-    exits,
-    endExits,
+    entry: tryStartId,
+    exits: finallyNormalExits,
+    endExits: [],
   };
 }
 
@@ -308,28 +274,21 @@ function visitStandardLoop(
   loopId: string,
   loopBranch: import('ts-morph').Node,
   bodyLabel = 'yes',
-  exitLabel = 'no',
 ): BuildResult {
   const innerDecisionCount = countDecisionsInBranch(loopBranch);
   const body = host.visitBranch(loopBranch);
+  void innerDecisionCount;
 
   if (body.entry) {
-    host.writer.addEdge(loopId, body.entry, bodyLabel, false, host.edgeMeta('right', 'positive'));
+    host.writer.addEdge(loopId, body.entry, bodyLabel, false);
     host.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
   } else {
-    host.writer.addEdge(
-      loopId,
-      loopId,
-      bodyLabel,
-      true,
-      host.edgeMeta('left', 'loop-back', { innerDecisionCount }),
-    );
+    host.writer.addEdge(loopId, loopId, bodyLabel, true);
   }
 
-  const exitId = host.createContinuationFrom(loopId, exitLabel, host.edgeMeta('left', 'negative'));
   return {
     entry: loopId,
-    exits: [exitId],
+    exits: [loopId],
     endExits: [...new Set(body.endExits)],
   };
 }
@@ -343,6 +302,5 @@ function visitIteratorLoop(host: StatementVisitorHost, stmt: ForOfStatement | Fo
     ),
     stmt.getStatement(),
     'each',
-    'done',
   );
 }

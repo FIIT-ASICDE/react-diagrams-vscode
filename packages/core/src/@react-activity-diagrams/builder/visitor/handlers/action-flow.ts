@@ -41,21 +41,13 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
   const body = callbackBranch ? host.visitBranch(callbackBranch) : undefined;
 
   if (body?.entry) {
-    host.writer.addEdge(loopId, body.entry, 'each', false, host.edgeMeta('right', 'positive'));
+    host.writer.addEdge(loopId, body.entry, 'each', false);
     host.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
-    const exitId = host.createContinuationFrom(loopId, 'done', host.edgeMeta('left', 'negative'));
-    return { entry: loopId, exits: [exitId], endExits: body.endExits };
+    return { entry: loopId, exits: [loopId], endExits: body.endExits };
   }
 
-  host.writer.addEdge(
-    loopId,
-    loopId,
-    'each',
-    true,
-    host.edgeMeta('left', 'loop-back', { innerDecisionCount }),
-  );
-  const exitId = host.createContinuationFrom(loopId, 'done', host.edgeMeta('left', 'negative'));
-  return { entry: loopId, exits: [exitId], endExits: [] };
+  host.writer.addEdge(loopId, loopId, 'each', true);
+  return { entry: loopId, exits: [loopId], endExits: [] };
 }
 
 export function visitAction(host: StatementVisitorHost, label: string, sourceText?: string): BuildResult {
@@ -74,7 +66,7 @@ export function visitReturn(host: StatementVisitorHost, stmt: ReturnStatement): 
     nodeKind: 'action',
   });
 
-  return { entry: id, exits: [id], endExits: [] };
+  return { entry: id, exits: [], endExits: [id] };
 }
 
 export function visitThrow(host: StatementVisitorHost, stmt: ThrowStatement): BuildResult {
@@ -85,5 +77,5 @@ export function visitThrow(host: StatementVisitorHost, stmt: ThrowStatement): Bu
     nodeKind: 'action',
   });
 
-  return { entry: id, exits: [id], endExits: [] };
+  return { entry: id, exits: [], endExits: [id] };
 }

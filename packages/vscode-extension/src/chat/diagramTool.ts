@@ -6,7 +6,15 @@ type CreateActivityDiagramInput = {
 	title?: string;
 };
 
-function getBestEditorCode(): { code: string; filePath?: string; codeContextKind: "selected" | "full-file" | "none" } {
+type CreateCodeInput = {
+	title?: string;
+};
+
+function getBestEditorCode(): {
+	code: string;
+	filePath?: string;
+	codeContextKind: "selected" | "full-file" | "none";
+} {
 	const editor =
 		vscode.window.activeTextEditor ??
 		vscode.window.visibleTextEditors.find((e) => e.document.uri.scheme === "file");
@@ -52,8 +60,7 @@ export function registerCreateActivityDiagramTool(
 				if (!sourceText.trim()) {
 					throw new Error("No code is available. Open a file or select code first.");
 				}
-				console.log("Invoking create_activity_diagram with sourceText:", sourceText);
-				console.log(hasSnippet ? "Using provided sourceText." : "Using code from editor.");
+
 				await ComponentActivityPanel.showDiagramFromSourceText(
 					context.extensionUri,
 					sourceText,
@@ -61,15 +68,48 @@ export function registerCreateActivityDiagramTool(
 				);
 
 				return new vscode.LanguageModelToolResult([
-					new vscode.LanguageModelTextPart(JSON.stringify({
-						success: true,
-						usedSnippet: hasSnippet,
-						codeContextKind: editorState.codeContextKind,
-						filePath: editorState.filePath ?? null,
-						title: input.title ?? null,
-					}))
+					new vscode.LanguageModelTextPart(
+						JSON.stringify({
+							success: true,
+							usedSnippet: hasSnippet,
+							codeContextKind: editorState.codeContextKind,
+							filePath: editorState.filePath ?? null,
+							title: input.title ?? null,
+						})
+					),
 				]);
-			}
+			},
+		}
+	);
+
+	context.subscriptions.push(disposable);
+	return disposable;
+}
+
+export function registerCreateCodeTool(
+	context: vscode.ExtensionContext
+): vscode.Disposable {
+	const disposable = vscode.lm.registerTool<CreateCodeInput>(
+		"create_code_from_activity_diagram",
+		{
+			async invoke(options, _token) {
+				const code =
+					await ComponentActivityPanel.generateCodeFromCurrentDiagram();
+
+				if (!code || !code.trim()) {
+					throw new Error("Diagram-to-code generation returned empty code.");
+				}
+
+				return new vscode.LanguageModelToolResult([
+					new vscode.LanguageModelTextPart(
+						JSON.stringify({
+							success: true,
+							title: options.input?.title ?? null,
+							code,
+						})
+					),
+				]);
+			},
 		}
 	);
 

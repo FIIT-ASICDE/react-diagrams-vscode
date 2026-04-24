@@ -2,8 +2,8 @@ import { commands, ExtensionContext, ExtensionMode, RelativePattern, window, wor
 import { ComponentActivityPanel } from "./app@panels/ComponentActivityPanel";
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
 import { normalizeFilePath } from "@react-diagrams/core";
-import { registerDiagramChatParticipant } from "./chat/diagramChatParticipant";
-import { registerCreateActivityDiagramTool } from "./chat/diagramTool";
+import { registerDiagramChatParticipant } from "./chat/diagram";
+import { registerCreateActivityDiagramTool, registerCreateCodeTool } from "./chat/diagramTool";
 
 export function activate(context: ExtensionContext) {
 	const showComponentStateDiagram = commands.registerCommand("vs-code-ext.componentState", () => {
@@ -34,8 +34,9 @@ export function activate(context: ExtensionContext) {
 	const autoRestartInDev = setupAutoRestartInDevelopment(context);
 	const diagramChatParticipant = registerDiagramChatParticipant(context);
 	const createActivityDiagramTool = registerCreateActivityDiagramTool(context);
+	const createCodeTool = registerCreateCodeTool(context);
 
-	context.subscriptions.push(showComponentStateDiagram, refreshCurrentPanelOnSave, showActivityCommand, autoRestartInDev, diagramChatParticipant, createActivityDiagramTool);
+	context.subscriptions.push(showComponentStateDiagram, refreshCurrentPanelOnSave, showActivityCommand, autoRestartInDev, diagramChatParticipant, createActivityDiagramTool, createCodeTool);
 }
 
 function setupAutoRestartInDevelopment(context: ExtensionContext) {

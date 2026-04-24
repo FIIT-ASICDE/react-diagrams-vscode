@@ -43,18 +43,16 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
 
   const normalExitSources: string[] = [];
   const endExits: string[] = [];
-  const directBreakBranches: Array<{ semanticKind: 'case' | 'default' }> = [];
+  const directBreakBranchCount = { value: 0 };
 
   const mergeId = host.writer.addFlowNode('merge', '');
 
   for (const group of groups) {
-    const isDefaultOnly = group.labels.every((label) => label === 'default');
-    const semanticKind = isDefaultOnly ? 'default' as const : 'case' as const;
     const displayLabelBase = formatSwitchGroupLabel(group.labels);
 
     if (group.executableStatements.length === 0) {
       if (group.hasBreak) {
-        directBreakBranches.push({ semanticKind });
+        directBreakBranchCount.value += 1;
       }
       continue;
     }
@@ -69,13 +67,7 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
       nodeKind: 'switch-case',
     });
 
-    host.writer.addEdge(
-      decisionId,
-      caseNodeId,
-      '',
-      false,
-      host.edgeMeta('bottom', semanticKind),
-    );
+    host.writer.addEdge(decisionId, caseNodeId, '', false);
 
     if (analysis.endExits.length > 0 && analysis.exits.length === 0) {
       endExits.push(caseNodeId);
@@ -87,7 +79,7 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
     }
   }
 
-  const normalPathCount = normalExitSources.length + directBreakBranches.length;
+  const normalPathCount = normalExitSources.length + directBreakBranchCount.value;
   if (normalPathCount === 0) {
     return {
       entry: decisionId,
@@ -96,14 +88,8 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
     };
   }
 
-  for (const branch of directBreakBranches) {
-    host.writer.addEdge(
-      decisionId,
-      mergeId,
-      '',
-      false,
-      host.edgeMeta('bottom', branch.semanticKind),
-    );
+  for (let index = 0; index < directBreakBranchCount.value; index += 1) {
+    host.writer.addEdge(decisionId, mergeId, '', false);
   }
 
   return {

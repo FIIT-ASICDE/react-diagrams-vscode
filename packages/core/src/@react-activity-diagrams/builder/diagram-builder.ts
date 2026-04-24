@@ -43,9 +43,6 @@ export class DiagramBuilder {
         endId,
         onlyExit.startsWith('decision-') || onlyExit.startsWith('loop-') ? 'no' : undefined,
         false,
-        onlyExit.startsWith('decision-') || onlyExit.startsWith('loop-')
-          ? { branchSide: 'left', semanticKind: 'negative' }
-          : { branchSide: 'bottom', semanticKind: 'normal' },
       );
     } else {
       const finalMergeId = writer.addFlowNode('merge', '');
@@ -56,9 +53,6 @@ export class DiagramBuilder {
           finalMergeId,
           exit.startsWith('decision-') || exit.startsWith('loop-') ? 'no' : undefined,
           false,
-          exit.startsWith('decision-') || exit.startsWith('loop-')
-            ? { branchSide: 'left', semanticKind: 'negative' }
-            : { branchSide: 'bottom', semanticKind: 'normal' },
         );
       }
 
