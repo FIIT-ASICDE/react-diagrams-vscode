@@ -37,7 +37,11 @@ export async function jumpToPosition(file: Uri | string, line: number, col: numb
 	existingEditor.revealRange(selection, TextEditorRevealType.InCenter);
 }
 
-export async function saveDiagramImage(data: { dataUrl?: string; }, cache: ParsingImageCache<any>) {
+export function getConfigOption<T>(section: string, key: string) {
+	return workspace.getConfiguration(section).get<T>(key);
+}
+
+export async function saveDiagramImage(data: { dataUrl?: string; }, cache: ParsingImageCache) {
 	const document = cache.getCurrentDocument();
 	if (!document) {
 		window.showWarningMessage("No active React component file found for this diagram image.");

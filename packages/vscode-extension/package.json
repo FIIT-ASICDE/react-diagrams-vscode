@@ -53,6 +53,11 @@
           "default": true,
           "description": "Open the State Diagram panel on the side instead of the main area"
         },
+        "state.diagram.useGuardsWhenPossible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use [guards] in the State Diagram transitions instead of decision nodes if possible."
+        },
         "state.diagram.backgroundColor": {
           "type": "string",
           "default": "auto",

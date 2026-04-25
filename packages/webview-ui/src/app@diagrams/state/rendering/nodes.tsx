@@ -17,10 +17,7 @@ function NodeShell({ width, height, children }: { width?: number; height?: numbe
 	return (
 		<>
 			{commonSourceHandles(false, 0, 0)}
-			<div
-				className="relative flex items-center justify-center box-border overflow-visible"
-				style={{ width, height }}
-			>
+			<div className="relative flex items-center justify-center box-border overflow-visible" style={{ width, height }}>
 				{children}
 			</div>
 			{commonTargetHandles(false, 0, 0)}
@@ -28,13 +25,13 @@ function NodeShell({ width, height, children }: { width?: number; height?: numbe
 	);
 }
 
-function CenteredLabel({ label, color, background }: { label?: string,  color?: string, background?: string }) {
+function CenteredLabel({ label, color, background, className }: { label?: string, color?: string, background?: string, className?: string }) {
 	if (!label?.length)
 		return null;
 
 	return (
 		<span
-			className={`max-w-58 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden text-ellipsis whitespace-nowrap text-center text-[10px] z-50 ${labelClass}`}
+			className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 truncate text-center text-[10px] ${labelClass} ${className}`}
 			style={{ color: color ?? 'var(--vscode-foreground)', background }}
 		>
 			{label}
@@ -85,7 +82,7 @@ const DecisionNode = memo(({ data }: RFNodeProps) => {
 					boxSizing: 'border-box',
 				}}
 			/>
-			<CenteredLabel label={data.label} background={data.color} color="white" />
+			<CenteredLabel label={data.label} background={data.color} color="white" className='not-[&:hover]:max-w-58' />
 		</NodeShell>
 	);
 });
@@ -134,7 +131,7 @@ const ExitNode = memo(({ data }: RFNodeProps) => {
 					}}
 				/>
 			</div>
-			<CenteredLabel label={data.label} />
+			<CenteredLabel label={data.label} background={data.color} className='translate-y-[170%] not-[&:hover]:max-w-30' />
 		</NodeShell>
 	);
 });
@@ -170,7 +167,7 @@ const ExceptionNode = memo(({ data }: RFNodeProps) => {
 					}}
 				/>
 			</div>
-			<CenteredLabel label={data.label} />
+			<CenteredLabel label={data.label} background={data.color} className='translate-y-[170%] not-[&:hover]:max-w-30' />
 		</NodeShell>
 	);
 });
@@ -190,7 +187,7 @@ const NODE_COLORS = {
 	tryDecision: 'color-mix(in srgb, #af6b07 88%, transparent)',
 	switchDecision: 'color-mix(in srgb, #7c9b2e 88%, transparent)',
 	loopDecision: 'color-mix(in srgb, #008f9e 88%, transparent)',
-	throw: 'var(--vscode-errorForeground, #ef4444)',
+	throw: 'color-mix(in srgb, #ff4440 88%, transparent)',
 	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 75, blockedHueRanges: [ [350, 20] ] })} 88%, transparent)`,
 };
 

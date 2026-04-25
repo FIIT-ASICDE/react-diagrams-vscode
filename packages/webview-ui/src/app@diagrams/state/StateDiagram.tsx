@@ -85,8 +85,8 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	return (
 		<div className="h-full w-full">
 			{!hasModel && (
-				<div className="absolute z-10 rounded border border-(--vscode-editorWidget-border) bg-(--vscode-editorWidget-background) px-3 py-2 text-(--vscode-descriptionForeground)">
-					No state variables found.
+				<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 rounded border border-(--vscode-editorWidget-border) px-3 py-2 text-gray-400 text-center">
+					State diagram can't be generated from the current code. Please make sure you export default valid React components that has at least one active state variable.
 				</div>
 			)}
 			<ReactFlow

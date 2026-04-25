@@ -32,7 +32,6 @@ import {
 } from '../../app@state-diagram-model/types';
 import { codePosStr, createId, getAllCalls, getCodePos, getFuncName, normText } from './utils';
 import { truncate } from '../../app@core/utils';
-import { classifyStateUpdateKind } from './state-mutators';
 
 export function createFlowNode(kind: ControlFlowNodeKind, node: Node, mutator: StateMutatingFunction, label?: string/*, sourceFile: SourceFile*/): ControlFlowNode {
 	const pos = getCodePos(node);
@@ -45,9 +44,9 @@ export function createFlowNode(kind: ControlFlowNodeKind, node: Node, mutator: S
 	};
 }
 
-export function createTransition(from: StateGraphNode, to: StateGraphNode, kind: StateTransitionKind, rawConditionText?: string): StateTransition {
+export function createTransition(from: StateGraphNode, to: StateGraphNode, kind: StateTransitionKind, rawConditionText?: string, label?: string): StateTransition {
 	const ifKindName = kind => kind == StateTransitionKind.Then ? 'true' : kind == StateTransitionKind.Else ? 'false' : kind;
-	const label = rawConditionText ? `[${kind}] ${truncate(rawConditionText, 80)}` : (kind == StateTransitionKind.Normal ? '' : `[${ifKindName(kind)}]`);
+	label ??= rawConditionText ? `[${kind}] ${truncate(rawConditionText, 80)}` : (kind == StateTransitionKind.Normal ? '' : `[${ifKindName(kind)}]`);
 	return {
 		id: createId('transition', `${from.id}->${to.id}:${kind}`, from.pos),
 		fromNodeId: from.id,
@@ -56,16 +55,6 @@ export function createTransition(from: StateGraphNode, to: StateGraphNode, kind:
 		label,
 		rawConditionText,
 	};
-}
-
-function truncCaseLabels(existing?: string, incoming?: string, maxLength = 30) {
-	if (!existing)
-		return incoming;
-	if (!incoming || existing.includes('...') || existing.includes(incoming))
-		return existing;
-
-	const combined = `${existing} | ${incoming}`;
-	return combined.length <= maxLength ? combined : `${existing.split(' | ')[0]} | ...`;
 }
 
 export function normalizeOpenEdges(openEdges: OpenEdge[], to?: StateGraphNode) { // necessary evil to dedup case fallthroughs and rm unecessary...
@@ -96,26 +85,9 @@ export function normalizeOpenEdges(openEdges: OpenEdge[], to?: StateGraphNode) {
 			continue;
 		}
 
-		existing.rawConditionText = truncCaseLabels(existing.rawConditionText, edge.rawConditionText);
+		existing.rawConditionText = `${existing.rawConditionText} | ${edge.rawConditionText}`;
 	}
 	return result;
-}
-
-export function createOccurrenceUpdateNode(call: CallExpression, stateVariable: StateVariable/*, sourceFile: SourceFile*/): StateUpdate {
-	const pos = getCodePos(call);
-	const arg = call.getArguments()[0];
-	const label = arg ? normText(arg) : undefined;
-	const kind = classifyStateUpdateKind(arg);
-
-	return {
-		id: createId('update-occ', `${stateVariable.name}:${kind}`, pos),
-		nodeType: 'state-update',
-		stateVariableId: stateVariable.id,
-		setterName: stateVariable.setterName,
-		kind,
-		pos,
-		label,
-	};
 }
 
 export const isRelevant = (node: Node, setterName: string, hasSetterAhead = false) => {
@@ -132,11 +104,16 @@ export interface OpenEdge { // We dont yet know "to", remember type and from...
 	from: StateGraphNode;
 	kind: StateTransitionKind;
 	rawConditionText?: string;
+	label?: string;
 }
 
-interface VisitContext {
+export interface StateVisitContext {
 	breakCollector?: OpenEdge[];
 	continueCollector?: OpenEdge[];
+}
+
+export interface StateGraphOptions {
+	useGuardsWhenPossible?: boolean;
 }
 
 export class GraphBuilder {
@@ -147,6 +124,7 @@ export class GraphBuilder {
 		private readonly mutator: StateMutatingFunction,
 		private readonly nodes: StateGraphNode[],
 		private readonly transitions: StateTransition[],
+		private readonly options?: StateGraphOptions,
 		// private readonly sourceFile?: SourceFile,
 		
 	) {
@@ -158,8 +136,8 @@ export class GraphBuilder {
 	}
 
 	private connect(to: StateGraphNode, edges: OpenEdge[]) {
-		for (const edge of normalizeOpenEdges(edges, to))
-			this.transitions.push(createTransition(edge.from, to, edge.kind, edge.rawConditionText));
+		for (const { from, kind, ...edge } of normalizeOpenEdges(edges, to))
+			this.transitions.push(createTransition(from, to, kind, edge.rawConditionText, edge.label));
 	}
 
 	private appendFlowNode(kind: ControlFlowNodeKind, node: Node, label?: string, replaceCurrent?: ControlFlowNode) {
@@ -211,13 +189,26 @@ export class GraphBuilder {
 		return [];
 	}
 
-	visitIf(statement: IfStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: VisitContext): OpenEdge[] {
+	visitIf(statement: IfStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext): OpenEdge[] {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
 
 		const conditionText = statement.getExpression().getText();
 		const thenBody = statement.getThenStatement();
 		const elseBody = statement.getElseStatement();
+		const isElseif = Node.isIfStatement(elseBody);
+
+		if (this.options?.useGuardsWhenPossible && !isElseif && incoming.length == 1 && incoming[0].from.nodeType == 'state-update' && incoming[0].kind == StateTransitionKind.Normal) {
+			const from = incoming[0].from;
+
+			const thenIncoming: OpenEdge[] = [{ from, kind: StateTransitionKind.Then, label: `[${truncate(conditionText, 80)}]` }];
+			const thenOpen = this.visit(thenBody, thenIncoming, hasSetterAhead, context);
+
+			const elseIncoming: OpenEdge[] = [{ from, kind: StateTransitionKind.Else, label: `[else]` }];
+			const elseOpen = !elseBody ? elseIncoming : this.visit(elseBody, elseIncoming, hasSetterAhead, context);
+
+			return normalizeOpenEdges([...thenOpen, ...elseOpen]);
+		}
 		
 		const decisionNode = this.appendFlowNode('decision', statement, truncate(conditionText, 80));
 		this.connect(decisionNode, incoming);
@@ -226,12 +217,12 @@ export class GraphBuilder {
 		const thenOpen = this.visit(thenBody, thenIncoming, hasSetterAhead, context)
 
 		const elseIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Else, /*rawConditionText: `!(${conditionText})`*/ }];
-		var elseOpen = !elseBody ? elseIncoming : Node.isIfStatement(elseBody) ? this.visitIf(elseBody, elseIncoming, hasSetterAhead, context) : this.visit(elseBody, elseIncoming, hasSetterAhead, context);
+		var elseOpen = !elseBody ? elseIncoming : isElseif ? this.visitIf(elseBody, elseIncoming, hasSetterAhead, context) : this.visit(elseBody, elseIncoming, hasSetterAhead, context);
 
 		return this.collapseWithMerge(statement, [...thenOpen, ...elseOpen]);
 	}
 
-	visitTry(statement: TryStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: VisitContext) {
+	visitTry(statement: TryStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext) {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
 
@@ -265,7 +256,7 @@ export class GraphBuilder {
 		return this.collapseWithMerge(statement, finalOpen);
 	}
 
-	visitBreak(_statement: BreakStatement, incoming: OpenEdge[], context?: VisitContext) {
+	visitBreak(_statement: BreakStatement, incoming: OpenEdge[], context?: StateVisitContext) {
 		if (!context?.breakCollector)
 			return incoming;
 
@@ -273,7 +264,7 @@ export class GraphBuilder {
 		return [];
 	}
 
-	visitContinue(_statement: ContinueStatement, incoming: OpenEdge[], context?: VisitContext) {
+	visitContinue(_statement: ContinueStatement, incoming: OpenEdge[], context?: StateVisitContext) {
 		if (!context?.continueCollector)
 			return incoming;
 
@@ -281,7 +272,7 @@ export class GraphBuilder {
 		return [];
 	}
 
-	visitSwitch(statement: SwitchStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: VisitContext) {
+	visitSwitch(statement: SwitchStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext) {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
 
@@ -394,7 +385,7 @@ export class GraphBuilder {
 		return this.collapseWithMerge(statement, [{ from: decisionNode, kind: StateTransitionKind.Else }, ...loopBreakEdges]);
 	}
 
-	visit(what: Statement | Block, incoming: OpenEdge[], hasSetterAhead = false, context?: VisitContext) {
+	visit(what: Statement | Block, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext) {
 		let current = incoming;
 		if (Node.isBlock(what)) {
 			const statements = what.getStatements();
@@ -469,7 +460,7 @@ export class GraphBuilder {
 	}
 }
 
-export function buildTransitionFlowGraph(mutatorBodies: Map<Id, Block>, stateVariables: StateVariable[]/*, sourceFile: SourceFile*/) {
+export function buildTransitionFlowGraph(mutatorBodies: Map<Id, Block>, stateVariables: StateVariable[], stateFlowOptions?: StateGraphOptions) {
 	for (const stateVariable of stateVariables) {
 		const mutators = [...(stateVariable.mutators ?? [])]; // remember obj instances are shared
 		for (const mutator of mutators) {
@@ -480,7 +471,7 @@ export function buildTransitionFlowGraph(mutatorBodies: Map<Id, Block>, stateVar
 			mutator.nodes = mutator.nodes.filter(({nodeType}) => nodeType == 'state-update');
 			mutator.transitions = [];
 
-			const builder = new GraphBuilder(stateVariable, mutator, mutator.nodes, mutator.transitions);
+			const builder = new GraphBuilder(stateVariable, mutator, mutator.nodes, mutator.transitions, stateFlowOptions);
 			builder.build(body);
 		}
 	}

@@ -102,6 +102,8 @@ export enum StateTransitionKind {
 // 	'then' |
 // 	'else' |
 // 	'case' |
+// 	'default' |
+// 	'loop' |
 // 	'catch' |
 // 	'finally' |
 // 	'return' |

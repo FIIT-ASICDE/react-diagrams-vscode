@@ -70,7 +70,7 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 					},
 					width,
 					height,
-					className: 'bg-transparent border-0 shadow-none z-20',
+					className: `bg-transparent border-0 shadow-none ${graphNode.nodeType == 'state-update' ? 'z-10' : ''}`,
 					draggable: true,
 				}
 				nodes.push(node);

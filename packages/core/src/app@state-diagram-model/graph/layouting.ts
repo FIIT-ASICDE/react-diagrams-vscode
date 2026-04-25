@@ -50,7 +50,7 @@ export const ELK_OPTIONS: LayoutOptions = {
 	'elk.portConstraints': 'FIXED_SIDE',
 	'elk.edgeRouting': 'POLYLINE',
 
-	'elk.spacing.nodeNode': '48',
+	'elk.spacing.nodeNode': '50',
 	'elk.padding': elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad, LAYOUT.mutator.pad),
 
 	// 'elk.edgeLabels.placement': 'CENTER',

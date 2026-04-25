@@ -26,12 +26,14 @@ export function getRoutablePath(pathPoints: XYPosition[], borderRadius: string |
 	if (!borderRadius) {
 		for (let i = 1; i < pathPoints.length; i++) {
 			const { x, y } = pathPoints[i];
+			const prev = pathPoints[i - 1];
+
 			stringPath += ` L ${x} ${y}`;
 
-			const dPrev = Math.hypot(x - x, y - y);
+			const dPrev = Math.hypot(x - prev.x, y - prev.y);
 			if (dPrev > maxSegmentLen) {
 				maxSegmentLen = dPrev;
-				[labelX, labelY] = [(x + x)/2, (y + y)/2];
+				[labelX, labelY] = [(x + prev.x)/2, (y + prev.y)/2];
 			}
 		}
 	}
@@ -112,12 +114,13 @@ export default function RoutableEdge({ id, source, target, style, label, data: {
 			</g>
 			{label && (
 				<EdgeLabelRenderer>
-					<div className="text-nowrap absolute rounded border truncate max-w-28 border-(--vscode-widget-border) p-1 leading-none text-[11px] text-(--vscode-foreground) shadow-sm"
+					<div className="text-nowrap absolute rounded border truncate border-(--vscode-widget-border) p-1 leading-none text-[11px] text-(--vscode-foreground) shadow-sm"
 						style={{
 							transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
 							background: hover ? `var(--vscode-editor-background)` : `color-mix(in srgb, var(--vscode-editor-background) 80%, transparent)`,
 							zIndex: hover ? 30 : 10,
 							filter: hover ? 'drop-shadow(0 2px 8px rgba(65,65,75,0.5))' : 'none',
+							maxWidth: hover ? 'max-content' : 120,
 						}}
 					>
 						{label}

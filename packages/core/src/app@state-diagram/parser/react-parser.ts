@@ -8,7 +8,7 @@ import { asSrcFile } from './utils';
 import { createComponentModel, resolveDefaultExportComponent } from './component';
 import { collectStateVariables } from './state-variables';
 import { classifyStateUpdateKind, populateStateUpdatesAndMutators } from './state-mutators';
-import { buildTransitionFlowGraph, GraphBuilder } from './state-flow-graph';
+import { buildTransitionFlowGraph, GraphBuilder, StateGraphOptions } from './state-flow-graph';
 
 /*
 
@@ -67,8 +67,8 @@ Step 4:
 		Loops should be incorporated into this with the backwards transitions cyclic transitions.
 */
 
-export function parseReactComponent(reactComponent: string, rootDir = '.'): StateDiagram {
-	const { sourceFile } = asSrcFile(reactComponent, rootDir);
+export function parseReactComponent(reactComponent: string, stateFlowOptions?: StateGraphOptions & { rootPath?: string }): StateDiagram {
+	const { sourceFile } = asSrcFile(reactComponent, stateFlowOptions?.rootPath);
 	try {
 		const component = resolveDefaultExportComponent(sourceFile);
 		// console.debug(component);
@@ -81,7 +81,7 @@ export function parseReactComponent(reactComponent: string, rootDir = '.'): Stat
 
 		const stateVariables = collectStateVariables(component, sourceFile);
 		const mutatorBodies = populateStateUpdatesAndMutators(component, stateVariables);
-		buildTransitionFlowGraph(mutatorBodies, stateVariables);
+		buildTransitionFlowGraph(mutatorBodies, stateVariables, stateFlowOptions);
 
 		return {
 			component: createComponentModel(component, sourceFile),

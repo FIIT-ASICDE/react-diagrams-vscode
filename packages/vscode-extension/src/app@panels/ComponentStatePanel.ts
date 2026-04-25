@@ -1,5 +1,5 @@
 import { Disposable, TextDocument, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
-import { getNonce, getUri, jumpToPosition, saveDiagramImage } from "../app@utils";
+import { getConfigOption, getNonce, getUri, jumpToPosition, saveDiagramImage } from "../app@utils";
 import { basename, extname } from "path";
 import { componentStateCache, getRootPath } from "../app@utils/cache";
 
@@ -39,8 +39,7 @@ export class ComponentStatePanel {
 	 * @param extensionUri The URI of the directory containing the extension.
 	 */
 	public static async render(extensionUri: Uri) {
-		const config = workspace.getConfiguration('state.diagram');
-		const openOnSide = config.get<boolean>('openStatePanelOnTheSide', true);
+		const openOnSide = getConfigOption<boolean>('state.diagram', 'openStatePanelOnTheSide');
 
 		if (ComponentStatePanel.current) { // Already exists, show it
 			console.debug("ComponentStatePanel already exists, showing existing panel");
@@ -70,8 +69,10 @@ export class ComponentStatePanel {
 		if (!result)
 			return;
 
+		const useGuardsWhenPossible = getConfigOption<boolean>('state.diagram', 'useGuardsWhenPossible');
+
 		const { rootPath, targetDocument } = result;
-		return componentStateCache.update(targetDocument, rootPath, forceUpdate);
+		return componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible }, forceUpdate);
 	}
 
 	// public static isShowingDocument(document: TextDocument) {
@@ -89,7 +90,9 @@ export class ComponentStatePanel {
 		this.panel.title = `${ComponentStatePanel.NAME} (${basename(activeFilePath)})`;
 
 		try {
-			const model = await componentStateCache.update(targetDocument, rootPath, forceUpdate);
+			const useGuardsWhenPossible = getConfigOption<boolean>('state.diagram', 'useGuardsWhenPossible');
+
+			const model = await componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible }, forceUpdate);
 
 			if (requestId != this.refreshRequestId) // Ignore if a newer refresh started while this parse was running.
 				return console.debug("Outdated refresh result discarded");

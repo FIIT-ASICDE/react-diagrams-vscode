@@ -19,15 +19,15 @@ export class ParsingCache<T = any> {
 	private currentDocument?: TextDocument;
 
 	constructor (
-		private parseFunction: (source: string, rootPath?: string) => T,
+		private parseFunction: (source: string, parserOptions?) => T,
 	) 
 	{}
 
-	async parseAsync(source: string, rootPath?: string) {
-		return this.parseFunction(source, rootPath);	
+	async parseAsync(source: string, parserOptions?) {
+		return this.parseFunction(source, parserOptions);	
 	}
 
-	updateEntry(document: TextDocument, rootPath?: string, forceUpdate = false) {
+	updateEntry(document: TextDocument, parserOptions?, forceUpdate = false) {
 		const cacheKey = normalizeFilePath(document.uri.fsPath);
 		this.currentDocument = document;
 
@@ -39,7 +39,7 @@ export class ParsingCache<T = any> {
 		}
 
 		console.time(`Parsing React component {${cacheKey}}`);
-		const data = this.parseAsync(document.uri.fsPath, rootPath ?? getRootPath(document));
+		const data = this.parseAsync(document.uri.fsPath, { ...parserOptions, rootPath: parserOptions.rootPath ?? getRootPath(document) });
 		console.timeEnd(`Parsing React component {${cacheKey}}`);
 		// console.trace();
 
@@ -53,8 +53,8 @@ export class ParsingCache<T = any> {
 		return entry;
 	}
 
-	async update(document: TextDocument, rootPath?: string, forceUpdate = false) {
-		const { data } = this.updateEntry(document, rootPath, forceUpdate);
+	async update(document: TextDocument, parserOptions?, forceUpdate = false) {
+		const { data } = this.updateEntry(document, parserOptions, forceUpdate);
 		return await data;
 	}
 
@@ -84,13 +84,13 @@ export type ImageCacheEntry = CacheEntry<Uint8Array, Uint8Array> & {
 export class ParsingImageCache<T = any> extends ParsingCache<T> {
 	private readonly images = new Map<string, ImageCacheEntry>();
 
-	override updateEntry(document: TextDocument, rootPath?: string, forceUpdate = false) {
+	override updateEntry(document: TextDocument, parserOptions?, forceUpdate = false) {
 		const cacheKey = normalizeFilePath(document.uri.fsPath);
 		const cached = super.get(document.uri.fsPath);
 
 		if (forceUpdate || cached?.documentVersion != document.version)
 			this.images.delete(cacheKey);
-		return super.updateEntry(document, rootPath, forceUpdate);
+		return super.updateEntry(document, parserOptions, forceUpdate);
 	}
 
 	override clear() {
