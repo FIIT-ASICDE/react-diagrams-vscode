@@ -18,16 +18,16 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 	const stateVariableLayouts = await Promise.all(model.stateVariables.map(stateVar => layoutStateVariable(stateVar, { 'elk.edgeRouting': transitionRouting })));
 	const { layoutedItems: layoutedStateVariables } = await layoutBoxRow(stateVariableLayouts, { gap: LAYOUT.state.gap, padding: elkPadd(LAYOUT.canvasPadding, LAYOUT.canvasPadding) });
 
-	for (const { id: stateVarId, layoutedMutators, ...stateVar } of layoutedStateVariables) {
+	for (const { id: stateVarId, layoutedMutators, initializerText, ...stateVar } of layoutedStateVariables) {
 		nodes.push({
 			id: stateVarId,
 			type: 'labeledGroupNode',
 			position: { x: stateVar.x, y: stateVar.y },
 			data: {
 				...stateVar,
-				label: <div className='text-white'><b>{stateVar.name}</b> : {stateVar.hook}</div>, 
+				name: <span className='text-white leading-0'><b>{stateVar.name}</b> : {stateVar.hook} {initializerText && <> = <span className='font-semibold'>{initializerText}</span></>}</span>, 
 				color: getColor(stateVar.name, 24),
-				children: !layoutedMutators?.length && <p className='text-(--vscode-descriptionForeground) italic'>No mutators found</p> 
+				children: !layoutedMutators?.length && <p className='text-gray-400 italic'>No mutators found</p> 
 			} as GroupNodeProps,
 			width: stateVar.width,
 			height: stateVar.height,
@@ -35,7 +35,7 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 		});
 
 		for (const { id: mutatorId, ...mutatorLayout } of layoutedMutators) {
-			const mutatorArgs = `${mutatorLayout.args ?? '...'}`;
+			const mutatorArgs = mutatorLayout.type == 'arrow-function' ? `((${mutatorLayout.args}) =>` : `(${mutatorLayout.args})`;
 			nodes.push({
 				id: mutatorId,
 				type: 'labeledGroupNode',
@@ -43,9 +43,9 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 				parentId: stateVarId,
 				extent: 'parent',
 				data: { 
-					label: <div className='text-white'>{mutatorLayout.name}<i>{mutatorLayout.type == 'arrow-function' ? `((${mutatorArgs}) =>` : `(${mutatorArgs})`}</i></div>, 
-					color: getColor(mutatorLayout.name, 40),
 					...mutatorLayout, 
+					name: <span className='text-white leading-0'><span className='font-semibold'>{mutatorLayout.name}</span>{mutatorLayout.args != undefined && <i>{mutatorArgs}</i>}</span>,
+					color: getColor(mutatorLayout.name, 40),
 				} as GroupNodeProps,
 				width: mutatorLayout.width,
 				height: mutatorLayout.height,

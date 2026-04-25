@@ -63,13 +63,14 @@ export function createStateUpdate(stateVariable: StateVariable, callExpression: 
 
 /** Gets or creates the dedicated render-body mutator for top-level setter calls. */
 function getOrCreateInlineMutator(stateVariable: StateVariable, component: SupportedComponentDeclaration/*, sourceFile: SourceFile*/) {
-	if (stateVariable.inlineMutator)
-		return stateVariable.inlineMutator;
+	const inlineName = '<render-body>';
+	if (stateVariable.mutators?.[0]?.name == inlineName)
+		return stateVariable.mutators[0];
 
 	const pos = getCodePos(component);
 	const mutator: StateMutatingFunction = {
-		id: createId('mutator', `${stateVariable.name}:<render-body>`, pos),
-		name: '<render-body>',
+		id: createId('mutator', `${stateVariable.name}:${inlineName}`, pos),
+		name: inlineName,
 		pos,
 		type: getDeclarationKind(component),
 		// states: [],
@@ -77,7 +78,7 @@ function getOrCreateInlineMutator(stateVariable: StateVariable, component: Suppo
 		transitions: [],
 	};
 
-	stateVariable.inlineMutator = mutator;
+	stateVariable.mutators?.unshift(mutator);
 	return mutator;
 }
 
@@ -143,7 +144,6 @@ export function populateStateUpdatesAndMutators(component: SupportedComponentDec
 	const bySetter = new Map<string, StateVariable>();
 	for (const stateVariable of stateVariables)
 		bySetter.set(stateVariable.setterName, stateVariable);
-
 
 	const callExpressions = component.getDescendantsOfKind(SyntaxKind.CallExpression);
 	for (const callExpression of callExpressions) {

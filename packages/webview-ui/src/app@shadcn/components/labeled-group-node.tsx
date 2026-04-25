@@ -14,10 +14,8 @@ export function GroupNodeLabel({
   ...props
 }: GroupNodeLabelProps) {
   return (
-    <div className="h-full w-full rounded-br-md" {...props}>
-      <div className={cn("text-card-foreground bg-secondary w-max-[300px] px-2 py-1.5 text-xs truncate", className)}>
-        {children}
-      </div>
+    <div className={cn("h-full w-full rounded-br-md text-card-foreground bg-secondary w-max-[300px] px-2 py-1.75 not-even:truncate", className)} {...props}>
+      {children}
     </div>
   );
 }

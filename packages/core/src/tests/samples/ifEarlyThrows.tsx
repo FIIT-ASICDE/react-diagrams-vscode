@@ -4,6 +4,8 @@ export default function GuardClausesAndMultipleIfs() {
   const [status, setStatus] = useState<"start" | "validating" | "warning" | "processing" | "failed" | "success">("start");
   const [message, setMessage] = useState<string>("");
 
+  setMessage("Begin...");
+
   const doBench = true
 
   function runTask(input: string, shouldWarn: boolean, shouldFail: boolean) {

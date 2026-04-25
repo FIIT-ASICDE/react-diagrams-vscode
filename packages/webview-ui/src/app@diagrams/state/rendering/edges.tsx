@@ -1,8 +1,6 @@
-import CustomFloatingEdge from '@/app@components/xyflow-react/components/CustomFloatingEdge';
 import RoutableEdge from '@/app@components/xyflow-react/components/RoutableEdge';
 import type { EdgeTypes } from '@xyflow/react';
 
 export const edgeTypes: EdgeTypes = {
-	floating: CustomFloatingEdge as EdgeTypes['floating'],
 	routable: RoutableEdge as EdgeTypes['routable'],
 };

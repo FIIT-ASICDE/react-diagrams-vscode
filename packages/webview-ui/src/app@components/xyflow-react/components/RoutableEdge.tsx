@@ -112,7 +112,7 @@ export default function RoutableEdge({ id, source, target, style, label, data: {
 			</g>
 			{label && (
 				<EdgeLabelRenderer>
-					<div className="text-nowrap pointer-events-none absolute rounded border border-(--vscode-widget-border) p-1 leading-none text-[11px] text-(--vscode-foreground) shadow-sm"
+					<div className="text-nowrap absolute rounded border truncate max-w-28 border-(--vscode-widget-border) p-1 leading-none text-[11px] text-(--vscode-foreground) shadow-sm"
 						style={{
 							transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
 							background: hover ? `var(--vscode-editor-background)` : `color-mix(in srgb, var(--vscode-editor-background) 80%, transparent)`,

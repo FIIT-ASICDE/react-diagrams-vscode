@@ -33,7 +33,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	const modelCacheKey = useMemo(() => JSON.stringify(model ?? null), [model]);
 	const hasModel = useMemo(() => Boolean(model?.stateVariables?.length), [model]);
 
-	const { bgColor, transitionRouting } = (window as any).CONFIG;
+	const { bgColor, transitionRouting } = (window as any).CONFIG ?? {};
 
 	useEffect(() => {
 		let cancelled = false;
@@ -85,7 +85,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	return (
 		<div className="h-full w-full">
 			{!hasModel && (
-				<div className="absolute z-10 rounded border border-(--vscode-editorWidget-border) bg-(--vscode-editorWidget-background) px-3 py-2 text-xs text-(--vscode-descriptionForeground)">
+				<div className="absolute z-10 rounded border border-(--vscode-editorWidget-border) bg-(--vscode-editorWidget-background) px-3 py-2 text-(--vscode-descriptionForeground)">
 					No state variables found.
 				</div>
 			)}

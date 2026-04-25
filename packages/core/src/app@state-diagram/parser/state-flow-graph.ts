@@ -172,20 +172,6 @@ export class GraphBuilder {
 		return flowNode;
 	}
 
-	private appendUpdateNode(call: CallExpression) {
-		const pos = getCodePos(call);
-		const key = codePosStr(pos);
-
-		const existing = this.updateNodesByPos.get(key);
-		if (existing)
-			return existing;
-
-		const created = createOccurrenceUpdateNode(call, this.stateVariable);
-		this.nodes.push(created);
-		this.updateNodesByPos.set(key, created);
-		return created;
-	}
-
 	private collapseWithMerge(node: Node, openEdges: OpenEdge[]) {
 		const normalizedOpen = normalizeOpenEdges(openEdges);
 		if (!normalizedOpen.length)
@@ -204,7 +190,10 @@ export class GraphBuilder {
 		const setterCalls = getAllCalls(statement, this.stateVariable.setterName) as CallExpression[];
 
 		for (const call of setterCalls) {
-			const updateNode = this.appendUpdateNode(call);
+			const updateNode = this.updateNodesByPos.get(codePosStr(getCodePos(call)));
+			if (!updateNode)
+				continue;
+
 			this.connect(updateNode, current);
 			current = [{ from: updateNode, kind: StateTransitionKind.Normal }];
 		}
@@ -227,15 +216,16 @@ export class GraphBuilder {
 			return incoming;
 
 		const conditionText = statement.getExpression().getText();
+		const thenBody = statement.getThenStatement();
+		const elseBody = statement.getElseStatement();
+		
 		const decisionNode = this.appendFlowNode('decision', statement, truncate(conditionText, 80));
 		this.connect(decisionNode, incoming);
 
 		const thenIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Then, /*rawConditionText: conditionText*/ }];
-		const thenBody = statement.getThenStatement();
 		const thenOpen = this.visit(thenBody, thenIncoming, hasSetterAhead, context)
 
 		const elseIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Else, /*rawConditionText: `!(${conditionText})`*/ }];
-		const elseBody = statement.getElseStatement();
 		var elseOpen = !elseBody ? elseIncoming : Node.isIfStatement(elseBody) ? this.visitIf(elseBody, elseIncoming, hasSetterAhead, context) : this.visit(elseBody, elseIncoming, hasSetterAhead, context);
 
 		return this.collapseWithMerge(statement, [...thenOpen, ...elseOpen]);
@@ -454,7 +444,10 @@ export class GraphBuilder {
 
 		const setterCalls = getAllCalls(what, this.stateVariable.setterName) as CallExpression[];
 		for (const call of setterCalls) {
-			const updateNode = this.appendUpdateNode(call);
+			const updateNode = this.updateNodesByPos.get(codePosStr(getCodePos(call)));
+			if (!updateNode)
+				continue;
+
 			this.connect(updateNode, current);
 			current = [{ from: updateNode, kind: StateTransitionKind.Normal }];
 		}
@@ -478,7 +471,7 @@ export class GraphBuilder {
 
 export function buildTransitionFlowGraph(mutatorBodies: Map<Id, Block>, stateVariables: StateVariable[]/*, sourceFile: SourceFile*/) {
 	for (const stateVariable of stateVariables) {
-		const mutators = [...(stateVariable.mutators ?? []), ...(stateVariable.inlineMutator ? [stateVariable.inlineMutator] : [])]; // remember obj instances are shared
+		const mutators = [...(stateVariable.mutators ?? [])]; // remember obj instances are shared
 		for (const mutator of mutators) {
 			const body = mutatorBodies.get(mutator.id);
 			if (!body)

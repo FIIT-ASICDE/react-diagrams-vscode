@@ -9,7 +9,7 @@ export const elkPadd = (top: number, horizontal: number, bottom = horizontal) =>
 
 const LAYOUT = {
 	canvasPadding: 12,
-	headerHeight: 24,
+	headerHeight: 25,
 	
 	state: {
 		gap: 24,

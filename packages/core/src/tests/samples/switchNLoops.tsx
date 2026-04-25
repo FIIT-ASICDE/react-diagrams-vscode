@@ -4,6 +4,7 @@ export default function SwitchWithLoops() {
   const [mode, setMode] = useState<"idle" | "scan" | "match" | "skip" | "error" | "complete">("idle");
   const [index, setIndex] = useState(0);
 
+  setIndex(1);
 
   const func12 = useCallback((idk: string) => {
     console.debug(idk)

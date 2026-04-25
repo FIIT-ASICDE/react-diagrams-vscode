@@ -33,6 +33,18 @@
         "title": "React Component Activity"
       }
     ],
+    "keybindings": [
+      {
+        "command": "vs-code-ext.componentState",
+        "key": "alt+d alt+s",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "vs-code-ext.componentActivity",
+        "key": "alt+d alt+a",
+        "when": "editorTextFocus"
+      }
+    ],
     "configuration": {
       "title": "React diagrams",
       "properties": {

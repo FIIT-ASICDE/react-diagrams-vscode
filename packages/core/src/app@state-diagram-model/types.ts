@@ -25,7 +25,7 @@ export interface StateVariable {
 	typeText?: string;
 	pos: CodePos;
 
-	inlineMutator?: StateMutatingFunction; // Setter calls in component render-body (outside nested function declarations).
+	// inlineMutator?: StateMutatingFunction; // Setter calls in component render-body (outside nested function declarations).
 
 	states?: StateUpdate[]; // This will be populated later with the updates related to all the states this variable can reach in all functions that mut it.
 	mutators?: StateMutatingFunction[]; // All the functions that mutate this state variable.

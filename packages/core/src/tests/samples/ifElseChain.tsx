@@ -10,7 +10,10 @@ function doSomething() {
 
 export default function IfElseChainComplex() {
   const [phase, setPhase] = useState<"idle" | "checking" | "small" | "medium" | "large" | "done">("idle");
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState<number>();
+
+  if (count == undefined)
+    setCount(0);
 
   const cond = phase === "idle";
 
@@ -25,6 +28,17 @@ export default function IfElseChainComplex() {
 
   function handleProcess(value: number) {
     setCount(value);
+
+    const innrCheck = () => {
+      setPhase("idle");
+
+      if (value) {
+        console.log("chck");
+        setPhase("checking");  
+      }
+    }
+
+    innrCheck();
 
     if (value < 0) {
       setPhase("idle");
@@ -42,7 +56,7 @@ export default function IfElseChainComplex() {
 
   doInit();
   return <>
-    <button onClick={() => handleProcess(count + 1)}>Run</button>
-    <button onClick={() => { setCount(count + 10) }}>Run big incr</button>
+    <button onClick={() => handleProcess(count! + 1)}>Run</button>
+    <button onClick={() => { setCount(count! + 10) }}>Run big incr</button>
   </>;
 }

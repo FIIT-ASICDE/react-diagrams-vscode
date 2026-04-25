@@ -34,7 +34,7 @@ function CenteredLabel({ label, color, background }: { label?: string,  color?: 
 
 	return (
 		<span
-			className={`pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden text-ellipsis whitespace-nowrap text-center text-[10px] z-50 ${labelClass}`}
+			className={`max-w-58 absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden text-ellipsis whitespace-nowrap text-center text-[10px] z-50 ${labelClass}`}
 			style={{ color: color ?? 'var(--vscode-foreground)', background }}
 		>
 			{label}
