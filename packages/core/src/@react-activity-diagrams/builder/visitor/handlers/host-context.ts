@@ -10,4 +10,5 @@ export interface StatementVisitorHost {
   connectLoopBackEdges(exits: string[], loopId: string, innerDecisionCount: number): void;
   visitBranch(node: MorphNode): BuildResult;
   analyzeStatementsSemantics(statements: Statement[]): BuildResult;
+  visitStatementsInline(statements: Statement[]): BuildResult
 }

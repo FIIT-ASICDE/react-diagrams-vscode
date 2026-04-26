@@ -1,27 +1,28 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
 	ReactFlow,
 	Background,
-	type Node,
-	type Edge,
-	type ReactFlowInstance,
-	useReactFlow,
 	Controls,
 	SmoothStepEdge,
+	type Connection,
+	type Edge,
+	type EdgeChange,
+	type Node,
+	type NodeChange,
+	type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { VSCodeButton } from '@vscode/webview-ui-toolkit/react';
+
 import { vscode } from '../../app@vscode/api';
+import type { ActivityGraphPayload } from '@react-diagrams/core/app@vscode';
+import type { ActivityNodeType } from './model/types';
+
 import { nodeTypes } from './diagram-rendering/nodeTypes';
-import  ElkPathEdge  from './diagram-rendering/BackEdge';
+import ElkPathEdge from './components/BackEdge';
+import DynamicPathEdge from './components/PlaygroundEdge';
+import { applyActivityElkLayout } from './diagram-rendering/elk-layout';
 import { generateCodeFromDiagram } from './logic/diagram-code-generation';
-import { toPng } from 'html-to-image';
-import {
-	applyRenameToEdges,
-	applyRenameToNodes,
-	createEdgeRenameDraft,
-	createRenameDraft,
-} from './logic/rename-utils';
+import { useDiagramReadOnlyNavigator } from './logic/useDiagramHistoryNavigator';
 import {
 	appendNode,
 	applyEdgeChangesToEdges,
@@ -30,461 +31,544 @@ import {
 	connectEdges,
 	createActivityNode,
 } from './logic/graph-edit-utils';
-import type { ActivityGraphPayload } from '@react-diagrams/core/app@vscode';
-import type {
-	ActivityNodeType,
-	ActivityMessage,
-	DiagramRenameDraft,
-} from './model/types';
-import { useDiagramHistoryNavigator } from './logic/useDiagramHistoryNavigator';
 
-const customNode = {
-	action: nodeTypes.action,
-	expandable: nodeTypes.expandable,
-	decision: nodeTypes.decision,
-	loop: nodeTypes.loop,
-	merge: nodeTypes.merge,
-	initial: nodeTypes.initial,
-	end: nodeTypes.end,
-	textPreview: nodeTypes.textPreview,
+import { AutoFitOnSnapshotChange } from './logic/auto-fit';
+import { useActivityMessages } from './logic/use-activity-messages';
+import { useImageCapture } from './logic/use-image-capture';
+import { DiagramToolbar, type ViewMode } from './components/Toolbar';
+import { SourcePreviewPanel } from './components/SourcePreviewPanel';
+import {
+	EdgeEditDialog,
+	NodeEditDialog,
+	type EdgeEditDraft,
+	type NodeEditDraft,
+} from './components/rename-dialog';
+
+
+const VIEWER_NODE_TYPES = nodeTypes;
+
+const VIEWER_EDGE_TYPES = {
+	default: ElkPathEdge,
+	back: ElkPathEdge,
 };
 
-const customEdge = {
-  default: ElkPathEdge,
-  back: ElkPathEdge,   // rovnaký komponent aj pre back edges — štýl rieši edge.style
+const PLAYGROUND_EDGE_TYPES = {
+	default: DynamicPathEdge,
+	back: DynamicPathEdge,
 };
 
-function AutoFitOnSnapshotChange({ nodesCount }: { nodesCount: number }) {
-	const { fitView, getNodes, setCenter } = useReactFlow();
-
-	useEffect(() => {
-		if (!nodesCount) return;
-
-		requestAnimationFrame(() => {
-			void fitView({ padding: 0.2 });
-
-			const nodes = getNodes();
-			const startNode = nodes.find((n) => n.type === 'initial') ?? nodes[0];
-			if (!startNode) return;
-
-			const x = startNode.position.x - (startNode.width ?? 0) / 2;
-			const y = startNode.position.y;
-
-			setTimeout(() => {
-				setCenter(x, y, {
-					zoom: 0.6,
-					duration: 200,
-				});
-			}, 50);
-		});
-	}, [nodesCount, fitView, getNodes, setCenter]);
-
-	return null;
-}
-
-async function captureDiagramImage(): Promise<string | null> {
-	const element = document.querySelector('.react-flow') as HTMLElement | null;
-	if (!element) {
-		return null;
-	}
-
-	return toPng(element, {
-		cacheBust: true,
-		pixelRatio: 2,
-	});
-}
+// ─── Utilities ──────────────────────────────────────────────────────────────
 
 function truncate(text: string, maxLength: number) {
 	return text.length <= maxLength ? text : `${text.slice(0, maxLength - 3)}...`;
 }
 
+function getNodeFullText(node: Node | null): string {
+	if (!node) return '';
+	return getNodeData(node).sourceText.trim();
+}
+
+function getNodeData(node: Node) {
+	const data = (node.data ?? {}) as Record<string, unknown>;
+
+	return {
+		label: String(data.label ?? ''),
+		sourceText: String(data.sourceText ?? data.label ?? ''),
+		deps: typeof data.deps === 'string' ? data.deps : undefined,
+	};
+}
+
+function getDefaultConstructForNodeType(nodeType: string): string {
+	switch (nodeType) {
+		case 'decision':
+			return 'if';
+		case 'loop':
+			return 'while';
+		case 'expandable':
+			return 'function';
+		default:
+			return 'action';
+	}
+}
+
+function createNodeEditDraft(node: Node): NodeEditDraft {
+	const data = (node.data ?? {}) as Record<string, unknown>;
+	const nodeData = getNodeData(node);
+	const nodeType = String(node.type ?? 'action');
+	const construct = typeof data.construct === 'string' ? data.construct : undefined;
+	return {
+		nodeId: String(node.id),
+		nodeType,
+		label: nodeData.label,
+		sourceText: nodeData.sourceText,
+		deps: nodeData.deps,
+		construct: construct ?? getDefaultConstructForNodeType(nodeType),
+	};
+}
+
+type ModalState =
+	| { type: 'preview'; node: Node }
+	| { type: 'nodeEdit'; draft: NodeEditDraft }
+	| { type: 'edgeEdit'; draft: EdgeEditDraft }
+	| null;
+
+function buildErrorGraph(message: string): { nodes: Node[]; edges: Edge[] } {
+	return {
+		nodes: [
+			{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'Activity diagram error' } },
+			{ id: 'n2', position: { x: 0, y: 100 }, data: { label: truncate(message, 80) } },
+		],
+		edges: [{ id: 'n1-n2', source: 'n1', target: 'n2' }],
+	};
+}
+
+// ─── Main component ─────────────────────────────────────────────────────────
+
 export default function ActivityDiagram() {
-	const [renameDraft, setRenameDraft] = useState<DiagramRenameDraft | null>(null);
-	const [, setSourceFile] = useState<string | undefined>(undefined);
+	const [viewMode, setViewMode] = useState<ViewMode>('viewer');
+
+	const [playgroundNodes, setPlaygroundNodes] = useState<Node[]>([]);
+	const [playgroundEdges, setPlaygroundEdges] = useState<Edge[]>([]);
+
+	const [modalState, setModalState] = useState<ModalState>(null);
 
 	const nodeCounter = useRef(1);
 	const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
-	const previewClickTimeoutRef = useRef<number | null>(null);
+	const playgroundSnapshotDepthRef = useRef<number | null>(null);
+	const playgroundSnapshotSourceFileRef = useRef<string | null>(null);
 
+	const navigator = useDiagramReadOnlyNavigator();
 	const {
-		currentHistoryIndex,
+		canGoBack,
+		visibleRevision,
 		visibleNodes,
 		visibleEdges,
 		currentTitle,
-		historyRef,
-		updateCurrentDiagram,
+		stackRef,
 		applyIncomingDiagramPayload,
+		replaceCurrentDiagramPayload,
 		setRootError,
 		markPendingPreview,
 		clearPendingPreview,
 		goBack,
-	} = useDiagramHistoryNavigator();
+	} = navigator;
 
-	// Keep a ref to the latest visible graph so we can answer on-demand
-	// requestGraph messages without re-subscribing to window events.
-	const visibleGraphRef = useRef<{ nodes: Node[]; edges: Edge[] }>({
-		nodes: visibleNodes,
-		edges: visibleEdges,
-	});
-	useEffect(() => {
-		visibleGraphRef.current = { nodes: visibleNodes, edges: visibleEdges };
-	}, [visibleNodes, visibleEdges]);
+	const activeNodes = viewMode === 'playground' ? playgroundNodes : visibleNodes;
+	const activeEdges = viewMode === 'playground' ? playgroundEdges : visibleEdges;
+	const isEditable = viewMode === 'playground';
+
+	const getActiveGraph = useCallback(
+		() => ({
+			nodes: viewMode === 'playground' ? playgroundNodes : visibleNodes,
+			edges: viewMode === 'playground' ? playgroundEdges : visibleEdges,
+		}),
+		[playgroundEdges, playgroundNodes, viewMode, visibleEdges, visibleNodes],
+	);
+
+	const edgeTypes = useMemo(
+		() =>
+			viewMode === 'playground'
+				? PLAYGROUND_EDGE_TYPES
+				: VIEWER_EDGE_TYPES,
+		[viewMode],
+	);
 
 	const postMessage = useCallback((type: string, data: unknown = {}) => {
 		vscode.postMessage(type, data);
 	}, []);
 
-	const handleIncomingMessage = useCallback(async (message: ActivityMessage | { type?: string; data?: unknown }) => {
-		if (message?.type === 'diagram/requestImage') {
-			try {
-				const dataUrl = await captureDiagramImage();
-				postMessage('diagram/imageData', { dataUrl });
-			} catch (error) {
-				postMessage('diagram/imageData', {
-					dataUrl: null,
-					error: error instanceof Error ? error.message : 'Image capture failed',
-				});
-			}
-			return;
-		}
+	const captureImage = useImageCapture();
 
-		if (message?.type === 'diagram/requestGraph') {
-			const { nodes, edges } = visibleGraphRef.current;
-			postMessage('diagram/graphSnapshot', { nodes, edges });
-			return;
-		}
+	// ── Incoming messages from extension host ────────────────────────────
 
-		if (message?.type === 'code/data') {
-			const payload = message.data as ActivityGraphPayload;
-			const incomingFile =
-				typeof payload.sourceFile === 'string' && payload.sourceFile.trim()
-					? payload.sourceFile
-					: undefined;
+	const handleCodeData = useCallback(
+		(payload: ActivityGraphPayload) => {
+			void applyIncomingDiagramPayload(payload);
+		},
+		[applyIncomingDiagramPayload],
+	);
 
-			setSourceFile(incomingFile);
-
-			const incomingNodes = applyIncomingDiagramPayload(payload);
-			nodeCounter.current = incomingNodes.length + 1;
-			return;
-		}
-
-		if (message?.type === 'code/error') {
-			const errorMessage = message.data as { message?: string };
-			const errorNodes: Node[] = [
-				{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'Activity diagram error' } },
-				{
-					id: 'n2',
-					position: { x: 0, y: 100 },
-					data: { label: truncate(errorMessage.message ?? 'Unknown error', 80) },
-				},
-			];
-			const errorEdges: Edge[] = [{ id: 'n1-n2', source: 'n1', target: 'n2' }];
-
-			if (historyRef.current.length === 0) {
-				setRootError(errorNodes, errorEdges);
-			} else {
-				updateCurrentDiagram((diagram) => ({
-					...diagram,
-					nodes: errorNodes,
-					edges: errorEdges,
-				}));
-			}
-
+	const handleCodeError = useCallback(
+		(message: string) => {
+			const { nodes, edges } = buildErrorGraph(message);
+			setRootError(nodes, edges);
 			clearPendingPreview();
+		},
+		[clearPendingPreview, setRootError],
+	);
+
+	const handleImageRequest = useCallback(async () => {
+		try {
+			const dataUrl = await captureImage();
+			postMessage('diagram/imageData', { dataUrl });
+		} catch (error) {
+			postMessage('diagram/imageData', {
+				dataUrl: null,
+				error: error instanceof Error ? error.message : 'Image capture failed',
+			});
 		}
-	}, [
-		applyIncomingDiagramPayload,
-		clearPendingPreview,
-		historyRef,
-		postMessage,
-		setRootError,
-		updateCurrentDiagram,
-	]);
+	}, [captureImage, postMessage]);
 
+	const handleGraphRequest = useCallback(() => {
+		const { nodes, edges } = getActiveGraph();
+		postMessage('diagram/graphSnapshot', { nodes, edges });
+	}, [getActiveGraph, postMessage]);
+
+	useActivityMessages({
+		onCodeData: handleCodeData,
+		onCodeError: handleCodeError,
+		onImageRequest: handleImageRequest,
+		onGraphRequest: handleGraphRequest,
+	});
+
+	// Ready handshake — post once on mount.
 	useEffect(() => {
-		const onMessage = (event: MessageEvent) => {
-			void handleIncomingMessage(event.data);
-		};
-
-		window.addEventListener('message', onMessage);
-
-		// The only boot-time message the webview sends. The panel decides what
-		// (if anything) to push back. We no longer ask for the active document here —
-		// that caused a race with AI-driven showDiagramFromSourceText().
 		postMessage('webview/ready');
+	}, [postMessage]);
 
-		return () => {
-			if (previewClickTimeoutRef.current !== null) {
-				window.clearTimeout(previewClickTimeoutRef.current);
-				previewClickTimeoutRef.current = null;
-			}
-			window.removeEventListener('message', onMessage);
-		};
-	}, [handleIncomingMessage, postMessage]);
-
+	// Edge-label context menu (custom event from the BackEdge label).
 	useEffect(() => {
-		nodeCounter.current = visibleNodes.length + 1;
-	}, [visibleNodes.length]);
+		function handler(event: Event) {
+			const detail = (event as CustomEvent<{ edgeId?: unknown; label?: unknown }>).detail;
+			if (!detail || typeof detail.edgeId !== 'string') return;
+			if (viewMode !== 'playground') return;
 
-	const addNode = useCallback((type: ActivityNodeType) => {
-		const createCenteredNode = () =>
-			centerNodeInViewport(
-				createActivityNode(type, nodeCounter.current++, false),
-				reactFlowRef.current,
-				window.innerWidth,
-				window.innerHeight,
+			setModalState({
+				type: 'edgeEdit',
+				draft: {
+					edgeId: detail.edgeId,
+					label: typeof detail.label === 'string' ? detail.label : '',
+				},
+			});
+		}
+
+		window.addEventListener('activity/edgeLabelContextMenu', handler);
+		return () => window.removeEventListener('activity/edgeLabelContextMenu', handler);
+	}, [viewMode]);
+
+	// Keep node-id counter ahead of any nodes already in playground.
+	useEffect(() => {
+		if (viewMode === 'playground') {
+			nodeCounter.current = playgroundNodes.length + 1;
+		}
+	}, [viewMode, playgroundNodes.length]);
+
+	// ── Viewer-side: drilldown ───────────────────────────────────────────
+
+	const openNodeDiagram = useCallback(
+		(node: Node) => {
+			if (viewMode !== 'viewer') return;
+			if (String(node.type ?? 'action') !== 'expandable') return;
+
+			const sourceText = getNodeFullText(node);
+			if (!sourceText) return;
+
+			const title = String(
+				(node.data as { label?: unknown } | undefined)?.label ?? 'Expanded Diagram',
 			);
+			markPendingPreview(title);
+			postMessage('code/nodePreview', { title, sourceText });
+		},
+		[markPendingPreview, postMessage, viewMode],
+	);
 
-		updateCurrentDiagram((diagram) => ({
-			...diagram,
-			nodes: appendNode(diagram.nodes, createCenteredNode()),
-		}));
-	}, [updateCurrentDiagram]);
+	// ── Playground-side: editing ─────────────────────────────────────────
+
+	const addPlaygroundNode = useCallback(
+		(type: ActivityNodeType) => {
+			setPlaygroundNodes((nodes) => {
+				const node = centerNodeInViewport(
+					createActivityNode(type, nodeCounter.current++, false),
+					reactFlowRef.current,
+					window.innerWidth,
+					window.innerHeight,
+				);
+				return appendNode(nodes, node);
+			});
+		},
+		[],
+	);
+
+	const clearPlayground = useCallback(() => {
+		nodeCounter.current = 1;
+		setPlaygroundNodes([]);
+		setPlaygroundEdges([]);
+		setModalState(null);
+	}, []);
+
+	const openPlaygroundWithGraph = useCallback(async (nodes: Node[], edges: Edge[]) => {
+		let layoutedNodes = nodes;
+		let layoutedEdges = edges;
+		try {
+			const layouted = await applyActivityElkLayout(nodes, edges);
+			layoutedNodes = layouted.nodes;
+			layoutedEdges = layouted.edges;
+		} catch (error) {
+			console.error('Failed to apply activity ELK layout when opening playground', error);
+		}
+
+		setPlaygroundNodes(layoutedNodes);
+		setPlaygroundEdges(layoutedEdges);
+		setModalState(null);
+		setViewMode('playground');
+	}, []);
+
+	const loadCurrentIntoPlayground = useCallback(async () => {
+		playgroundSnapshotDepthRef.current = null;
+		playgroundSnapshotSourceFileRef.current = null;
+		const cloneNodes = visibleNodes.map((node) => ({ ...node }));
+		const cloneEdges = visibleEdges.map((edge) => ({ ...edge }));
+		await openPlaygroundWithGraph(cloneNodes, cloneEdges);
+	}, [openPlaygroundWithGraph, visibleEdges, visibleNodes]);
+
+	const commitPlaygroundToViewer = useCallback(() => {
+		const { nodes, edges } = getActiveGraph();
+
+		setModalState(null);
+
+		if (!nodes.length && !edges.length) {
+			setViewMode('viewer');
+			return;
+		}
+
+		const currentTop = stackRef.current[stackRef.current.length - 1];
+		const canReplaceCurrentPlaygroundSnapshot =
+			playgroundSnapshotDepthRef.current !== null &&
+			stackRef.current.length === playgroundSnapshotDepthRef.current &&
+			playgroundSnapshotSourceFileRef.current !== null &&
+			currentTop?.sourceFile === playgroundSnapshotSourceFileRef.current;
+
+		if (canReplaceCurrentPlaygroundSnapshot) {
+			void replaceCurrentDiagramPayload({
+				nodes,
+				edges,
+				sourceFile: playgroundSnapshotSourceFileRef.current ?? undefined,
+			} as ActivityGraphPayload);
+		} else {
+			const snapshotIndex = stackRef.current.length + 1;
+			const sourceFile = `Playground Snapshot ${snapshotIndex}.tsx`;
+			playgroundSnapshotDepthRef.current = stackRef.current.length + 1;
+			playgroundSnapshotSourceFileRef.current = sourceFile;
+
+			void applyIncomingDiagramPayload({
+				nodes,
+				edges,
+				sourceFile,
+			} as ActivityGraphPayload);
+		}
+
+		setViewMode('viewer');
+	}, [applyIncomingDiagramPayload, getActiveGraph, replaceCurrentDiagramPayload, stackRef]);
+
+	const switchToViewer = useCallback(() => {
+		if (viewMode === 'playground') {
+			commitPlaygroundToViewer();
+			return;
+		}
+		setModalState(null);
+		setViewMode('viewer');
+	}, [commitPlaygroundToViewer, viewMode]);
+
+	const switchToPlayground = useCallback(() => {
+		void openPlaygroundWithGraph(playgroundNodes, playgroundEdges);
+	}, [openPlaygroundWithGraph, playgroundEdges, playgroundNodes]);
+
+	// ── Save handlers for the dialogs ────────────────────────────────────
+
+	const saveNodeEditDraft = useCallback(() => {
+		if (!modalState || modalState.type !== 'nodeEdit') return;
+		const { draft } = modalState;
+		setPlaygroundNodes((nodes) => {
+			const next = nodes.map((node) => {
+				if (String(node.id) !== draft.nodeId) return node;
+				const previousData = (node.data as Record<string, unknown> | undefined) ?? {};
+				const constructUpdate = {
+					construct: draft.construct ?? getDefaultConstructForNodeType(draft.nodeType),
+				};
+				return {
+					...node,
+					data: {
+						...previousData,
+						label: draft.label,
+						sourceText: draft.sourceText,
+						...(draft.deps !== undefined ? { deps: draft.deps } : {}),
+						...constructUpdate,
+					},
+				};
+			});
+			return next;
+		});
+		setModalState(null);
+	}, [modalState]);
+
+	const saveEdgeEditDraft = useCallback(() => {
+		if (!modalState || modalState.type !== 'edgeEdit') return;
+		const { draft } = modalState;
+		setPlaygroundEdges((edges) => {
+			const next = edges.map((edge) =>
+				String(edge.id) === draft.edgeId ? { ...edge, label: draft.label } : edge,
+			);
+			return next;
+		});
+		setModalState(null);
+	}, [modalState]);
+
+	// ── ReactFlow event handlers ─────────────────────────────────────────
+
+	const onNodeClick = useCallback(
+		(_event: React.MouseEvent, node: Node) => {
+			if (viewMode !== 'viewer') return;
+			if (String(node.type ?? 'action') === 'expandable') {
+				openNodeDiagram(node);
+			}
+		},
+		[openNodeDiagram, viewMode],
+	);
+
+	const onNodeContextMenu = useCallback(
+		(event: React.MouseEvent, node: Node) => {
+			event.preventDefault();
+			event.stopPropagation();
+
+			if (viewMode === 'viewer') {
+				setModalState({ type: 'preview', node });
+				return;
+			}
+			setModalState({ type: 'nodeEdit', draft: createNodeEditDraft(node) });
+		},
+		[viewMode],
+	);
+
+	const onEdgeContextMenu = useCallback(
+		(event: React.MouseEvent, edge: Edge) => {
+			event.preventDefault();
+			event.stopPropagation();
+			if (viewMode !== 'playground') return;
+
+			setModalState({
+				type: 'edgeEdit',
+				draft: {
+					edgeId: String(edge.id),
+					label: typeof edge.label === 'string' ? edge.label : '',
+				},
+			});
+		},
+		[viewMode],
+	);
+
+	const onNodesChange = useCallback(
+		(changes: NodeChange<Node>[]) => {
+			if (viewMode !== 'playground') return;
+			setPlaygroundNodes((nodes) => applyNodeChangesToNodes(nodes, changes));
+		},
+		[viewMode],
+	);
+
+	const onEdgesChange = useCallback(
+		(changes: EdgeChange<Edge>[]) => {
+			if (viewMode !== 'playground') return;
+			setPlaygroundEdges((edges) => applyEdgeChangesToEdges(edges, changes));
+		},
+		[viewMode],
+	);
+
+	const onConnect = useCallback(
+		(params: Connection) => {
+			if (viewMode !== 'playground') return;
+			setPlaygroundEdges((edges) => connectEdges(edges, params));
+		},
+		[viewMode],
+	);
+
+	// ── Generate skeleton ────────────────────────────────────────────────
 
 	const generateSkeleton = useCallback(() => {
-		generateCodeFromDiagram(vscode, visibleNodes, visibleEdges);
-	}, [visibleEdges, visibleNodes]);
+		const { nodes, edges } = getActiveGraph();
+		generateCodeFromDiagram(vscode, nodes, edges);
+	}, [getActiveGraph]);
 
-	const openNodeDiagram = useCallback((node: Node) => {
-		if (String(node.type ?? 'action') !== 'expandable') {
-			return;
-		}
+	// ── Render ───────────────────────────────────────────────────────────
 
-		const sourceText = String(
-			(node.data as { sourceText?: unknown } | undefined)?.sourceText ?? ''
-		).trim();
-
-		if (!sourceText) {
-			return;
-		}
-
-		markPendingPreview(
-			String((node.data as { label?: unknown } | undefined)?.label ?? 'Expanded Diagram')
-		);
-
-		postMessage('code/nodePreview', {
-			title: String((node.data as { label?: unknown } | undefined)?.label ?? 'Node'),
-			sourceText,
-		});
-	}, [markPendingPreview, postMessage]);
-
-	const openRenameForNode = useCallback((node: Node, useFullText: boolean) => {
-		const draft = createRenameDraft(node);
-
-		if (!useFullText) {
-			setRenameDraft({ kind: 'node', draft });
-			return;
-		}
-
-		const sourceText = String(
-			(node.data as { sourceText?: unknown } | undefined)?.sourceText ?? ''
-		).trim();
-
-		setRenameDraft({
-			kind: 'node',
-			draft: {
-				...draft,
-				value: sourceText || draft.value,
-			},
-		});
-	}, []);
-
-	const onNodesChange = useCallback((changes) => {
-		updateCurrentDiagram((diagram) => ({
-			...diagram,
-			nodes: applyNodeChangesToNodes(diagram.nodes, changes),
-		}));
-	}, [updateCurrentDiagram]);
-
-	const onEdgesChange = useCallback((changes) => {
-		updateCurrentDiagram((diagram) => ({
-			...diagram,
-			edges: applyEdgeChangesToEdges(diagram.edges, changes),
-		}));
-	}, [updateCurrentDiagram]);
-
-	const onConnect = useCallback((params) => {
-		updateCurrentDiagram((diagram) => ({
-			...diagram,
-			edges: connectEdges(diagram.edges, params),
-		}));
-	}, [updateCurrentDiagram]);
-
-	const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
-		if (previewClickTimeoutRef.current !== null) {
-			window.clearTimeout(previewClickTimeoutRef.current);
-			previewClickTimeoutRef.current = null;
-		}
-
-		openRenameForNode(node, String(node.type ?? 'action') === 'expandable');
-	}, [openRenameForNode]);
-
-	const onEdgeDoubleClick = useCallback((_: React.MouseEvent, edge: Edge) => {
-		if (previewClickTimeoutRef.current !== null) {
-			window.clearTimeout(previewClickTimeoutRef.current);
-			previewClickTimeoutRef.current = null;
-		}
-
-		setRenameDraft({ kind: 'edge', draft: createEdgeRenameDraft(edge) });
-	}, []);
-
-	const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-		if (previewClickTimeoutRef.current !== null) {
-			window.clearTimeout(previewClickTimeoutRef.current);
-		}
-
-		if (String(node.type ?? 'action') !== 'expandable') {
-			openRenameForNode(node, true);
-			previewClickTimeoutRef.current = null;
-			return;
-		}
-
-		previewClickTimeoutRef.current = window.setTimeout(() => {
-			openNodeDiagram(node);
-			previewClickTimeoutRef.current = null;
-		}, 150);
-	}, [openNodeDiagram, openRenameForNode]);
-
-	const applyRename = useCallback(() => {
-		if (!renameDraft) {
-			return;
-		}
-
-		if (renameDraft.kind === 'node') {
-			updateCurrentDiagram((diagram) => ({
-				...diagram,
-				nodes: applyRenameToNodes(diagram.nodes, renameDraft.draft),
-			}));
-		} else {
-			updateCurrentDiagram((diagram) => ({
-				...diagram,
-				edges: applyRenameToEdges(diagram.edges, renameDraft.draft),
-			}));
-		}
-
-		setRenameDraft(null);
-	}, [renameDraft, updateCurrentDiagram]);
-
-	const cancelRename = useCallback(() => {
-		setRenameDraft(null);
-	}, []);
+	const isPlayground = viewMode === 'playground';
+	const previewNode = modalState?.type === 'preview' ? modalState.node : null;
+	const nodeEditDraft = modalState?.type === 'nodeEdit' ? modalState.draft : null;
+	const edgeEditDraft = modalState?.type === 'edgeEdit' ? modalState.draft : null;
+	const focusTrigger = `${viewMode}:${viewMode === 'viewer' ? visibleRevision : 'mode'}`;
 
 	return (
 		<div className="relative h-full w-full">
-			<div className="absolute top-2 left-2 z-10 flex flex-wrap items-center gap-2 rounded bg-[var(--vscode-editor-background)]/90 p-2">
-				<VSCodeButton
-					appearance="secondary"
-					disabled={currentHistoryIndex === 0}
-					onClick={goBack}
-				>
-					&lt;
-				</VSCodeButton>
-				<div className="max-w-[220px] truncate text-xs text-[var(--vscode-foreground)]">
-					{currentTitle}
-				</div>
-				<VSCodeButton appearance="secondary" onClick={() => addNode('start')}>Add Start</VSCodeButton>
-				<VSCodeButton appearance="secondary" onClick={() => addNode('action')}>Add Action</VSCodeButton>
-				<VSCodeButton appearance="secondary" onClick={() => addNode('decision')}>Add Decision</VSCodeButton>
-				<VSCodeButton appearance="secondary" onClick={() => addNode('merge')}>Add Merge</VSCodeButton>
-				<VSCodeButton appearance="secondary" onClick={() => addNode('end')}>Add End</VSCodeButton>
-				<VSCodeButton appearance="primary" onClick={generateSkeleton}>Generate Skeleton</VSCodeButton>
-			</div>
+			<DiagramToolbar
+				mode={viewMode}
+				currentTitle={currentTitle}
+				canGoBack={canGoBack}
+				onBack={goBack}
+				onSwitchToViewer={switchToViewer}
+				onSwitchToPlayground={switchToPlayground}
+				onLoadCurrentIntoPlayground={loadCurrentIntoPlayground}
+				onAddNode={addPlaygroundNode}
+				onClearPlayground={clearPlayground}
+				onGenerateSkeleton={generateSkeleton}
+			/>
 
-			{renameDraft && (
-				<div className="absolute inset-0 z-30 flex items-start justify-center bg-black/20 pt-20">
-					<div className="w-[760px] max-w-[calc(100vw-48px)] rounded border border-[var(--vscode-editorWidget-border)] bg-[var(--vscode-editorWidget-background)] p-4 shadow-xl">
-						<div className="mb-3 text-sm font-semibold text-[var(--vscode-editor-foreground)]">
-							{renameDraft.kind === 'edge' ? 'Edit Edge Label' : 'Edit Node Text'}
-						</div>
+			{viewMode === 'viewer' && previewNode && (
+				<SourcePreviewPanel
+					node={previewNode}
+					sourceText={getNodeFullText(previewNode)}
+					onClose={() => setModalState(null)}
+				/>
+			)}
 
-						{renameDraft.kind === 'node' ? (
-							<textarea
-								className="h-56 w-full resize-y rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
-								value={renameDraft.draft.value}
-								placeholder="Node text"
-								autoFocus
-								onChange={(event) => setRenameDraft((snapshot) => snapshot && snapshot.kind === 'node'
-									? { ...snapshot, draft: { ...snapshot.draft, value: event.target.value } }
-									: snapshot)}
-								onKeyDown={(event) => {
-									if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-										applyRename();
-									}
-									if (event.key === 'Escape') {
-										cancelRename();
-									}
-								}}
-							/>
-						) : (
-							<input
-								className="w-full rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
-								value={renameDraft.draft.value}
-								placeholder="Edge label"
-								autoFocus
-								onChange={(event) => setRenameDraft((snapshot) => snapshot && snapshot.kind === 'edge'
-									? { ...snapshot, draft: { ...snapshot.draft, value: event.target.value } }
-									: snapshot)}
-								onKeyDown={(event) => {
-									if (event.key === 'Enter') {
-										applyRename();
-									}
-									if (event.key === 'Escape') {
-										cancelRename();
-									}
-								}}
-							/>
-						)}
+			{isPlayground && nodeEditDraft && (
+				<NodeEditDialog
+					draft={nodeEditDraft}
+					onChange={(draft) => setModalState({ type: 'nodeEdit', draft })}
+					onSave={saveNodeEditDraft}
+					onCancel={() => setModalState(null)}
+				/>
+			)}
 
-						{renameDraft.kind === 'node' && renameDraft.draft.deps !== undefined && (
-							<input
-								className="mt-3 w-full rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
-								value={renameDraft.draft.deps}
-								placeholder="deps"
-								onChange={(event) => setRenameDraft((snapshot) => snapshot && snapshot.kind === 'node'
-									? { ...snapshot, draft: { ...snapshot.draft, deps: event.target.value } }
-									: snapshot)}
-							/>
-						)}
-
-						<div className="mt-4 flex items-center gap-2">
-							{renameDraft.kind === 'node' && (
-								<VSCodeButton
-									appearance="secondary"
-									onClick={() => {
-										void navigator.clipboard.writeText(renameDraft.draft.value);
-									}}
-								>
-									Copy
-								</VSCodeButton>
-							)}
-							<VSCodeButton appearance="primary" onClick={applyRename}>Save</VSCodeButton>
-							<VSCodeButton appearance="secondary" onClick={cancelRename}>Close</VSCodeButton>
-						</div>
-					</div>
-				</div>
+			{isPlayground && edgeEditDraft && (
+				<EdgeEditDialog
+					draft={edgeEditDraft}
+					onChange={(draft) => setModalState({ type: 'edgeEdit', draft })}
+					onSave={saveEdgeEditDraft}
+					onCancel={() => setModalState(null)}
+				/>
 			)}
 
 			<ReactFlow
 				className="download-image"
-				nodes={visibleNodes}
-				edges={visibleEdges}
+				nodes={activeNodes}
+				edges={activeEdges}
 				style={{ backgroundColor: 'white' }}
 				onInit={(instance) => {
 					reactFlowRef.current = instance;
 				}}
-				onNodesChange={onNodesChange}
-				onEdgesChange={onEdgesChange}
-				onConnect={onConnect}
 				onNodeClick={onNodeClick}
-				onNodeDoubleClick={onNodeDoubleClick}
-				onEdgeDoubleClick={onEdgeDoubleClick}
-				nodeTypes={customNode}
-				edgeTypes={customEdge}
+				onNodeContextMenu={onNodeContextMenu}
+				onEdgeContextMenu={onEdgeContextMenu}
+				onNodesChange={isPlayground ? onNodesChange : undefined}
+				onEdgesChange={isPlayground ? onEdgesChange : undefined}
+				onConnect={isPlayground ? onConnect : undefined}
+				nodeTypes={VIEWER_NODE_TYPES}
+				edgeTypes={edgeTypes}
+				nodesDraggable={isEditable}
+				nodesConnectable={isEditable}
+				elementsSelectable
+				edgesFocusable={isEditable}
+				nodesFocusable={isEditable}
+				panOnDrag
+				zoomOnScroll
+				zoomOnPinch
+				zoomOnDoubleClick={false}
 				snapToGrid
 			>
-				<AutoFitOnSnapshotChange nodesCount={visibleNodes.length} />
+				<AutoFitOnSnapshotChange focusTrigger={focusTrigger} />
 				<Controls />
-				<Background gap={18} size={1} />
+				<Background 
+				gap={25} 
+				size={2} 
+				color={ isPlayground ? "rgba(0, 0, 0, 0.68)" : "rgb(233, 233, 233)"  }/>
 			</ReactFlow>
 		</div>
 	);

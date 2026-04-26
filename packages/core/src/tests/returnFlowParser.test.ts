@@ -171,3 +171,35 @@ test('consecutive preparation steps are merged into one action node', async () =
 	assert.ok(prepSource.includes('let total = start;'));
 	assert.ok(prepSource.includes('total = total + 2;'));
 });
+
+test('returning Promise constructor call is not classified as expandable return', async () => {
+	const body = createFunctionBody(`
+		function promiseDelayExample(ms: number) {
+			return new Promise((resolve) => setTimeout(resolve, ms));
+		}
+	`);
+
+	const graph = await new DiagramBuilder().buildStatements(body.getStatements());
+
+	const returnExpandable = graph.nodes.find((node) => {
+		if (node.type !== 'expandable') {
+			return false;
+		}
+
+		const label = String((node.data as { label?: unknown } | undefined)?.label ?? '');
+		return label.trim() === 'return';
+	});
+
+	assert.equal(returnExpandable, undefined);
+
+	const returnAction = graph.nodes.find((node) => {
+		if (node.type !== 'action') {
+			return false;
+		}
+
+		const sourceText = String((node.data as { sourceText?: unknown } | undefined)?.sourceText ?? '');
+		return sourceText.includes('return new Promise((resolve) => setTimeout(resolve, ms));');
+	});
+
+	assert.ok(returnAction);
+});

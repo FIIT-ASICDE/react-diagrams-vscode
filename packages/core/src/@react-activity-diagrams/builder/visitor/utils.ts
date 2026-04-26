@@ -1,12 +1,8 @@
 import { Node as MorphNode, SyntaxKind } from 'ts-morph';
 
-export const MAX_LABEL_LENGTH = 20;
-
 export function compactLabel(text: string): string {
   const cleaned = text.replace(/\s+/g, ' ').trim();
-  return cleaned.length > MAX_LABEL_LENGTH
-    ? `${cleaned.slice(0, MAX_LABEL_LENGTH - 3)}...`
-    : cleaned;
+  return cleaned;
 }
 
 export function getFallthroughEdgeLabel(sourceId: string): string | undefined {

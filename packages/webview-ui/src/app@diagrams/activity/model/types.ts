@@ -1,22 +1,28 @@
-import type { Edge, Node } from '@xyflow/react';
 import type {
 	ActivityGraphPayload,
 	ActivityNodePreviewRequestPayload,
 	ActivityExtensionToWebviewMessage,
 } from '@react-diagrams/core/app@vscode';
 
-export type ActivityNodeType = 'start' | 'action' | 'expandable' | 'decision' | 'loop' | 'merge' | 'end';
+/** Node "types" the user can add via the toolbar. */
+export type ActivityNodeType =
+	| 'start'
+	| 'action'
+	| 'expandable'
+	| 'decision'
+	| 'loop'
+	| 'merge'
+	| 'end';
 
-export type PreviewSnapshot = {
-	title: string;
-	sourceText?: string;
-	nodes: Node[];
-	edges: Edge[];
-};
-
+/**
+ * In-flight rename for a node. `value` is what the user is typing.
+ * `fullText` is the original sourceText (or label, if no sourceText) —
+ * used to seed the textarea when the user opens the dialog.
+ */
 export type RenameDraft = {
 	nodeId: string;
 	value: string;
+	fullText: string;
 	deps?: string;
 };
 
@@ -41,4 +47,6 @@ export type ActivityWebviewMessenger = {
 	};
 };
 
-export type ActivityMessage = ActivityExtensionToWebviewMessage | { type?: string; data?: unknown };
+export type ActivityMessage =
+	| ActivityExtensionToWebviewMessage
+	| { type?: string; data?: unknown };

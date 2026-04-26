@@ -5,7 +5,6 @@ import {
 } from 'ts-morph';
 import { GraphWriter } from './graph-writer';
 import { StatementVisitor } from './visitor';
-import { adjustDecisionEdgeHandles, applyElkLayout } from './elkLayout';
 
 export class DiagramBuilder {
   private nodes: Node[] = [];
@@ -65,9 +64,7 @@ export class DiagramBuilder {
   this.normalizeGraphStructure();
   this.reindexEdgeIds();
 
-  const layoutedGraph = await applyElkLayout(this.nodes, this.edges);
-  const adjustedEdges = adjustDecisionEdgeHandles(layoutedGraph.nodes, layoutedGraph.edges);
-  return { nodes: layoutedGraph.nodes, edges: adjustedEdges };
+  return { nodes: this.nodes, edges: this.edges };
 }
 
   private normalizeGraphStructure(): void {

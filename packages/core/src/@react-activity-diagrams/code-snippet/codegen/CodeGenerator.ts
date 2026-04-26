@@ -1,7 +1,7 @@
 import { type Node, type Edge } from "@xyflow/react";
-import { START_EDGE_SOURCE_ID, type FuncArg, type HookSpec } from "../shared/types";
-import { indent, normalize, sanitizeStatement, parseHookSpec, stringifyLabel } from "../shared/string-utils";
-import { checkStructure, formatFunctionHeader, getNodeLabel, isTryNode, looksAsync } from "../graph/node-utils";
+import { START_EDGE_SOURCE_ID, type FuncArg } from "../shared/types";
+import { indent, normalize, sanitizeStatement, stringifyLabel } from "../shared/string-utils";
+import { checkStructure, formatFunctionHeader, getNodeLabel, looksAsync } from "../graph/node-utils";
 import {
 	findJoinNode,
 	findJoinNodeForBranches,
@@ -10,22 +10,58 @@ import {
 	getPrimaryNext,
 } from "../graph/traversal";
 
-function hookOpenLine(spec: HookSpec, level: number): string {
-	switch (spec.kind) {
-		case "useEffect": return `${indent(level)}useEffect(() => {\n`;
-		case "useMemo": return `${indent(level)}const value = useMemo(() => {\n`;
-		case "useCallback": return `${indent(level)}const handler = useCallback(() => {\n`;
-	}
+// ─── Types ────────────────────────────────────────────────────────────────
+
+type Construct =
+	| "if"
+	| "switch"
+	| "try"
+	| "while"
+	| "do-while"
+	| "for"
+	| "for-of"
+	| "for-in"
+	| "foreach"
+	| "function"
+	| "hook"
+	| "return"
+	| "throw"
+	| "break"
+	| "continue";
+
+type AnyNodeData = {
+	label?: unknown;
+	sourceText?: unknown;
+	construct?: unknown;
+	forHeader?: unknown;
+	forOfBinding?: unknown;
+	forEachIterable?: unknown;
+	forEachCallee?: unknown;
+	forEachParams?: unknown;
+	deps?: unknown;
+};
+
+const getData = (node: Node): AnyNodeData => (node.data as AnyNodeData | undefined) ?? {};
+const getStr = (value: unknown): string => (typeof value === "string" ? value : "");
+
+function getConstruct(node: Node): Construct | undefined {
+	const value = getStr(getData(node).construct);
+	return value ? (value as Construct) : undefined;
 }
+
+// ─── Generator ────────────────────────────────────────────────────────────
 
 export class CodeGenerator {
 	private readonly nodeById: Map<string, Node>;
 	private readonly asyncMode: boolean;
+
 	private code = "";
+	private readonly suppressed = new Set<string>();
 	private readonly activeLoopHeaders = new Set<string>();
-	private readonly visitCountByContext = new Map<string, number>();
-	private recursionDepth = 0;
-	private readonly maxRecursionDepth = 1200;
+	private readonly visitCount = new Map<string, number>();
+	private depth = 0;
+
+	private readonly maxDepth = 1200;
 	private readonly maxVisitsPerContext = 6;
 
 	constructor(
@@ -38,30 +74,32 @@ export class CodeGenerator {
 	}
 
 	generate(funcName: string, funcArgs: FuncArg[]): string {
-		try {
-			const startLink = this.findStartLink();
+		const startEdge = this.findStartEdge();
 
-			if (!startLink) {
-				return formatFunctionHeader(funcName, funcArgs, this.asyncMode) + "  // Build diagram and click Convert\n}";
-			}
-
-			this.code = formatFunctionHeader(funcName, funcArgs, this.asyncMode);
-
-			const firstNode = this.nodeById.get(String(startLink.target));
-			if (firstNode) this.visitNode(firstNode, 1);
-
-			this.code += "}";
-			return this.code;
-		} catch (error) {
-			const message = error instanceof Error ? error.message : "Unknown code generation failure.";
-			return (
-				formatFunctionHeader(funcName, funcArgs, this.asyncMode) +
-				`${indent(1)}throw new Error(${JSON.stringify(`Diagram conversion failed: ${message}`)});\n}`
-			);
+		if (!startEdge) {
+			return formatFunctionHeader(funcName, funcArgs, this.asyncMode)
+				+ "  // Build a diagram and click Convert.\n}";
 		}
+
+		this.code = formatFunctionHeader(funcName, funcArgs, this.asyncMode);
+		const first = this.nodeById.get(String(startEdge.target));
+		if (first) this.visit(first, 1);
+		this.code += "}";
+
+		return this.code;
 	}
 
-	private findStartLink(): Edge | undefined {
+	generateBodyOnly(): string {
+		const startEdge = this.findStartEdge();
+		if (!startEdge) return "";
+
+		this.code = "";
+		const first = this.nodeById.get(String(startEdge.target));
+		if (first) this.visit(first, 0);
+		return this.code;
+	}
+
+	private findStartEdge(): Edge | undefined {
 		return (
 			this.edges.find((edge) => String(edge.source) === START_EDGE_SOURCE_ID) ??
 			this.edges.find((edge) => {
@@ -71,632 +109,473 @@ export class CodeGenerator {
 		);
 	}
 
-	private visitNode(
-		node: Node,
-		level: number,
-		stopAtNodeId?: string,
-		localVisited: Set<string> = new Set(),
-	): void {
-		this.recursionDepth += 1;
-		if (this.recursionDepth > this.maxRecursionDepth) {
-			this.code += `${indent(level)}// Traversal depth limit reached; stopping to avoid stack overflow.\n`;
-			this.recursionDepth -= 1;
+	// ── Core traversal ─────────────────────────────────────────────────────
+
+	/**
+	 * Dispatch order:
+	 *
+	 *   1. Skip / loop guards (suppressed nodes, recursion limits, etc.)
+	 *   2. data.construct — the canonical "what does this node represent"
+	 *      tag. Set by the parser, set by the playground UI; covers
+	 *      every control-flow construct we know how to emit.
+	 *   3. node.type fallback — for nodes that don't carry a construct
+	 *      (typically plain action statements, merges, starts, ends).
+	 *
+	 * No more "is this a try? let me look at the outgoing edge labels"
+	 * heuristic. No more "is this a switch? let me count case labels".
+	 * The parser tells us, the UI tells us, we just read the field.
+	 */
+	private visit(node: Node, level: number, stopAt?: string, localVisited: Set<string> = new Set()): void {
+		this.depth += 1;
+		if (this.depth > this.maxDepth) {
+			this.code += `${indent(level)}// recursion limit\n`;
+			this.depth -= 1;
 			return;
 		}
 
 		try {
-		const nodeId = String(node.id);
-		const contextKey = `${nodeId}|${stopAtNodeId ?? "root"}`;
-		const contextVisits = (this.visitCountByContext.get(contextKey) ?? 0) + 1;
-		this.visitCountByContext.set(contextKey, contextVisits);
+			const id = String(node.id);
 
-		if (contextVisits > this.maxVisitsPerContext) {
-			this.code += `${indent(level)}// Repeated flow at node ${nodeId}; stopping branch to prevent infinite recursion.\n`;
-			return;
-		}
-
-		if (stopAtNodeId && nodeId === stopAtNodeId) return;
-		if (node.type === "end") return;
-
-		if (localVisited.has(nodeId)) {
-			this.code += `${indent(level)}// Loop detected at node ${nodeId}, stopping this branch.\n`;
-			return;
-		}
-
-		localVisited.add(nodeId);
-
-		if (node.type === "merge") {
-			this.continueFrom(nodeId, level, stopAtNodeId, localVisited);
-			return;
-		}
-
-		if (isTryNode(node)) {
-			if (this.emitTryCatch(node, level, stopAtNodeId, localVisited)) return;
-		}
-
-		switch (node.type) {
-			case "action":
-			case "expandable":
-				return this.emitAction(node, nodeId, level, stopAtNodeId, localVisited);
-			case "loop":
-				return this.emitLoop(node, nodeId, level, stopAtNodeId, localVisited);
-			case "switch":
-				return this.emitSwitch(node, nodeId, level, stopAtNodeId, localVisited);
-			case "decision":
-				return this.emitDecision(node, nodeId, level, stopAtNodeId, localVisited);
-		}
-
-		this.continueFrom(nodeId, level, stopAtNodeId, localVisited);
-		} finally {
-			this.recursionDepth -= 1;
-		}
-	}
-
-	// ── Node-type emitters ──────────────────────────────────────────────────
-
-	private emitAction(
-		node: Node,
-		nodeId: string,
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): void {
-		const label = getNodeLabel(node);
-		const hookSpec = parseHookSpec(label);
-
-		if (hookSpec) {
-			this.emitHookBlock(hookSpec, nodeId, level, stopAtNodeId, localVisited);
-			return;
-		}
-
-		const statement = sanitizeStatement(label);
-		this.code += `${indent(level)}${statement}\n`;
-
-		if (this.isTerminatingStatement(statement)) {
-			return;
-		}
-
-		const nextId = this.getDeterministicContinuationTarget(nodeId);
-		if (!nextId || nextId === stopAtNodeId) return;
-
-		const nextNode = this.nodeById.get(nextId);
-		if (nextNode) this.visitNode(nextNode, level, stopAtNodeId, localVisited);
-	}
-
-	private emitLoop(
-		node: Node,
-		nodeId: string,
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): void {
-		const label = getNodeLabel(node).trim();
-		const outgoing = getOutgoingEdges(this.edges, nodeId);
-
-		const trueEdge = this.pickPreferredBranchEdge(outgoing, ["true", "yes", "body", "each", "next"]);
-		const falseEdge =
-			findLabeledEdge(outgoing, ["false", "no", "done", "exit"]) ??
-			outgoing.find((e) => String(e.target) !== String(trueEdge?.target));
-
-		if (!trueEdge && outgoing.length > 1) {
-			throw new Error(`Ambiguous loop at node ${nodeId}: missing explicit body branch label.`);
-		}
-
-		if (this.activeLoopHeaders.has(nodeId)) return;
-		this.activeLoopHeaders.add(nodeId);
-
-		if (!label) {
-			this.code += `${indent(level)}while (true) {\n`;
-		} else if (/^(let |const |var )/.test(label) || label.includes(";")) {
-			this.code += `${indent(level)}for (${label}) {\n`;
-		} else {
-			this.code += `${indent(level)}while (${label}) {\n`;
-		}
-
-		if (trueEdge) {
-			const bodyNode = this.nodeById.get(String(trueEdge.target));
-			if (bodyNode) this.visitNode(bodyNode, level + 1, nodeId, new Set());
-		}
-
-		this.code += `${indent(level)}}\n`;
-		this.activeLoopHeaders.delete(nodeId);
-
-		if (falseEdge) {
-			const exitNode = this.nodeById.get(String(falseEdge.target));
-			if (exitNode) this.visitNode(exitNode, level, stopAtNodeId, new Set(localVisited));
-		}
-	}
-
-	private emitSwitch(
-		node: Node,
-		nodeId: string,
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): void {
-		const label = getNodeLabel(node);
-		const outgoing = getOutgoingEdges(this.edges, nodeId);
-
-		const caseEdges = outgoing.filter((edge) => {
-			const edgeLabel = normalize(edge.label);
-			return edgeLabel.startsWith("case ") || edgeLabel === "default" || edgeLabel === "default:";
-		});
-
-		if (caseEdges.length < 2) {
-			this.continueFrom(nodeId, level, stopAtNodeId, localVisited);
-			return;
-		}
-
-		const joinNodeId = findJoinNodeForBranches(
-			this.edges,
-			this.nodeById,
-			caseEdges.map((e) => String(e.target)),
-		);
-
-		const switchExpr = label.trim().startsWith("Switch:")
-			? label.trim().slice(7).trim() || "value"
-			: label.trim() || "value";
-
-		this.code += `${indent(level)}switch (${switchExpr}) {\n`;
-
-		for (const caseEdge of caseEdges) {
-			const raw = stringifyLabel(caseEdge.label);
-			const lower = raw.toLowerCase();
-			const caseLabel =
-				lower === "default" || lower === "default:"
-					? "default:"
-					: raw.endsWith(":")
-						? raw
-						: `${raw}:`;
-
-			this.code += `${indent(level + 1)}${caseLabel}\n`;
-
-			const targetNode = this.nodeById.get(String(caseEdge.target));
-			if (targetNode) this.visitNode(targetNode, level + 2, joinNodeId ?? undefined, new Set());
-
-			this.code += `${indent(level + 2)}break;\n`;
-		}
-
-		this.code += `${indent(level)}}\n`;
-		this.continueAfterJoin(joinNodeId, level, stopAtNodeId, localVisited);
-	}
-
-	private emitDecision(
-		node: Node,
-		nodeId: string,
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): void {
-		const label = getNodeLabel(node);
-		const outgoing = getOutgoingEdges(this.edges, nodeId);
-
-		if (outgoing.length === 0) {
-			return;
-		}
-
-		if (this.isSwitchDecision(outgoing)) {
-			this.emitSwitchDecision(nodeId, label, outgoing, level, stopAtNodeId, localVisited);
-			return;
-		}
-
-		if (this.isTryDecision(outgoing)) {
-			this.emitTryDecision(nodeId, outgoing, level, stopAtNodeId, localVisited);
-			return;
-		}
-
-		if (this.emitDecisionAsLoopWhenDetected(nodeId, label, outgoing, level, stopAtNodeId, localVisited)) {
-			return;
-		}
-
-		if (outgoing.length > 2) {
-			throw new Error(
-				`Ambiguous decision at node ${nodeId}: expected yes/no branches or labeled switch-like edges.`,
-			);
-		}
-
-		const trueEdge = this.pickPreferredBranchEdge(outgoing, ["true", "yes", "next"]);
-		const falseEdge =
-			findLabeledEdge(outgoing, ["false", "no", "done"]) ??
-			outgoing.find((e) => String(e.target) !== String(trueEdge?.target));
-
-		if (!trueEdge && outgoing.length > 1) {
-			throw new Error(`Ambiguous decision at node ${nodeId}: add explicit yes/no labels.`);
-		}
-
-		const trueTarget  = trueEdge  ? String(trueEdge.target)  : undefined;
-		const falseTarget = falseEdge ? String(falseEdge.target) : undefined;
-
-		const joinNodeId = findJoinNode(this.edges, this.nodeById, trueTarget, falseTarget);
-
-		this.code += `${indent(level)}if (${label || "condition"}) {\n`;
-
-		if (trueEdge) {
-			const trueNode = this.nodeById.get(String(trueEdge.target));
-			if (trueNode) this.visitNode(trueNode, level + 1, joinNodeId ?? undefined, new Set());
-		}
-
-		if (falseEdge) {
-			this.code += `${indent(level)}} else {\n`;
-			const falseNode = this.nodeById.get(String(falseEdge.target));
-			if (falseNode) this.visitNode(falseNode, level + 1, joinNodeId ?? undefined, new Set());
-			this.code += `${indent(level)}}\n`;
-		} else {
-			this.code += `${indent(level)}}\n`;
-		}
-
-		this.continueAfterJoin(joinNodeId, level, stopAtNodeId, localVisited);
-	}
-
-	private emitDecisionAsLoop(
-		nodeId: string,
-		label: string,
-		trueLoopsBack: boolean,
-		trueTarget: string | undefined,
-		falseTarget: string | undefined,
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): void {
-		this.activeLoopHeaders.add(nodeId);
-
-		const loopBodyTarget = trueLoopsBack ? trueTarget : falseTarget;
-		const loopExitTarget = trueLoopsBack ? falseTarget : trueTarget;
-		const rawCondition = label.trim() || "condition";
-		const loopCondition = trueLoopsBack ? rawCondition : `!(${rawCondition})`;
-
-		this.code += `${indent(level)}while (${loopCondition}) {\n`;
-
-		if (loopBodyTarget) {
-			const bodyNode = this.nodeById.get(loopBodyTarget);
-			if (bodyNode) this.visitNode(bodyNode, level + 1, nodeId, new Set());
-		}
-
-		this.code += `${indent(level)}}\n`;
-		this.activeLoopHeaders.delete(nodeId);
-
-		if (loopExitTarget) {
-			const exitNode = this.nodeById.get(loopExitTarget);
-			if (exitNode) this.visitNode(exitNode, level, stopAtNodeId, new Set(localVisited));
-		}
-	}
-
-	private emitDecisionAsLoopWhenDetected(
-		nodeId: string,
-		label: string,
-		outgoing: Edge[],
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): boolean {
-		if (this.activeLoopHeaders.has(nodeId)) {
-			return false;
-		}
-
-		if (outgoing.length !== 2) {
-			return false;
-		}
-
-		const trueEdge = this.pickPreferredBranchEdge(outgoing, ["true", "yes", "next"]);
-		const falseEdge =
-			findLabeledEdge(outgoing, ["false", "no", "done"]) ??
-			outgoing.find((edge) => String(edge.target) !== String(trueEdge?.target));
-
-		if (!trueEdge || !falseEdge) {
-			return false;
-		}
-
-		const trueTarget = String(trueEdge.target);
-		const falseTarget = String(falseEdge.target);
-		const trueIsLoopBranch = this.isUnambiguousLoopBackBranch(trueTarget, nodeId);
-		const falseIsLoopBranch = this.isUnambiguousLoopBackBranch(falseTarget, nodeId);
-
-		// Must have exactly one clear loop-back branch and one clear exit branch.
-		if (trueIsLoopBranch === falseIsLoopBranch) {
-			return false;
-		}
-
-		this.emitDecisionAsLoop(
-			nodeId,
-			label,
-			trueIsLoopBranch,
-			trueTarget,
-			falseTarget,
-			level,
-			stopAtNodeId,
-			localVisited,
-		);
-
-		return true;
-	}
-
-	private isUnambiguousLoopBackBranch(branchStartId: string, decisionId: string): boolean {
-		if (branchStartId === decisionId) {
-			return true;
-		}
-
-		const visited = new Set<string>();
-		let currentId: string | undefined = branchStartId;
-		let steps = 0;
-		const maxSteps = 120;
-
-		while (currentId && !visited.has(currentId) && steps < maxSteps) {
-			visited.add(currentId);
-			steps += 1;
-
-			const currentNode = this.nodeById.get(currentId);
-			if (!currentNode) {
-				return false;
-			}
-
-			const outgoing = getOutgoingEdges(this.edges, currentId);
-			const hasBackEdge = outgoing.some((edge) => String(edge.target) === decisionId);
-			if (hasBackEdge) {
-				// Only accept direct structural back-edges from linear flow nodes.
-				return outgoing.length === 1 || (outgoing.length === 2 && currentNode.type === "action");
-			}
-
-			if (currentNode.type === "merge" || currentNode.type === "decision" || currentNode.type === "switch" || currentNode.type === "loop") {
-				return false;
-			}
-
-			const nextId = this.getDeterministicContinuationTarget(currentId);
-			if (!nextId) {
-				return false;
-			}
-
-			currentId = nextId;
-		}
-
-		return false;
-	}
-
-	private isSwitchDecision(outgoing: Edge[]): boolean {
-		const caseEdgeCount = outgoing.filter((edge) => {
-			const edgeLabel = normalize(edge.label);
-			return edgeLabel.startsWith("case ") || edgeLabel === "default" || edgeLabel === "default:";
-		}).length;
-
-		return caseEdgeCount >= 2;
-	}
-
-	private emitSwitchDecision(
-		nodeId: string,
-		label: string,
-		outgoing: Edge[],
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): void {
-		const caseEdges = outgoing.filter((edge) => {
-			const edgeLabel = normalize(edge.label);
-			return edgeLabel.startsWith("case ") || edgeLabel === "default" || edgeLabel === "default:";
-		});
-
-		const groupedCaseTargets: Array<{ target: string; labels: string[] }> = [];
-		for (const edge of caseEdges) {
-			const target = String(edge.target);
-			const text = stringifyLabel(edge.label) || "default";
-			const existing = groupedCaseTargets.find((group) => group.target === target);
-			if (existing) {
-				existing.labels.push(text);
-			} else {
-				groupedCaseTargets.push({ target, labels: [text] });
-			}
-		}
-
-		const joinNodeId = findJoinNodeForBranches(
-			this.edges,
-			this.nodeById,
-			groupedCaseTargets.map((group) => group.target),
-		);
-
-		const switchExpr = label.trim().startsWith("Switch:")
-			? label.trim().slice(7).trim() || "value"
-			: label.trim() || "value";
-
-		this.code += `${indent(level)}switch (${switchExpr}) {\n`;
-
-		for (const group of groupedCaseTargets) {
-			for (const rawLabel of group.labels) {
-				const lower = rawLabel.toLowerCase();
-				const caseLabel =
-					lower === "default" || lower === "default:"
-						? "default:"
-						: rawLabel.endsWith(":")
-							? rawLabel
-							: `${rawLabel}:`;
-				this.code += `${indent(level + 1)}${caseLabel}\n`;
-			}
-
-			const targetNode = this.nodeById.get(group.target);
-			if (targetNode) {
-				this.visitNode(targetNode, level + 2, joinNodeId ?? undefined, new Set());
-			}
-
-			this.code += `${indent(level + 2)}break;\n`;
-		}
-
-		this.code += `${indent(level)}}\n`;
-		this.continueAfterJoin(joinNodeId, level, stopAtNodeId, localVisited);
-	}
-
-	private isTryDecision(outgoing: Edge[]): boolean {
-		const labels = outgoing.map((edge) => normalize(edge.label));
-		return labels.includes("try") || labels.includes("catch");
-	}
-
-	private emitTryDecision(
-		nodeId: string,
-		outgoing: Edge[],
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): void {
-		const tryEdge = this.pickPreferredBranchEdge(outgoing, ["try", "success", "ok", "yes", "true"]);
-		const catchEdge =
-			findLabeledEdge(outgoing, ["catch", "error", "fail", "no", "false"]) ??
-			outgoing.find((edge) => edge !== tryEdge);
-
-		if (!tryEdge) {
-			throw new Error(`Invalid try/catch decision at node ${nodeId}: missing try branch.`);
-		}
-
-		const tryTarget = String(tryEdge.target);
-		const catchTarget = catchEdge ? String(catchEdge.target) : undefined;
-		const joinNodeId = findJoinNode(this.edges, this.nodeById, tryTarget, catchTarget);
-
-		this.code += `${indent(level)}try {\n`;
-		const tryNode = this.nodeById.get(tryTarget);
-		if (tryNode) {
-			this.visitNode(tryNode, level + 1, joinNodeId ?? undefined, new Set());
-		}
-
-		this.code += `${indent(level)}} catch (err) {\n`;
-		if (catchTarget) {
-			const catchNode = this.nodeById.get(catchTarget);
-			if (catchNode) {
-				this.visitNode(catchNode, level + 1, joinNodeId ?? undefined, new Set());
-			}
-		}
-		this.code += `${indent(level)}}\n`;
-
-		if (joinNodeId) {
-			const joinNode = this.nodeById.get(joinNodeId);
-			if (joinNode && joinNode.type !== "merge") {
-				const finallyStop = this.findFirstMergeOnPrimary(joinNodeId);
-				this.code += `${indent(level)}finally {\n`;
-				this.visitNode(joinNode, level + 1, finallyStop ?? undefined, new Set());
-				this.code += `${indent(level)}}\n`;
-				this.continueAfterJoin(finallyStop ?? undefined, level, stopAtNodeId, localVisited);
+			if (this.suppressed.has(id)) {
+				this.continueFrom(id, level, stopAt, localVisited);
 				return;
 			}
-		}
 
-		this.continueAfterJoin(joinNodeId, level, stopAtNodeId, localVisited);
-	}
-
-	private emitTryCatch(
-		node: Node,
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): boolean {
-		const nodeId = String(node.id);
-		const outgoing = getOutgoingEdges(this.edges, nodeId);
-		if (!this.isTryDecision(outgoing)) {
-			return false;
-		}
-
-		this.emitTryDecision(nodeId, outgoing, level, stopAtNodeId, localVisited);
-		return true;
-	}
-
-	private emitHookBlock(
-		spec: HookSpec,
-		nodeId: string,
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): void {
-		const outgoing = getOutgoingEdges(this.edges, nodeId);
-		const primaryEdge = this.pickPreferredBranchEdge(outgoing, ["body", "next", "yes", "true"]);
-
-		this.code += hookOpenLine(spec, level);
-
-		let mergeId: string | null = null;
-
-		if (primaryEdge) {
-			const bodyStartId = String(primaryEdge.target);
-			mergeId = findJoinNode(this.edges, this.nodeById, bodyStartId, stopAtNodeId);
-			const bodyNode = this.nodeById.get(bodyStartId);
-			if (bodyNode) this.visitNode(bodyNode, level + 1, mergeId ?? stopAtNodeId, new Set());
-		}
-
-		if (spec.kind === "useMemo") {
-			this.code += `${indent(level + 1)}return undefined;\n`;
-		}
-
-		this.code += `${indent(level)}}${spec.deps});\n`;
-
-		if (mergeId) {
-			const continueId = this.getDeterministicContinuationTarget(mergeId);
-			if (continueId) {
-				const nextNode = this.nodeById.get(continueId);
-				if (nextNode) this.visitNode(nextNode, level, stopAtNodeId, new Set(localVisited));
+			const ctxKey = `${id}|${stopAt ?? "root"}`;
+			const visits = (this.visitCount.get(ctxKey) ?? 0) + 1;
+			this.visitCount.set(ctxKey, visits);
+			if (visits > this.maxVisitsPerContext) {
+				this.code += `${indent(level)}// repeated visit guard\n`;
+				return;
 			}
+
+			if (stopAt && id === stopAt) return;
+			if (node.type === "end") return;
+
+			if (localVisited.has(id)) {
+				this.code += `${indent(level)}// loop detected at ${id}\n`;
+				return;
+			}
+			localVisited.add(id);
+
+			const construct = getConstruct(node);
+
+			// 1) Construct-driven dispatch — single source of truth.
+			if (construct) {
+				switch (construct) {
+					case "try":
+						this.emitTry(node, id, level, stopAt, localVisited);
+						return;
+					case "switch":
+						this.emitSwitch(node, id, level, stopAt, localVisited);
+						return;
+					case "if":
+						this.emitIf(node, id, level, stopAt, localVisited);
+						return;
+					case "while":
+					case "do-while":
+					case "for":
+					case "for-of":
+					case "for-in":
+					case "foreach":
+						this.emitLoop(node, id, construct, level, stopAt, localVisited);
+						return;
+					case "function":
+					case "hook":
+						this.emitExpandable(node, id, level, stopAt, localVisited);
+						return;
+					case "return":
+					case "throw":
+					case "break":
+					case "continue":
+						this.emitTerminatingAction(node, level);
+						return;
+				}
+			}
+
+			// 2) Type-based fallback — unmarked nodes still need to do
+			//    something sensible.
+			switch (node.type) {
+				case "merge":
+				case "initial":
+				case "start":
+					this.continueFrom(id, level, stopAt, localVisited);
+					return;
+				case "expandable":
+					this.emitExpandable(node, id, level, stopAt, localVisited);
+					return;
+				case "decision":
+					// Untagged decision → assume `if`.
+					this.emitIf(node, id, level, stopAt, localVisited);
+					return;
+				case "loop":
+					// Untagged loop → assume `while`.
+					this.emitLoop(node, id, "while", level, stopAt, localVisited);
+					return;
+				case "action":
+				default:
+					this.emitAction(node, id, level, stopAt, localVisited);
+					return;
+			}
+		} finally {
+			this.depth -= 1;
 		}
 	}
 
-	// ── Traversal helpers ───────────────────────────────────────────────────
-
-	private continueFrom(
-		nodeId: string,
-		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
-	): void {
-		const nextId = this.getDeterministicContinuationTarget(nodeId);
-		if (!nextId || nextId === stopAtNodeId) return;
+	private continueFrom(id: string, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
+		const nextId = getPrimaryNext(this.edges, id);
+		if (!nextId || nextId === stopAt) return;
 		const nextNode = this.nodeById.get(nextId);
-		if (nextNode) this.visitNode(nextNode, level, stopAtNodeId, localVisited);
+		if (nextNode) this.visit(nextNode, level, stopAt, localVisited);
 	}
 
-	private continueAfterJoin(
-		joinNodeId: string | null | undefined,
+	private continueAfter(joinId: string | null | undefined, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
+		if (!joinId) return;
+		if (stopAt && joinId === stopAt) return;
+		const nextId = getPrimaryNext(this.edges, joinId);
+		if (!nextId) return;
+		const nextNode = this.nodeById.get(nextId);
+		if (nextNode) this.visit(nextNode, level, stopAt, new Set(localVisited));
+	}
+
+	// ── Snippet writer ─────────────────────────────────────────────────────
+
+	private writeSnippet(snippet: string, level: number): void {
+		const lines = snippet.split(/\r?\n/);
+
+		let minIndent = Infinity;
+		for (const line of lines) {
+			if (line.trim().length === 0) continue;
+			const m = line.match(/^[ \t]*/);
+			const len = m ? m[0].length : 0;
+			if (len < minIndent) minIndent = len;
+		}
+		if (!isFinite(minIndent)) minIndent = 0;
+
+		for (const line of lines) {
+			if (line.trim().length === 0) {
+				this.code += "\n";
+			} else {
+				this.code += `${indent(level)}${line.slice(minIndent)}\n`;
+			}
+		}
+	}
+
+	// ── Expandable (function / hook) ───────────────────────────────────────
+
+	private emitExpandable(node: Node, id: string, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
+		const data = getData(node);
+		const sourceText = getStr(data.sourceText);
+		if (sourceText.trim()) {
+			this.writeSnippet(sourceText, level);
+		}
+		this.continueFrom(id, level, stopAt, localVisited);
+	}
+
+	// ── Action ─────────────────────────────────────────────────────────────
+
+	private emitAction(node: Node, id: string, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
+		const data = getData(node);
+		const label = getStr(data.label).trim();
+		const sourceText = getStr(data.sourceText);
+		const text = sourceText.trim() || sanitizeStatement(label);
+
+		if (text.includes("\n")) {
+			this.writeSnippet(text, level);
+		} else if (text) {
+			this.code += `${indent(level)}${text}\n`;
+		}
+
+		// Even untagged actions can be terminating — e.g. legacy diagrams
+		// where construct wasn't set. Fallback regex keeps those working.
+		if (this.terminatesByText(text)) return;
+
+		this.continueFrom(id, level, stopAt, localVisited);
+	}
+
+	/**
+	 * Emit a terminating action (return / throw / break / continue) and
+	 * stop traversal. The construct tag tells us we terminate; we don't
+	 * need to look at the text to find out.
+	 */
+	private emitTerminatingAction(node: Node, level: number): void {
+		const data = getData(node);
+		const text = getStr(data.sourceText).trim() || sanitizeStatement(getStr(data.label).trim());
+		if (text.includes("\n")) {
+			this.writeSnippet(text, level);
+		} else if (text) {
+			this.code += `${indent(level)}${text}\n`;
+		}
+	}
+
+	/** Fallback for actions without an explicit terminating construct. */
+	private terminatesByText(statement: string): boolean {
+		const s = statement.trim();
+		return /^return\b/.test(s) || /^throw\b/.test(s) || /^break\b/.test(s) || /^continue\b/.test(s);
+	}
+
+	// ── Try / catch ────────────────────────────────────────────────────────
+
+	private isExceptionEdgeLabel(label: unknown): boolean {
+		const n = normalize(label);
+		return n === "exception" || n === "catch" || n === "error";
+	}
+
+	/**
+	 * Emit a try/catch[/finally] from a `construct: 'try'` decision node.
+	 *
+	 * The decision has two outgoing edges: an unlabeled (or `try`) edge
+	 * to the try body, and an `exception` edge to the catch body. We
+	 * walk both into a join, suppress the subgraph so it isn't visited
+	 * again as part of the outer flow, then continue past the join.
+	 */
+	private emitTry(node: Node, id: string, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
+		const outgoing = getOutgoingEdges(this.edges, id);
+		const exceptionEdge = outgoing.find((e) => this.isExceptionEdgeLabel(e.label));
+		const successEdge = outgoing.find((e) => !this.isExceptionEdgeLabel(e.label));
+
+		const successTarget = successEdge ? String(successEdge.target) : undefined;
+		const exceptionTarget = exceptionEdge ? String(exceptionEdge.target) : undefined;
+		const joinId = findJoinNode(this.edges, this.nodeById, successTarget, exceptionTarget);
+
+		this.code += `${indent(level)}try {\n`;
+		if (successTarget) {
+			const tryNode = this.nodeById.get(successTarget);
+			if (tryNode) this.visit(tryNode, level + 1, joinId ?? undefined, new Set());
+		}
+		this.code += `${indent(level)}} catch (err) {\n`;
+		if (exceptionTarget) {
+			const catchNode = this.nodeById.get(exceptionTarget);
+			if (catchNode) this.visit(catchNode, level + 1, joinId ?? undefined, new Set());
+		}
+		this.code += `${indent(level)}}\n`;
+
+		this.continueAfter(joinId, level, stopAt, localVisited);
+	}
+
+	// ── If ─────────────────────────────────────────────────────────────────
+
+	private emitIf(node: Node, id: string, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
+		const outgoing = getOutgoingEdges(this.edges, id);
+		if (outgoing.length === 0) return;
+
+		const data = getData(node);
+		const condition = (getStr(data.sourceText).trim() || getStr(data.label).trim() || "condition");
+
+		const yesEdge = this.pickEdge(outgoing, ["yes", "true", "next"]);
+		const noEdge = this.pickEdge(outgoing, ["no", "false", "done"])
+			?? outgoing.find((e) => e !== yesEdge);
+
+		const yesTarget = yesEdge ? String(yesEdge.target) : undefined;
+		const noTarget = noEdge ? String(noEdge.target) : undefined;
+		const joinId = findJoinNode(this.edges, this.nodeById, yesTarget, noTarget);
+
+		this.code += `${indent(level)}if (${condition}) {\n`;
+
+		if (yesEdge) {
+			const yesNode = this.nodeById.get(String(yesEdge.target));
+			if (yesNode) this.visit(yesNode, level + 1, joinId ?? undefined, new Set());
+		}
+
+		if (noEdge && noTarget !== (joinId ?? "")) {
+			this.code += `${indent(level)}} else {\n`;
+			const noNode = this.nodeById.get(String(noEdge.target));
+			if (noNode) this.visit(noNode, level + 1, joinId ?? undefined, new Set());
+		}
+
+		this.code += `${indent(level)}}\n`;
+
+		this.continueAfter(joinId, level, stopAt, localVisited);
+	}
+
+	// ── Switch ─────────────────────────────────────────────────────────────
+
+	/**
+	 * Parse one outgoing edge's label into one or more case headers.
+	 *
+	 *   "case 1"                  → ["case 1:"]
+	 *   "case 1, 2"               → ["case 1:", "case 2:"]
+	 *   "case 1, 2, default"      → ["case 1:", "case 2:", "default:"]
+	 *   "default"                 → ["default:"]
+	 *
+	 * Bare comma-separated values after the first one are interpreted as
+	 * additional case labels in the same group (the source had `case 1:
+	 * case 2:` etc. sharing a body).
+	 */
+	private parseSwitchLabels(rawLabel: unknown): string[] {
+		const text = stringifyLabel(rawLabel).trim();
+		if (!text) return [];
+
+		const parts = text.split(',').map((p) => p.trim()).filter(Boolean);
+		if (parts.length === 0) return [];
+
+		return parts.map((part, index) => {
+			const lower = part.toLowerCase();
+			if (lower === 'default' || lower === 'default:') return 'default:';
+
+			let header: string;
+			if (index === 0) {
+				header = part.startsWith('case ') ? part : `case ${part}`;
+			} else {
+				header = `case ${part}`;
+			}
+			return header.endsWith(':') ? header : `${header}:`;
+		});
+	}
+
+	private emitSwitch(node: Node, id: string, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
+		const data = getData(node);
+		const expr = (getStr(data.sourceText).trim() || getStr(data.label).trim() || "value");
+
+		const outgoing = getOutgoingEdges(this.edges, id);
+		const caseEdges = outgoing.filter((e) => this.parseSwitchLabels(e.label).length > 0);
+		const caseTargets = caseEdges.map((e) => String(e.target));
+		const joinId = findJoinNodeForBranches(this.edges, this.nodeById, caseTargets);
+
+		this.code += `${indent(level)}switch (${expr}) {\n`;
+
+		const caseEntries = caseEdges.map((e) => String(e.target));
+
+		for (let i = 0; i < caseEdges.length; i += 1) {
+			const caseEdge = caseEdges[i];
+			const caseHeaders = this.parseSwitchLabels(caseEdge.label);
+			for (const header of caseHeaders) {
+				this.code += `${indent(level + 1)}${header}\n`;
+			}
+
+			const nextEntry = caseEntries[i + 1];
+			const caseStopAt = nextEntry ?? joinId ?? undefined;
+
+			const target = this.nodeById.get(String(caseEdge.target));
+			if (target) {
+				this.visit(target, level + 2, caseStopAt, new Set());
+			}
+		}
+
+		this.code += `${indent(level)}}\n`;
+
+		this.continueAfter(joinId, level, stopAt, localVisited);
+	}
+
+	// ── Loops ──────────────────────────────────────────────────────────────
+
+	/**
+	 * Loop emission contract:
+	 *
+	 *   - The loop NODE carries metadata (construct, plus type-specific
+	 *     fields like forHeader / forOfBinding / forEachIterable). It
+	 *     NEVER carries the body. The body lives in the graph as ordinary
+	 *     action / decision / loop nodes connected by a `yes` / `each`
+	 *     edge from the loop, with a back-edge to the loop.
+	 *
+	 *   - This dispatcher reads `construct` and reconstructs the
+	 *     appropriate syntax. The body is always traversed via
+	 *     emitLoopBody.
+	 */
+	private emitLoop(node: Node, id: string, construct: Construct, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
+		if (this.activeLoopHeaders.has(id)) return;
+		this.activeLoopHeaders.add(id);
+
+		try {
+			const data = getData(node);
+			const sourceText = getStr(data.sourceText).trim();
+			const label = getStr(data.label).trim();
+
+			const outgoing = getOutgoingEdges(this.edges, id);
+			const bodyEdge = this.pickEdge(outgoing, ["yes", "each", "true", "body", "next"]);
+			const exitEdge = this.pickEdge(outgoing, ["no", "false", "done", "exit"])
+				?? outgoing.find((e) => String(e.target) !== String(bodyEdge?.target));
+
+			switch (construct) {
+				case "foreach":
+					this.emitForEach(data, id, level, bodyEdge);
+					break;
+				case "for":
+					this.emitFor(id, getStr(data.forHeader).trim() || sourceText || label, level, bodyEdge);
+					break;
+				case "for-of":
+					this.emitForOfIn(getStr(data.forOfBinding), sourceText, "of", id, level, bodyEdge);
+					break;
+				case "for-in":
+					this.emitForOfIn(getStr(data.forOfBinding), sourceText, "in", id, level, bodyEdge);
+					break;
+				case "do-while":
+					this.emitDoWhile(id, sourceText || label, level, bodyEdge);
+					break;
+				case "while":
+				default:
+					this.emitWhile(id, sourceText || label, level, bodyEdge);
+					break;
+			}
+
+			if (exitEdge) {
+				const exitNode = this.nodeById.get(String(exitEdge.target));
+				if (exitNode) this.visit(exitNode, level, stopAt, new Set(localVisited));
+			}
+		} finally {
+			this.activeLoopHeaders.delete(id);
+		}
+	}
+
+	private emitForEach(data: AnyNodeData, loopId: string, level: number, bodyEdge: Edge | undefined): void {
+		const iterable = getStr(data.forEachIterable).trim() || getStr(data.sourceText).trim() || "items";
+		const callee = getStr(data.forEachCallee).trim() || "forEach";
+		const params = getStr(data.forEachParams).trim() || "(item)";
+
+		this.code += `${indent(level)}${iterable}.${callee}(${params} => {\n`;
+		this.emitLoopBody(bodyEdge, level + 1, loopId);
+		this.code += `${indent(level)}});\n`;
+	}
+
+	private emitWhile(id: string, condition: string, level: number, bodyEdge: Edge | undefined): void {
+		const cond = condition.trim() || "true";
+		this.code += `${indent(level)}while (${cond}) {\n`;
+		this.emitLoopBody(bodyEdge, level + 1, id);
+		this.code += `${indent(level)}}\n`;
+	}
+
+	private emitDoWhile(id: string, condition: string, level: number, bodyEdge: Edge | undefined): void {
+		const cond = condition.trim() || "true";
+		this.code += `${indent(level)}do {\n`;
+		this.emitLoopBody(bodyEdge, level + 1, id);
+		this.code += `${indent(level)}} while (${cond});\n`;
+	}
+
+	private emitFor(id: string, header: string, level: number, bodyEdge: Edge | undefined): void {
+		const headerText = header.trim() || ";;";
+		this.code += `${indent(level)}for (${headerText}) {\n`;
+		this.emitLoopBody(bodyEdge, level + 1, id);
+		this.code += `${indent(level)}}\n`;
+	}
+
+	private emitForOfIn(
+		binding: string,
+		iterable: string,
+		keyword: "of" | "in",
+		loopId: string,
 		level: number,
-		stopAtNodeId: string | undefined,
-		localVisited: Set<string>,
+		bodyEdge: Edge | undefined,
 	): void {
-		if (!joinNodeId) return;
-		if (stopAtNodeId && joinNodeId === stopAtNodeId) return;
-		const afterId = this.getDeterministicContinuationTarget(joinNodeId);
-		if (!afterId) return;
-		const afterNode = this.nodeById.get(afterId);
-		if (afterNode) this.visitNode(afterNode, level, stopAtNodeId, new Set(localVisited));
+		const bindingText = binding.trim() || (keyword === "of" ? "const item" : "const key");
+		const iterableText = iterable.trim() || "items";
+		const header = `${bindingText} ${keyword} ${iterableText}`;
+
+		this.code += `${indent(level)}for (${header}) {\n`;
+		this.emitLoopBody(bodyEdge, level + 1, loopId);
+		this.code += `${indent(level)}}\n`;
 	}
 
-	private isTerminatingStatement(statement: string): boolean {
-		const normalized = statement.trim();
-		return /^return\b/.test(normalized) || /^throw\b/.test(normalized);
+	private emitLoopBody(bodyEdge: Edge | undefined, level: number, stopAt: string): void {
+		if (!bodyEdge) return;
+		const bodyNode = this.nodeById.get(String(bodyEdge.target));
+		if (bodyNode) this.visit(bodyNode, level, stopAt, new Set());
 	}
 
-	private findFirstMergeOnPrimary(startId: string): string | undefined {
-		const visited = new Set<string>();
-		let current = startId;
+	// ── Edge picking ───────────────────────────────────────────────────────
 
-		while (current && !visited.has(current)) {
-			visited.add(current);
-			const nextId = this.getDeterministicContinuationTarget(current);
-			if (!nextId) {
-				return undefined;
-			}
-
-			const nextNode = this.nodeById.get(nextId);
-			if (nextNode?.type === "merge") {
-				return nextId;
-			}
-
-			current = nextId;
-		}
-
-		return undefined;
-	}
-
-	private getDeterministicContinuationTarget(nodeId: string): string | undefined {
-		return getPrimaryNext(this.edges, nodeId);
-	}
-
-	private pickPreferredBranchEdge(outgoing: Edge[], labels: string[]): Edge | undefined {
-		const labeled = findLabeledEdge(outgoing, labels);
-		if (labeled) {
-			return labeled;
-		}
-
-		if (outgoing.length === 1) {
-			return outgoing[0];
-		}
-
+	private pickEdge(outgoing: Edge[], preferredLabels: string[]): Edge | undefined {
+		const labeled = findLabeledEdge(outgoing, preferredLabels);
+		if (labeled) return labeled;
 		return undefined;
 	}
 }

@@ -8,59 +8,46 @@ function trimNodeLabel(text: string): string {
 	if (normalized.length <= MAX_NODE_LABEL_LENGTH) {
 		return normalized;
 	}
-
 	return `${normalized.slice(0, MAX_NODE_LABEL_LENGTH - 3)}...`;
 }
 
 export function createRenameDraft(node: Node): RenameDraft {
-	const currentData = (node.data as { label?: unknown; deps?: unknown } | undefined) ?? {};
-	const currentLabel = String(currentData.label ?? '');
-	const hasDeps = typeof currentData.deps === 'string';
+	const data =
+		(node.data as { label?: unknown; deps?: unknown; sourceText?: unknown } | undefined) ?? {};
+	const currentLabel = String(data.label ?? '');
+	const sourceText = typeof data.sourceText === 'string' ? data.sourceText : '';
 
 	return {
 		nodeId: node.id,
 		value: currentLabel,
-		...(hasDeps ? { deps: String(currentData.deps ?? '') } : {}),
+		fullText: sourceText || currentLabel,
+		...(typeof data.deps === 'string' ? { deps: data.deps } : {}),
 	};
 }
 
-export function applyRenameToNodes(nodes: Node[], renameDraft: RenameDraft): Node[] {
+export function applyRenameToNodes(nodes: Node[], draft: RenameDraft): Node[] {
 	return nodes.map((candidate) => {
-		if (candidate.id !== renameDraft.nodeId) {
-			return candidate;
-		}
+		if (candidate.id !== draft.nodeId) return candidate;
 
-		const fullText = renameDraft.value.trim();
-		const trimmedLabel = trimNodeLabel(fullText);
-
+		const fullText = draft.value.trim();
 		return {
 			...candidate,
 			data: {
 				...((candidate.data as Record<string, unknown> | undefined) ?? {}),
-				label: trimmedLabel,
+				label: trimNodeLabel(fullText),
 				sourceText: fullText,
-				...(renameDraft.deps !== undefined ? { deps: renameDraft.deps } : {}),
+				...(draft.deps !== undefined ? { deps: draft.deps } : {}),
 			},
 		};
 	});
 }
 
 export function createEdgeRenameDraft(edge: Edge): EdgeRenameDraft {
-	return {
-		edgeId: edge.id,
-		value: String(edge.label ?? ''),
-	};
+	return { edgeId: edge.id, value: String(edge.label ?? '') };
 }
 
-export function applyRenameToEdges(edges: Edge[], renameDraft: EdgeRenameDraft): Edge[] {
-	return edges.map((candidate) => {
-		if (candidate.id !== renameDraft.edgeId) {
-			return candidate;
-		}
-
-		return {
-			...candidate,
-			label: renameDraft.value,
-		};
-	});
+export function applyRenameToEdges(edges: Edge[], draft: EdgeRenameDraft): Edge[] {
+	return edges.map((candidate) =>
+		candidate.id === draft.edgeId ? { ...candidate, label: draft.value } : candidate,
+	);
 }

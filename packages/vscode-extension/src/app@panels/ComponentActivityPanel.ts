@@ -1,8 +1,6 @@
 import * as path from "path";
 import {
-	CancellationTokenSource,
 	Disposable,
-	Range,
 	TextDocument,
 	TextEditor,
 	Webview,
@@ -30,26 +28,26 @@ type ActivityGraph = {
 	edges: Edge[];
 };
 
-/**
- * The source of the currently displayed diagram.
- * - `document`: diagram is derived from an open text document and follows its edits.
- * - `snippet`: diagram comes from an ad-hoc source text (AI, node preview). Editor edits do NOT overwrite it.
- * - `none`: nothing is shown yet.
- */
 type DiagramSource =
 	| { kind: "document"; uri: Uri }
 	| { kind: "snippet"; text: string; sourceFile?: string }
 	| { kind: "none" };
 
-/**
- * What the panel should do once the webview signals it is ready.
- * This avoids race conditions when the webview boots while an AI-provided
- * snippet is already in flight.
- */
 type PendingIntent =
 	| { kind: "followActiveEditor" }
 	| { kind: "showSnippet"; text: string; sourceFile?: string }
 	| { kind: "none" };
+
+// Hook names whose first-argument callback should be drilled INTO, not the
+// hook call itself. Must match the parser's set in metadata.ts.
+const HOOK_NAMES = new Set([
+	"useEffect",
+	"useLayoutEffect",
+	"useInsertionEffect",
+	"useCallback",
+	"useMemo",
+	"useState",
+]);
 
 function isVisibleGraphMessage(
 	message: unknown
@@ -104,17 +102,13 @@ export class ComponentActivityPanel {
 
 	public static getCurrentActivityGraph(): ActivityGraph | undefined {
 		const current = ComponentActivityPanel.currentPanel?.lastKnownActivityGraph;
-		if (!current) {
-			return undefined;
-		}
+		if (!current) return undefined;
 		return { nodes: [...current.nodes], edges: [...current.edges] };
 	}
 
 	public static getCurrentVisibleActivityGraph(): ActivityGraph | undefined {
 		const current = ComponentActivityPanel.currentPanel?.lastVisibleActivityGraph;
-		if (!current) {
-			return undefined;
-		}
+		if (!current) return undefined;
 		return { nodes: [...current.nodes], edges: [...current.edges] };
 	}
 
@@ -165,9 +159,6 @@ export class ComponentActivityPanel {
 		sourceText: string,
 		sourceFile?: string
 	): Promise<void> {
-		// 1) Make sure the panel exists. If we are creating it, pre-set the intent
-		//    BEFORE construction so the first `webview/ready` handles the snippet
-		//    instead of publishing the active editor.
 		if (!ComponentActivityPanel.currentPanel) {
 			ComponentActivityPanel.render(extensionUri);
 		}
@@ -179,17 +170,12 @@ export class ComponentActivityPanel {
 
 		panel.diagramSource = { kind: "snippet", text: sourceText, sourceFile };
 		panel.pendingIntent = { kind: "showSnippet", text: sourceText, sourceFile };
-
 		panel.panel.reveal(ViewColumn.One);
 
-		// 2) If the webview is already up, run the intent immediately.
-		//    Otherwise onWebviewReady() will run it when `webview/ready` arrives.
 		if (panel.isWebviewReady) {
 			await panel.runPendingIntent();
 		}
 	}
-
-	// ───────────────────────── Construction / disposal ─────────────────────────
 
 	private constructor(panel: WebviewPanel, extensionUri: Uri, initialDocument?: TextDocument) {
 		this.panel = panel;
@@ -198,9 +184,6 @@ export class ComponentActivityPanel {
 		if (initialDoc) {
 			this.diagramSource = { kind: "document", uri: initialDoc.uri };
 		}
-
-		// NOTE: pendingIntent is left at its default `followActiveEditor`.
-		// showDiagramFromSourceText() may override it before the webview boots.
 
 		this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
 		this.panel.webview.onDidReceiveMessage(this.webviewMessageListener, this, this.disposables);
@@ -248,8 +231,6 @@ export class ComponentActivityPanel {
 		}
 	}
 
-	// ───────────────────────── Outbound messages ─────────────────────────
-
 	public postMessage(message: ActivityExtensionToWebviewMessage) {
 		void this.panel.webview.postMessage(message);
 	}
@@ -284,11 +265,6 @@ export class ComponentActivityPanel {
 		});
 	}
 
-	/**
-	 * Ask the webview for its current in-memory graph (possibly with unsaved edits)
-	 * and refresh `lastVisibleActivityGraph`. Useful right before feeding the graph
-	 * to the AI model.
-	 */
 	public async refreshVisibleGraph(timeoutMs = 2000): Promise<ActivityGraph | undefined> {
 		if (!this.isWebviewReady) {
 			return this.lastVisibleActivityGraph;
@@ -315,34 +291,23 @@ export class ComponentActivityPanel {
 		});
 	}
 
-	// ───────────────────────── Ready handling ─────────────────────────
-
 	private waitUntilReady(): Promise<void> {
-		if (this.isWebviewReady) {
-			return Promise.resolve();
-		}
+		if (this.isWebviewReady) return Promise.resolve();
 		return new Promise<void>((resolve) => {
 			this.readyWaiters.push(resolve);
 		});
 	}
 
 	private async onWebviewReady() {
-		if (this.isWebviewReady) {
-			return;
-		}
+		if (this.isWebviewReady) return;
 		this.isWebviewReady = true;
 
-		// Always tell the webview what kind of diagram it is rendering.
 		this.postDiagramType();
 
-		// Drain ready waiters FIRST so any code awaiting readiness can schedule work.
 		const waiters = this.readyWaiters;
 		this.readyWaiters = [];
-		for (const w of waiters) {
-			w();
-		}
+		for (const w of waiters) w();
 
-		// Then run whatever the panel was asked to show initially.
 		await this.runPendingIntent();
 	}
 
@@ -354,95 +319,60 @@ export class ComponentActivityPanel {
 			case "followActiveEditor":
 				await this.publishCurrentDocument();
 				return;
-
 			case "showSnippet":
 				await this.replaceDiagramFromSource(intent.text, intent.sourceFile);
 				return;
-
 			case "none":
 			default:
 				return;
 		}
 	}
 
-	// ───────────────────────── Document tracking ─────────────────────────
-
 	private static getPreferredDocumentStatic(): TextDocument | undefined {
 		const active = window.activeTextEditor?.document;
-		if (active && active.uri.scheme === "file") {
-			return active;
-		}
+		if (active && active.uri.scheme === "file") return active;
 		const visible = window.visibleTextEditors.find((editor) => editor.document.uri.scheme === "file");
 		return visible?.document;
 	}
 
 	private getPreferredDocument(): TextDocument | undefined {
 		const active = this.toSupportedDocument(window.activeTextEditor?.document);
-		if (active) {
-			return active;
-		}
+		if (active) return active;
 
 		const visible = window.visibleTextEditors
 			.map((editor) => editor.document)
 			.find((doc) => this.isSupportedDocument(doc));
-
-		if (visible) {
-			return visible;
-		}
+		if (visible) return visible;
 
 		return workspace.textDocuments.find((doc) => this.isSupportedDocument(doc));
 	}
 
 	private toSupportedDocument(document?: TextDocument): TextDocument | undefined {
-		if (!document) {
-			return undefined;
-		}
+		if (!document) return undefined;
 		return this.isSupportedDocument(document) ? document : undefined;
 	}
 
 	private isSupportedDocument(document?: TextDocument): boolean {
-		if (!document) {
-			return false;
-		}
-		if (document.uri.scheme !== "file") {
-			return false;
-		}
+		if (!document) return false;
+		if (document.uri.scheme !== "file") return false;
 		const extension = path.extname(document.uri.fsPath).toLowerCase();
 		return [".ts", ".tsx", ".js", ".jsx"].includes(extension);
 	}
 
 	private handleActiveEditorChanged(editor: TextEditor | undefined) {
-		// Only update the tracked document while we are in "document" mode.
-		// If a snippet (AI / preview) is currently displayed, ignore editor changes.
-		if (this.diagramSource.kind !== "document") {
-			return;
-		}
+		if (this.diagramSource.kind !== "document") return;
 
 		const document = this.toSupportedDocument(editor?.document);
-		if (!document) {
-			return;
-		}
+		if (!document) return;
 
 		this.diagramSource = { kind: "document", uri: document.uri };
 	}
 
 	private handleDocumentChanged(document: TextDocument) {
-		if (!this.isWebviewReady) {
-			return;
-		}
-
-		// Ignore editor edits while a snippet is displayed.
-		if (this.diagramSource.kind !== "document") {
-			return;
-		}
-
-		if (document.uri.toString() !== this.diagramSource.uri.toString()) {
-			return;
-		}
-
-		if (!this.isSupportedDocument(document)) {
-			return;
-		}
+		if (!this.isWebviewReady) return;
+		if (this.diagramSource.kind !== "document") return;
+		if (document.uri.toString() !== this.diagramSource.uri.toString()) return;
+		if (!this.isSupportedDocument(document)) return;
 
 		void this.publishCurrentDocument();
 	}
@@ -452,24 +382,16 @@ export class ComponentActivityPanel {
 			const match = workspace.textDocuments.find(
 				(doc) => doc.uri.toString() === (this.diagramSource as { uri: Uri }).uri.toString()
 			);
-			if (match) {
-				return match;
-			}
+			if (match) return match;
 		}
 		return this.getPreferredDocument();
 	}
 
 	private getCurrentFilePath(): string | undefined {
-		if (this.diagramSource.kind === "document") {
-			return this.diagramSource.uri.fsPath;
-		}
-		if (this.diagramSource.kind === "snippet") {
-			return this.diagramSource.sourceFile;
-		}
+		if (this.diagramSource.kind === "document") return this.diagramSource.uri.fsPath;
+		if (this.diagramSource.kind === "snippet") return this.diagramSource.sourceFile;
 		return this.getCurrentDocument()?.uri.fsPath;
 	}
-
-	// ───────────────────────── Parsing / publishing ─────────────────────────
 
 	private postDiagramType() {
 		this.postMessage({
@@ -515,22 +437,15 @@ export class ComponentActivityPanel {
 
 	private async publishCurrentDocument() {
 		const document = this.getCurrentDocument();
-		if (!document) {
-			return;
-		}
+		if (!document) return;
 
 		this.diagramSource = { kind: "document", uri: document.uri };
 		await this.parseAndSendDiagram(document.getText(), document.uri.fsPath);
 	}
 
-	// ───────────────────────── Skeleton generation ─────────────────────────
-
 	public static async generateCodeFromCurrentDiagram(): Promise<string> {
 		const panel = ComponentActivityPanel.currentPanel;
-
-		if (!panel) {
-			throw new Error("Activity panel is not open.");
-		}
+		if (!panel) throw new Error("Activity panel is not open.");
 
 		const graph =
 			await panel.refreshVisibleGraph(2000) ??
@@ -565,13 +480,8 @@ export class ComponentActivityPanel {
 			content: generatedCode,
 		});
 
-		await window.showTextDocument(
-			generatedDocument,
-			ViewColumn.Beside,
-			true
-		);
-
-		return generatedCode; // 👈 toto je jediná dôležitá zmena
+		await window.showTextDocument(generatedDocument, ViewColumn.Beside, true);
+		return generatedCode;
 	}
 
 	private buildDiagramContext(
@@ -583,9 +493,7 @@ export class ComponentActivityPanel {
 			new Set(
 				nodes
 					.map((node) => {
-						if (!node || typeof node !== "object") {
-							return "unknown";
-						}
+						if (!node || typeof node !== "object") return "unknown";
 						const maybeType = (node as { type?: unknown }).type;
 						return typeof maybeType === "string" && maybeType.trim() ? maybeType : "unknown";
 					})
@@ -604,13 +512,40 @@ export class ComponentActivityPanel {
 		};
 	}
 
-	// ───────────────────────── AST helper (unchanged) ─────────────────────────
-
+	/**
+	 * Unwrap a single layer of "wrapper" around a piece of source so the
+	 * parser sees only the body it should diagram. The expandable's
+	 * sourceText is a complete, self-contained statement; here we strip
+	 * the wrapper so the diagram shows what the user expects to see when
+	 * they click into the node.
+	 *
+	 * Recognised wrappers (in order of precedence — first match wins):
+	 *
+	 *   1. Hook calls — `useEffect(() => { BODY }, [...]);`
+	 *      Drill INTO the callback body. Without this branch the parser
+	 *      would re-detect the hook call as another expandable, the inner
+	 *      diagram would be a 1:1 copy of the outer, and drill-down would
+	 *      do nothing visible.
+	 *
+	 *   2. `const x = useCallback(() => { BODY }, []);` — same as (1) but
+	 *      the call is wrapped in a variable declaration.
+	 *
+	 *   3. `return <fn-like>;` — drill INTO the returned function.
+	 *
+	 *   4. Plain function declarations / expressions / arrow functions:
+	 *        `function f() { BODY }` → BODY
+	 *        `() => { BODY }`        → BODY
+	 *        `() => expr`            → `return expr;`
+	 *
+	 *   5. `const f = () => { BODY };` — strip the variable wrapper.
+	 *
+	 *   6. Class declarations / object literals — extract all functions.
+	 *
+	 *   7. Anything else — return unchanged.
+	 */
 	private extractFunctionBodyIfWrapped(sourceText: string): string {
 		const trimmed = sourceText.trim();
-		if (!trimmed) {
-			return trimmed;
-		}
+		if (!trimmed) return trimmed;
 
 		const sourceFile = ts.createSourceFile(
 			"inline.tsx",
@@ -621,9 +556,7 @@ export class ComponentActivityPanel {
 		);
 
 		const first = sourceFile.statements[0];
-		if (!first) {
-			return trimmed;
-		}
+		if (!first) return trimmed;
 
 		const isSupportedFunctionLike = (
 			node: ts.Node
@@ -644,9 +577,7 @@ export class ComponentActivityPanel {
 			ts.isSetAccessorDeclaration(node);
 
 		const getNodeName = (node: ts.Node): string => {
-			if (ts.isConstructorDeclaration(node)) {
-				return "constructor";
-			}
+			if (ts.isConstructorDeclaration(node)) return "constructor";
 			if (
 				ts.isFunctionDeclaration(node) ||
 				ts.isMethodDeclaration(node) ||
@@ -671,13 +602,55 @@ export class ComponentActivityPanel {
 				| ts.SetAccessorDeclaration
 		): string[] | null => {
 			const body = node.body;
-			if (!body) {
-				return null;
-			}
+			if (!body) return null;
 			if (ts.isBlock(body)) {
 				return body.statements.map((s) => s.getText(sourceFile));
 			}
 			return [`return ${body.getText(sourceFile)};`];
+		};
+
+		/**
+		 * Get the hook name for a CallExpression if it's a recognised hook,
+		 * otherwise undefined.
+		 *
+		 *   useEffect(...)           -> "useEffect"
+		 *   React.useEffect(...)     -> "useEffect"
+		 *   doStuff(...)             -> undefined
+		 */
+		const getHookCallName = (call: ts.CallExpression): string | undefined => {
+			const callee = call.expression;
+			if (ts.isIdentifier(callee)) {
+				const name = callee.text;
+				return HOOK_NAMES.has(name) ? name : undefined;
+			}
+			if (ts.isPropertyAccessExpression(callee)) {
+				const name = callee.name.text;
+				return HOOK_NAMES.has(name) ? name : undefined;
+			}
+			return undefined;
+		};
+
+		/**
+		 * If `call` is a hook call whose first argument is a function-like
+		 * expression we can drill into, extract the body of that function.
+		 * Returns the body's statements joined by newlines, or null if not
+		 * a drillable hook call.
+		 */
+		const extractHookCallbackBody = (call: ts.CallExpression): string | null => {
+			if (!getHookCallName(call)) return null;
+
+			const firstArg = call.arguments[0];
+			if (!firstArg) return null;
+
+			let candidate: ts.Node = firstArg;
+			while (ts.isParenthesizedExpression(candidate)) {
+				candidate = candidate.expression;
+			}
+
+			if (!isSupportedFunctionLike(candidate)) return null;
+
+			const statements = getBlockStatements(candidate);
+			return statements ? statements.join("\n") : null;
 		};
 
 		interface ExtractedFn {
@@ -686,6 +659,29 @@ export class ComponentActivityPanel {
 		}
 
 		const collectFunctions = (node: ts.Node): ExtractedFn[] => {
+			// Hook expression statement: useEffect(() => {...}, [...]);
+			if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression)) {
+				const body = extractHookCallbackBody(node.expression);
+				if (body !== null) {
+					return [{ name: "callback", statements: [body] }];
+				}
+			}
+
+			// Hook variable declaration:
+			//   const x = useCallback(() => {...}, []);
+			//   const [s, setS] = useState(() => {...});
+			if (ts.isVariableStatement(node)) {
+				for (const decl of node.declarationList.declarations) {
+					if (decl.initializer && ts.isCallExpression(decl.initializer)) {
+						const body = extractHookCallbackBody(decl.initializer);
+						if (body !== null) {
+							return [{ name: "callback", statements: [body] }];
+						}
+					}
+				}
+			}
+
+			// Plain function-like at top level.
 			if (isSupportedFunctionLike(node)) {
 				const statements = getBlockStatements(node);
 				if (statements) {
@@ -693,6 +689,7 @@ export class ComponentActivityPanel {
 				}
 			}
 
+			// Variable with function-like initializer (no hook).
 			if (ts.isVariableStatement(node)) {
 				const results: ExtractedFn[] = [];
 				for (const decl of node.declarationList.declarations) {
@@ -705,6 +702,11 @@ export class ComponentActivityPanel {
 					}
 				}
 				return results;
+			}
+
+			// `return () => { ... };` — descend into the returned function.
+			if (ts.isReturnStatement(node) && node.expression) {
+				return collectFunctions(node.expression);
 			}
 
 			if (ts.isExpressionStatement(node)) {
@@ -764,18 +766,12 @@ export class ComponentActivityPanel {
 
 		const extracted = collectFunctions(first);
 
-		if (extracted.length === 0) {
-			return trimmed;
-		}
-		if (extracted.length === 1) {
-			return extracted[0].statements.join("\n");
-		}
+		if (extracted.length === 0) return trimmed;
+		if (extracted.length === 1) return extracted[0].statements.join("\n");
 		return extracted
 			.map(({ name, statements }) => `function ${name}() {\n${statements.join("\n")}\n}`)
 			.join("\n\n");
 	}
-
-	// ───────────────────────── HTML / messaging ─────────────────────────
 
 	private getWebviewContent(webview: Webview, extensionUri: Uri) {
 		const stylesUri = getUri(webview, extensionUri, [
@@ -835,7 +831,6 @@ export class ComponentActivityPanel {
 			return;
 		}
 
-		// Response to an explicit `diagram/requestGraph` from the panel.
 		if (isGraphSnapshotMessage(message)) {
 			const payload = message.data;
 			const nodes = Array.isArray(payload?.nodes) ? (payload.nodes as Node[]) : [];
@@ -852,8 +847,6 @@ export class ComponentActivityPanel {
 			return;
 		}
 
-		// Back-compat: some older webview builds may still push this unsolicited.
-		// We accept it as a best-effort cache update but no longer rely on it.
 		if (isVisibleGraphMessage(message)) {
 			const payload = message.data;
 			const nodes = Array.isArray(payload?.nodes) ? (payload.nodes as Node[]) : [];
@@ -862,9 +855,7 @@ export class ComponentActivityPanel {
 			return;
 		}
 
-		if (!isActivityWebviewToExtensionMessage(message)) {
-			return;
-		}
+		if (!isActivityWebviewToExtensionMessage(message)) return;
 
 		switch (message.type) {
 			case "diagram/requestType":
@@ -872,8 +863,6 @@ export class ComponentActivityPanel {
 				return;
 
 			case "diagram/openSourceFile":
-				// Back-compat only: older webviews still send this at boot.
-				// We honor it only if nothing else is driving the view.
 				if (this.diagramSource.kind !== "snippet") {
 					void this.publishCurrentDocument();
 				}
@@ -895,16 +884,13 @@ export class ComponentActivityPanel {
 				return;
 			}
 
+
 			case "code/nodePreview": {
 				const payload = message.data as ActivityNodePreviewRequestPayload;
 				const sourceText = typeof payload.sourceText === "string" ? payload.sourceText : "";
 
-				if (!sourceText.trim()) {
-					return;
-				}
+				if (!sourceText.trim()) return;
 
-				// Node preview drilldown → switch to snippet mode so editor edits
-				// don't overwrite the drilled-down view.
 				this.diagramSource = {
 					kind: "snippet",
 					text: sourceText,

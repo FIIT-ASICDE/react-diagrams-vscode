@@ -1,157 +1,193 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { Edge, Node } from '@xyflow/react';
 import type { ActivityGraphPayload } from '@react-diagrams/core/app@vscode';
+import { applyActivityElkLayout } from '../diagram-rendering/elk-layout';
 
-export type DiagramHistoryItem = {
+/**
+ * One entry in the diagram history stack.
+ *
+ *   - root: the diagram for the file the user is looking at
+ *   - children: diagrams produced by drilling into an expandable node;
+ *     each child is layered on top of its parent in the stack
+ */
+export type DiagramViewItem = {
 	title: string;
 	sourceFile?: string;
+	sourceText?: string;
 	nodes: Node[];
 	edges: Edge[];
 };
 
 function fileNameFromPath(sourceFile?: string): string | undefined {
-	if (!sourceFile) {
-		return undefined;
-	}
-
-	const normalized = sourceFile.replace(/\\/g, '/');
-	return normalized.split('/').pop();
+	if (!sourceFile) return undefined;
+	return sourceFile.replace(/\\/g, '/').split('/').pop();
 }
 
-export function useDiagramHistoryNavigator() {
-	const [history, setHistory] = useState<DiagramHistoryItem[]>([]);
-	const [currentHistoryIndex, setCurrentHistoryIndex] = useState(0);
+function pickTitle(
+	payload: ActivityGraphPayload,
+	pendingTitle: string | undefined,
+	stackDepth: number,
+): string {
+	const trimmed = pendingTitle?.trim();
+	if (trimmed) return trimmed;
 
-	const historyRef = useRef<DiagramHistoryItem[]>([]);
-	const currentHistoryIndexRef = useRef(0);
+	const sourceFile = typeof payload.sourceFile === 'string' ? payload.sourceFile : '';
+	const fileName = fileNameFromPath(sourceFile);
+
+	if (stackDepth === 0) {
+		return fileName ? `Root: ${fileName}` : 'Root Diagram';
+	}
+	return fileName ?? `Expanded ${stackDepth}`;
+}
+
+async function layoutOrPassThrough(
+	nodes: Node[],
+	edges: Edge[],
+): Promise<{ nodes: Node[]; edges: Edge[] }> {
+	try {
+		return await applyActivityElkLayout(nodes, edges);
+	} catch (error) {
+		console.error('Failed to apply activity ELK layout in webview', error);
+		return { nodes, edges };
+	}
+}
+
+/**
+ * Read-only, drilldown-style navigator for the View panel.
+ *
+ * The user can step INTO an expandable node (each step pushes a new entry
+ * onto the stack) and step BACK (pop). There is no editing of nodes or
+ * edges here — that lives in the Playground. Therefore there is no
+ * sync-back-to-parent step on goBack: each entry is an independent
+ * snapshot of what the parser produced.
+ */
+export function useDiagramReadOnlyNavigator() {
+	const [stack, setStack] = useState<DiagramViewItem[]>([]);
+	const [visibleRevision, setVisibleRevision] = useState(0);
+	const stackRef = useRef<DiagramViewItem[]>([]);
 	const pendingPreviewTitleRef = useRef<string | undefined>(undefined);
-	const pendingPreviewOpenRef = useRef(false);
 
-	const currentDiagram = history[currentHistoryIndex];
+	const currentIndex = Math.max(0, stack.length - 1);
+	const currentDiagram = stack[currentIndex];
 	const visibleNodes = currentDiagram?.nodes ?? [];
 	const visibleEdges = currentDiagram?.edges ?? [];
 	const currentTitle = currentDiagram?.title ?? 'Diagram';
 
-	useEffect(() => {
-		historyRef.current = history;
-	}, [history]);
+	const applyIncomingDiagramPayload = useCallback(async (payload: ActivityGraphPayload) => {
+		const incomingNodes = Array.isArray(payload.nodes) ? (payload.nodes as Node[]) : [];
+		const incomingEdges = Array.isArray(payload.edges) ? (payload.edges as Edge[]) : [];
 
-	useEffect(() => {
-		currentHistoryIndexRef.current = currentHistoryIndex;
-	}, [currentHistoryIndex]);
+		const layouted = await layoutOrPassThrough(incomingNodes, incomingEdges);
 
-	const updateCurrentDiagram = useCallback((updater: (diagram: DiagramHistoryItem) => DiagramHistoryItem) => {
-		setHistory((historySnapshot) => {
-			if (!historySnapshot.length) {
-				return historySnapshot;
+		const payloadWithSource = payload as ActivityGraphPayload & { sourceText?: unknown };
+
+		const entry: DiagramViewItem = {
+			title: pickTitle(payload, pendingPreviewTitleRef.current, stackRef.current.length),
+			sourceFile: typeof payload.sourceFile === 'string' ? payload.sourceFile : undefined,
+			sourceText:
+				typeof payloadWithSource.sourceText === 'string'
+					? payloadWithSource.sourceText
+					: undefined,
+			nodes: layouted.nodes,
+			edges: layouted.edges,
+		};
+
+		setStack((previous) => {
+			const next = [...previous, entry];
+			stackRef.current = next;
+			setVisibleRevision((value) => value + 1);
+			return next;
+		});
+
+		pendingPreviewTitleRef.current = undefined;
+		return layouted.nodes;
+	}, []);
+
+	const replaceCurrentDiagramPayload = useCallback(async (payload: ActivityGraphPayload) => {
+		const incomingNodes = Array.isArray(payload.nodes) ? (payload.nodes as Node[]) : [];
+		const incomingEdges = Array.isArray(payload.edges) ? (payload.edges as Edge[]) : [];
+
+		const layouted = await layoutOrPassThrough(incomingNodes, incomingEdges);
+		const payloadWithSource = payload as ActivityGraphPayload & { sourceText?: unknown };
+
+		setStack((previous) => {
+			if (previous.length === 0) {
+				const fallbackEntry: DiagramViewItem = {
+					title: pickTitle(payload, pendingPreviewTitleRef.current, 0),
+					sourceFile: typeof payload.sourceFile === 'string' ? payload.sourceFile : undefined,
+					sourceText:
+						typeof payloadWithSource.sourceText === 'string'
+							? payloadWithSource.sourceText
+							: undefined,
+					nodes: layouted.nodes,
+					edges: layouted.edges,
+				};
+				const next = [fallbackEntry];
+				stackRef.current = next;
+				setVisibleRevision((value) => value + 1);
+				return next;
 			}
 
-			const safeIndex = Math.min(currentHistoryIndexRef.current, historySnapshot.length - 1);
-			const nextHistory = [...historySnapshot];
-			nextHistory[safeIndex] = updater(nextHistory[safeIndex]);
-			return nextHistory;
+			const current = previous[previous.length - 1];
+			const updated: DiagramViewItem = {
+				...current,
+				sourceFile: typeof payload.sourceFile === 'string' ? payload.sourceFile : current.sourceFile,
+				sourceText:
+					typeof payloadWithSource.sourceText === 'string'
+						? payloadWithSource.sourceText
+						: current.sourceText,
+				nodes: layouted.nodes,
+				edges: layouted.edges,
+			};
+
+			const next = [...previous];
+			next[next.length - 1] = updated;
+			stackRef.current = next;
+			setVisibleRevision((value) => value + 1);
+			return next;
 		});
+
+		pendingPreviewTitleRef.current = undefined;
+		return layouted.nodes;
 	}, []);
 
-	const pushHistoryEntry = useCallback((entry: DiagramHistoryItem) => {
-		setHistory((historySnapshot) => {
-			const safeIndex = Math.min(currentHistoryIndexRef.current, Math.max(0, historySnapshot.length - 1));
-			const truncated = historySnapshot.slice(0, historySnapshot.length === 0 ? 0 : safeIndex + 1);
-			const nextHistory = [...truncated, entry];
-			const nextIndex = nextHistory.length - 1;
-
-			currentHistoryIndexRef.current = nextIndex;
-			setCurrentHistoryIndex(nextIndex);
-
-			return nextHistory;
-		});
-	}, []);
-
-	const initializeHistory = useCallback((entry: DiagramHistoryItem) => {
-		historyRef.current = [entry];
-		currentHistoryIndexRef.current = 0;
-		setHistory([entry]);
-		setCurrentHistoryIndex(0);
+	const setRootError = useCallback((nodes: Node[], edges: Edge[]) => {
+		const next: DiagramViewItem[] = [{ title: 'Root Error', nodes, edges }];
+		stackRef.current = next;
+		setStack(next);
+		setVisibleRevision((value) => value + 1);
 	}, []);
 
 	const markPendingPreview = useCallback((title: string) => {
-		pendingPreviewOpenRef.current = true;
 		pendingPreviewTitleRef.current = title;
 	}, []);
 
 	const clearPendingPreview = useCallback(() => {
-		pendingPreviewOpenRef.current = false;
 		pendingPreviewTitleRef.current = undefined;
 	}, []);
 
-	const createTitle = useCallback((payload: ActivityGraphPayload): string => {
-		const pendingTitle = pendingPreviewTitleRef.current?.trim();
-		if (pendingTitle) {
-			return pendingTitle;
-		}
-
-		const sourceFile = typeof payload.sourceFile === 'string' ? payload.sourceFile : '';
-		const fileName = fileNameFromPath(sourceFile);
-		const currentHistoryLength = historyRef.current.length;
-
-		if (currentHistoryLength === 0) {
-			return fileName ? `Root: ${fileName}` : 'Root Diagram';
-		}
-
-		if (pendingPreviewOpenRef.current) {
-			return fileName ? `${fileName}` : `Expanded ${currentHistoryLength}`;
-		}
-
-		return fileName ? `Diagram: ${fileName}` : `Diagram ${currentHistoryLength + 1}`;
-	}, []);
-
-	const applyIncomingDiagramPayload = useCallback((payload: ActivityGraphPayload) => {
-		const incomingFile = payload.sourceFile;
-		const incomingNodes = Array.isArray(payload.nodes) ? payload.nodes as Node[] : [];
-		const incomingEdges = Array.isArray(payload.edges) ? payload.edges as Edge[] : [];
-
-		const nextEntry: DiagramHistoryItem = {
-			title: createTitle(payload),
-			sourceFile: incomingFile,
-			nodes: incomingNodes,
-			edges: incomingEdges,
-		};
-
-		if (historyRef.current.length === 0) {
-			initializeHistory(nextEntry);
-		} else {
-			pushHistoryEntry(nextEntry);
-		}
-
-		clearPendingPreview();
-		return incomingNodes;
-	}, [clearPendingPreview, createTitle, initializeHistory, pushHistoryEntry]);
-
-	const setRootError = useCallback((nodes: Node[], edges: Edge[]) => {
-		const rootError: DiagramHistoryItem = {
-			title: 'Root Error',
-			nodes,
-			edges,
-		};
-		initializeHistory(rootError);
-	}, [initializeHistory]);
-
 	const goBack = useCallback(() => {
-		const nextIndex = Math.max(0, currentHistoryIndexRef.current - 1);
-		currentHistoryIndexRef.current = nextIndex;
-		setCurrentHistoryIndex(nextIndex);
+		setStack((previous) => {
+			if (previous.length <= 1) return previous;
+			const next = previous.slice(0, -1);
+			stackRef.current = next;
+			setVisibleRevision((value) => value + 1);
+			return next;
+		});
 	}, []);
 
 	return {
-		history,
-		currentHistoryIndex,
+		stack,
+		stackRef,
+		currentIndex,
+		canGoBack: stack.length > 1,
 		currentDiagram,
+		visibleRevision,
 		visibleNodes,
 		visibleEdges,
 		currentTitle,
-		historyRef,
-		updateCurrentDiagram,
 		applyIncomingDiagramPayload,
+		replaceCurrentDiagramPayload,
 		setRootError,
 		markPendingPreview,
 		clearPendingPreview,

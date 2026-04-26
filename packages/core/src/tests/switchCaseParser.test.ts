@@ -30,3 +30,32 @@ test('DiagramBuilder builds switch cases as branches', async () => {
 	assert.ok(edgeLabels.some((label) => label.includes('case "broken"')));
 	assert.ok(edgeLabels.some((label) => label === 'default'));
 });
+
+test('switch with return-only branches does not add redundant internal merge', async () => {
+	const sourceText = `
+		function renderRoute(route: string) {
+			switch (route) {
+				case "dashboard":
+					return "dashboard";
+				case "settings":
+					return "settings";
+				default:
+					return "missing";
+			}
+		}
+	`;
+
+	const project = new Project({ compilerOptions: { allowJs: true, jsx: 2 } });
+	const sourceFile = project.createSourceFile('switch-return-only.ts', sourceText, { overwrite: true });
+	const renderRoute = sourceFile
+		.getDescendantsOfKind(SyntaxKind.FunctionDeclaration)
+		.find((candidate) => candidate.getName() === 'renderRoute');
+
+	assert.ok(renderRoute);
+
+	const body = renderRoute!.getBodyOrThrow().asKindOrThrow(SyntaxKind.Block);
+	const graph = await new DiagramBuilder().buildStatements(body.getStatements());
+
+	const mergeNodes = graph.nodes.filter((node) => node.type === 'merge');
+	assert.equal(mergeNodes.length, 1);
+});

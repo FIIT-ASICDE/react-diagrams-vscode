@@ -140,3 +140,62 @@ test('diagram->code does not overflow call stack on cyclic retry-like diagrams',
 	assert.ok(generated.length > 0);
 	assert.doesNotMatch(generated, /Maximum call stack|RangeError/i);
 });
+
+test('diagram->code emits expandable sourceText verbatim for class nodes', () => {
+	const classSource = `class testClass {
+	private condition: boolean;
+	public functionTest() { this.testMethod(); }
+	constructor(condition: boolean) { this.condition = condition; }
+	private testMethod() {
+		console.log('This is a test method');
+		const fn = () => {
+			if (this.condition) {
+				console.log('Condition is true');
+			}
+		};
+	}
+}`;
+
+	const nodes = [
+		{ id: 'initial-1', type: 'initial', position: { x: 0, y: 0 }, data: { label: 'Start' } },
+		{ id: 'expandable-1', type: 'expandable', position: { x: 0, y: 80 }, data: { label: 'class testClass', sourceText: classSource } },
+		{ id: 'end-1', type: 'end', position: { x: 0, y: 160 }, data: { label: 'End' } },
+	] as unknown as import('@xyflow/react').Node[];
+
+	const edges = [
+		{ id: 'edge-1', source: 'initial-1', target: 'expandable-1' },
+		{ id: 'edge-2', source: 'expandable-1', target: 'end-1' },
+	] as unknown as import('@xyflow/react').Edge[];
+
+	const generated = convertDiagramToCode(nodes, edges, 'generatedClass', []);
+
+	assert.match(generated, /class\s+testClass\s*\{/);
+	assert.match(generated, /private\s+condition\s*:\s*boolean/);
+	assert.match(generated, /private\s+testMethod\s*\(/);
+	assert.match(generated, /if\s*\(this\.condition\)/);
+	assertSyntacticallyValidTypeScript(generated);
+});
+
+test('diagram->code does not duplicate try body inside retry loop', async () => {
+	const generated = await generateFromFunctionBody(`
+		let attempt = 0;
+		while (attempt < retries) {
+			try {
+				const response = await fetch(url);
+				if (!response.ok) throw new Error(\`HTTP error: \${response.status}\`);
+				const data = await response.json();
+				return data;
+			} catch (err) {
+				attempt++;
+			}
+		}
+		throw new Error('Failed after max retries');
+	`);
+
+	assertSyntacticallyValidTypeScript(generated);
+	assert.match(generated, /while\s*\(attempt < retries\)/);
+	assert.match(generated, /try\s*\{/);
+
+	const fetchOccurrences = (generated.match(/const response = await fetch\(url\);/g) ?? []).length;
+	assert.equal(fetchOccurrences, 1);
+});

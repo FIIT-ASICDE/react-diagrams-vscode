@@ -41,6 +41,16 @@ function classMembersToSyntheticSource(classDeclaration: ClassDeclaration): stri
 	const chunks: string[] = [];
 
 	for (const member of classDeclaration.getMembers()) {
+		if (member.getKind() === SyntaxKind.PropertyDeclaration) {
+			const propNode = member.asKind(SyntaxKind.PropertyDeclaration);
+			const propName = propNode?.getName() ?? 'prop';
+			const initializer = propNode?.getInitializer();
+			if (initializer) {
+				const initText = initializer.getText();
+				chunks.push(`const ${propName} = ${initText};`);
+			}
+		}
+
 		if (member.getKind() === SyntaxKind.MethodDeclaration) {
 			const methodNode = member.asKind(SyntaxKind.MethodDeclaration);
 			const methodName = methodNode?.getName() ?? "method";

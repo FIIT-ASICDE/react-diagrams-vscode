@@ -32,6 +32,7 @@ export type ActivityExtensionToWebviewMessage =
 	| { type: "code/error"; data: { message: string } }
 	| { type: "code/nodePreviewData"; data: ActivityNodePreviewDataPayload }
 	| { type: "code/nodePreviewError"; data: { message: string } }
+	| { type: "diagram/codeFromGraph"; data: { requestId: string; success: true; code: string } | { requestId: string; success: false; error: string } }
 	| { type: "self/init" }
 	| { type: "diagram/requestImage"; data: {} }
 	| { type: "diagram/requestGraph"; data: {} };

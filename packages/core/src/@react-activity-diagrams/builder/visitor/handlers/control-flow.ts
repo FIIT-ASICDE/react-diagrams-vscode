@@ -4,6 +4,7 @@ import {
   ForOfStatement,
   ForStatement,
   IfStatement,
+  Node as MorphNode,
   TryStatement,
   WhileStatement,
 } from 'ts-morph';
@@ -11,12 +12,28 @@ import type { BuildResult } from '../types';
 import { compactLabel, countDecisionsInBranch, getFallthroughEdgeLabel } from '../utils';
 import type { StatementVisitorHost } from './host-context';
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Mutate a node's data after creation. The graph writer doesn't expose a
+ * dedicated update API, so we reach into the nodes array it shares with us.
+ */
+function setNodeData(host: StatementVisitorHost, nodeId: string, extra: Record<string, unknown>): void {
+  const node = (host.writer as unknown as { nodes?: import('@xyflow/react').Node[] }).nodes?.find?.(
+    (candidate) => candidate.id === nodeId,
+  );
+  if (!node) return;
+  node.data = { ...(node.data ?? {}), ...extra };
+}
+
+// ── Visitors ───────────────────────────────────────────────────────────────
+
 export function visitIf(host: StatementVisitorHost, stmt: IfStatement): BuildResult {
   const elseStmt = stmt.getElseStatement();
-  const decisionId = host.createDecisionNode(
-    compactLabel(stmt.getExpression().getText()),
-    stmt.getExpression().getText(),
-  );
+  const conditionText = stmt.getExpression().getText();
+
+  const decisionId = host.createDecisionNode(compactLabel(conditionText), conditionText);
+  setNodeData(host, decisionId, { construct: 'if' });
 
   const thenResult = host.visitBranch(stmt.getThenStatement());
   const elseResult = elseStmt ? host.visitBranch(elseStmt) : undefined;
@@ -51,22 +68,17 @@ export function visitIf(host: StatementVisitorHost, stmt: IfStatement): BuildRes
 }
 
 export function visitWhile(host: StatementVisitorHost, stmt: WhileStatement): BuildResult {
-  return visitStandardLoop(
-    host,
-    host.createLoopNode(
-      compactLabel(stmt.getExpression().getText()),
-      stmt.getExpression().getText(),
-    ),
-    stmt.getStatement(),
-    'yes',
-  );
+  const condText = stmt.getExpression().getText();
+  const loopId = host.createLoopNode(compactLabel(condText), condText);
+  setNodeData(host, loopId, { construct: 'while' });
+
+  return visitStandardLoop(host, loopId, stmt.getStatement(), 'yes');
 }
 
 export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): BuildResult {
-  const loopId = host.createLoopNode(
-    compactLabel(stmt.getExpression().getText()),
-    stmt.getExpression().getText(),
-  );
+  const condText = stmt.getExpression().getText();
+  const loopId = host.createLoopNode(compactLabel(condText), condText);
+  setNodeData(host, loopId, { construct: 'do-while' });
 
   const loopBranch = stmt.getStatement();
   const innerDecisionCount = countDecisionsInBranch(loopBranch);
@@ -90,83 +102,59 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
   };
 }
 
+/**
+ * Classical `for (init; cond; inc)` loop.
+ *
+ * The full header (`init; cond; inc`) is stored on the loop node as
+ * `data.forHeader`. CodeGen emits it verbatim as `for (<forHeader>) { body }`.
+ *
+ * Why on the loop node and not as separate action nodes: storing init/inc
+ * as adjacent action nodes was unstable across round-trips — CodeGen had
+ * no way to tell which neighbouring actions "belonged" to the loop, and
+ * the parser duplicated init nodes on every parse → generate cycle.
+ */
 export function visitFor(host: StatementVisitorHost, stmt: ForStatement): BuildResult {
-  let firstEntry: string | undefined;
-
-  const initializer = stmt.getInitializer();
-  if (initializer) {
-    firstEntry = host.writer.addFlowNode('action', compactLabel(initializer.getText()), {
-      sourceText: stmt.getText(),
-      nodeKind: 'action',
-    });
-  }
+  const initText = stmt.getInitializer()?.getText() ?? '';
+  const condText = stmt.getCondition()?.getText() ?? '';
+  const incText = stmt.getIncrementor()?.getText() ?? '';
+  const headerText = `${initText}; ${condText}; ${incText}`;
 
   const loopId = host.createLoopNode(
-    compactLabel(stmt.getCondition()?.getText() ?? 'for'),
-    stmt.getCondition()?.getText() ?? 'for',
+    compactLabel(condText || 'for'),
+    condText || 'for',
   );
+  setNodeData(host, loopId, {
+    construct: 'for',
+    forHeader: headerText,
+  });
 
-  if (firstEntry) {
-    host.writer.addEdge(firstEntry, loopId);
-  } else {
-    firstEntry = loopId;
-  }
-
-  const loopBranch = stmt.getStatement();
-  const innerDecisionCount = countDecisionsInBranch(loopBranch);
-  const body = host.visitBranch(loopBranch);
-  const incrementor = stmt.getIncrementor();
-
-  let incrementId: string | undefined;
-  if (incrementor) {
-    incrementId = host.writer.addFlowNode('action', compactLabel(incrementor.getText()), {
-      sourceText: incrementor.getText(),
-      nodeKind: 'action',
-    });
-  }
-
-  if (body.entry) {
-    host.writer.addEdge(loopId, body.entry, 'yes', false);
-  } else if (incrementId) {
-    host.writer.addEdge(loopId, incrementId, 'yes', false);
-  } else {
-    host.writer.addEdge(loopId, loopId, 'yes', true);
-  }
-
-  if (incrementId) {
-    if (body.entry) {
-      const uniqueBodyExits = [...new Set(body.exits)].filter(Boolean);
-      for (const exit of uniqueBodyExits) {
-        host.writer.addEdge(exit, incrementId, getFallthroughEdgeLabel(exit));
-      }
-    }
-
-    host.writer.addEdge(incrementId, loopId, '', true);
-  } else if (body.entry) {
-    host.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
-  }
-
-  return {
-    entry: firstEntry,
-    exits: [loopId],
-    endExits: [...new Set(body.endExits)],
-  };
+  return visitStandardLoop(host, loopId, stmt.getStatement(), 'yes');
 }
 
 export function visitForOf(host: StatementVisitorHost, stmt: ForOfStatement): BuildResult {
-  return visitIteratorLoop(host, stmt);
+  return visitIteratorLoop(host, stmt, 'for-of');
 }
 
 export function visitForIn(host: StatementVisitorHost, stmt: ForInStatement): BuildResult {
-  return visitIteratorLoop(host, stmt);
+  return visitIteratorLoop(host, stmt, 'for-in');
 }
 
+/**
+ * `try` / `catch` / `finally`.
+ *
+ * Represented in the graph as a DECISION node with `construct: 'try'`.
+ * Two outgoing edges:
+ *   - unlabeled (or labeled 'try') → entry of try-body
+ *   - labeled 'exception'          → entry of catch-body
+ *
+ * `finally` is a separate downstream subgraph that all paths funnel
+ * through via a 'finally' edge. CodeGen reconstructs the construct by
+ * reading `construct: 'try'` and the outgoing edge labels — no
+ * sourceText round-trip dependency.
+ */
 export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildResult {
-
-  const tryStartId = host.writer.addFlowNode('action', 'try', {
-    sourceText: stmt.getTryBlock().getText(),
-    nodeKind: 'action',
-  });
+  const tryStartId = host.createDecisionNode('try', 'try');
+  setNodeData(host, tryStartId, { construct: 'try' });
 
   const tryResult = host.visitBranch(stmt.getTryBlock());
 
@@ -178,7 +166,6 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
     ? host.resolveExitSources(tryResult.exits)
     : [tryStartId];
 
-
   const catchClause = stmt.getCatchClause();
   const catchResult = catchClause
     ? host.visitBranch(catchClause.getBlock())
@@ -188,10 +175,8 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
 
   if (catchClause && catchResult?.entry) {
     host.writer.addEdge(tryStartId, catchResult.entry, 'exception', false);
-
     catchSuccessExits.push(...host.resolveExitSources(catchResult.exits));
   }
-
 
   const innerEndExits = [
     ...tryResult.endExits,
@@ -203,7 +188,6 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
 
   const finallyBlock = stmt.getFinallyBlock();
 
-  // Case A: No finally block.
   if (!finallyBlock) {
     return {
       entry: tryStartId,
@@ -221,7 +205,6 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
       endExits: [...new Set(innerEndExits)],
     };
   }
-
 
   const allPathsIntoFinally = [...new Set([...uniqueNormalExits, ...innerEndExits])];
 
@@ -269,6 +252,8 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
   };
 }
 
+// ── Loop helpers ───────────────────────────────────────────────────────────
+
 function visitStandardLoop(
   host: StatementVisitorHost,
   loopId: string,
@@ -277,7 +262,6 @@ function visitStandardLoop(
 ): BuildResult {
   const innerDecisionCount = countDecisionsInBranch(loopBranch);
   const body = host.visitBranch(loopBranch);
-  void innerDecisionCount;
 
   if (body.entry) {
     host.writer.addEdge(loopId, body.entry, bodyLabel, false);
@@ -293,14 +277,30 @@ function visitStandardLoop(
   };
 }
 
-function visitIteratorLoop(host: StatementVisitorHost, stmt: ForOfStatement | ForInStatement): BuildResult {
-  return visitStandardLoop(
-    host,
-    host.createLoopNode(
-      compactLabel(stmt.getExpression().getText()),
-      stmt.getExpression().getText(),
-    ),
-    stmt.getStatement(),
-    'each',
-  );
+/**
+ * Iterator loop (`for-in` / `for-of`).
+ *
+ * Body is rendered as plain flow via visitStandardLoop. The loop node
+ * carries:
+ *   - construct:    'for-in' | 'for-of'
+ *   - forOfBinding: initializer text (e.g. `const item`, `let key`)
+ *   - sourceText:   iterable text (display + CodeGen header fallback)
+ *
+ * CodeGen reconstructs the header as `for (<binding> <keyword> <iter>)`.
+ */
+function visitIteratorLoop(
+  host: StatementVisitorHost,
+  stmt: ForOfStatement | ForInStatement,
+  construct: 'for-of' | 'for-in',
+): BuildResult {
+  const iterableText = stmt.getExpression().getText();
+  const bindingText = stmt.getInitializer()?.getText() ?? '';
+
+  const loopId = host.createLoopNode(compactLabel(iterableText), iterableText);
+  setNodeData(host, loopId, {
+    construct,
+    forOfBinding: bindingText,
+  });
+
+  return visitStandardLoop(host, loopId, stmt.getStatement(), 'each');
 }

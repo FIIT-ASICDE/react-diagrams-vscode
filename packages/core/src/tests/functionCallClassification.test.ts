@@ -418,3 +418,40 @@ test('DiagramBuilder labels do-while no-path to next statement', async () => {
 
 	assert.ok(graph.edges.some((edge) => edge.source === decisionNode!.id && edge.target === finishNode!.id && String(edge.label ?? '') === 'no'));
 });
+
+test('Class expansion shows methods and properties as separate expandable nodes', async () => {
+	const classSource = `
+export class DiagramContext {
+	readyMessage = console.log("Class initialized");
+
+	public sayHello() {
+		console.log("Hello from DiagramContext!");
+	}
+
+	private calculate() {
+		return 42;
+	}
+
+	get value() {
+		return this.calculate();
+	}
+}
+	`;
+
+	const graph = await parseActivityPreview(classSource, '.');
+
+	const expandableLabels = graph.nodes
+		.filter((node) => node.type === 'expandable')
+		.map((node) => String((node.data as { label?: unknown } | undefined)?.label ?? ''));
+	const actionSourceTexts = graph.nodes
+		.filter((node) => node.type === 'action')
+		.map((node) => String((node.data as { sourceText?: unknown } | undefined)?.sourceText ?? ''));
+
+	// Methods should be shown as expandable nodes
+	assert.ok(expandableLabels.some((label) => /function\s+sayHello\(\)/.test(label)), 'sayHello should be expandable');
+	assert.ok(expandableLabels.some((label) => /function\s+calculate\(\)/.test(label)), 'calculate should be expandable');
+	assert.ok(expandableLabels.some((label) => /function\s+get_value\(\)/.test(label)), 'getter should be expandable');
+
+	// Property initializer should appear as action
+	assert.ok(actionSourceTexts.some((text) => text.includes('readyMessage')), 'readyMessage property initializer should appear');
+});
