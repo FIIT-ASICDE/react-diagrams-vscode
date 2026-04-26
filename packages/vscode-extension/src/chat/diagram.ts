@@ -14,6 +14,7 @@ import { runAgenticLoop } from "./agent/agent-loop";
 import { renderAgentResponse } from "./response/render-response";
 import { buildHelpText, isHelpPrompt, printDebug } from "./debug";
 import { selectModelByType } from "./utils";
+import { getConfig } from "./config";
 
 export function registerDiagramChatParticipant(
   context: vscode.ExtensionContext,
@@ -36,7 +37,7 @@ async function handleChatRequest(
   token: vscode.CancellationToken,
 ): Promise<void> {
   const snapshot = await collectChatSnapshot(request.prompt);
-
+  const config = getConfig();
   if (isHelpPrompt(snapshot.userPrompt)) {
     stream.markdown(buildHelpText());
     return;
@@ -58,11 +59,13 @@ async function handleChatRequest(
   //    about function B.
   let verdict: RelevanceVerdict | undefined;
   let context = rawContext;
-  if (rawContext.hasAnything) {
-    verdict = await checkContextRelevance(model, snapshot.userPrompt, rawContext, token);
-    context = applyRelevanceVerdict(rawContext, verdict);
-  }
 
+  if (config.maxToolIterations > 0) {
+      if (rawContext.hasAnything) {
+      verdict = await checkContextRelevance(model, snapshot.userPrompt, rawContext, token);
+      context = applyRelevanceVerdict(rawContext, verdict);
+    }
+}
   const focus = resolveUserFocus(snapshot, context);
 
   if (DEBUG) {

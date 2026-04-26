@@ -36,6 +36,18 @@ export type EdgeEditDraft = {
 	label: string;
 };
 
+// Labels produced by the diagram builder or recognized by code generation.
+const EDGE_LABEL_OPTIONS = [
+	'',
+  'yes',
+  'no',
+  'each',
+  'exception',
+  'finally',
+  'default',
+  'case',
+] as const;
+
 // ─── Node edit dialog ───────────────────────────────────────────────────────
 
 type NodeDialogProps = {
@@ -139,7 +151,7 @@ type EdgeDialogProps = {
 };
 
 export function EdgeEditDialog({ draft, onChange, onSave, onCancel }: EdgeDialogProps) {
-	const inputRef = useRef<HTMLInputElement | null>(null);
+	const inputRef = useRef<HTMLSelectElement | null>(null);
 
 	useEffect(() => {
 		inputRef.current?.focus();
@@ -152,17 +164,37 @@ export function EdgeEditDialog({ draft, onChange, onSave, onCancel }: EdgeDialog
 					Edit Edge Label
 				</div>
 
-				<input
+				<select
 					ref={inputRef}
 					className="w-full rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
-					value={draft.label}
-					placeholder="Edge label"
+					value={draft.label === 'case' || draft.label.startsWith('case ') ? 'case' : draft.label}
 					onChange={(event) => onChange({ ...draft, label: event.target.value })}
 					onKeyDown={(event) => {
 						if (event.key === 'Enter') onSave();
 						if (event.key === 'Escape') onCancel();
 					}}
-				/>
+				>
+					{EDGE_LABEL_OPTIONS.map((option) => (
+						<option key={option} value={option}>
+							{option === '' ? '(no label)' : option}
+						</option>
+					))}
+				</select>
+
+				{(draft.label === 'case' || draft.label.startsWith('case ')) && (
+					<input
+						className="mt-2 w-full rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
+						value={draft.label.startsWith('case ') ? draft.label.slice(5) : ''}
+						placeholder="case value  (e.g. 'success', 0, null)"
+						onChange={(event) =>
+							onChange({ ...draft, label: `case ${event.target.value}` })
+						}
+						onKeyDown={(event) => {
+							if (event.key === 'Enter') onSave();
+							if (event.key === 'Escape') onCancel();
+						}}
+					/>
+				)}
 
 				<div className="mt-4 flex items-center gap-2">
 					<VSCodeButton appearance="primary" onClick={onSave}>

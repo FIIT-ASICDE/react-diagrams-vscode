@@ -113,7 +113,23 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
 
   // ── Phase 3: connect ──────────────────────────────────────────────────
 
-  const mergeId = host.writer.addFlowNode('merge', '');
+  const needsMerge = rendered.some((group, index) => {
+    if (!group.entry) {
+      return true;
+    }
+
+    if (group.exits.length > 0) {
+      return true;
+    }
+
+    if (group.fallthrough.length > 0 && !findNextGroupEntry(rendered, index)) {
+      return true;
+    }
+
+    return false;
+  });
+
+  const mergeId = needsMerge ? host.writer.addFlowNode('merge', '') : undefined;
   const allEndExits: string[] = [];
 
   for (let index = 0; index < rendered.length; index += 1) {
@@ -121,21 +137,28 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
     const edgeLabel = formatEdgeLabel(group.labels);
 
     if (!group.entry) {
-      host.writer.addEdge(decisionId, mergeId, edgeLabel, false);
+      if (mergeId) {
+        host.writer.addEdge(decisionId, mergeId, edgeLabel, false);
+      }
       continue;
     }
 
     host.writer.addEdge(decisionId, group.entry, edgeLabel, false);
 
     for (const exit of group.exits) {
-      host.writer.addEdge(exit, mergeId);
+      if (mergeId) {
+        host.writer.addEdge(exit, mergeId);
+      }
     }
 
     if (group.fallthrough.length > 0) {
       const nextEntry = findNextGroupEntry(rendered, index);
       const target = nextEntry ?? mergeId;
-      for (const exit of group.fallthrough) {
-        host.writer.addEdge(exit, target, getFallthroughEdgeLabel(exit));
+
+      if (target) {
+        for (const exit of group.fallthrough) {
+          host.writer.addEdge(exit, target, getFallthroughEdgeLabel(exit));
+        }
       }
     }
 
@@ -144,7 +167,7 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
 
   return {
     entry: decisionId,
-    exits: [mergeId],
+    exits: mergeId ? [mergeId] : [],
     endExits: [...new Set(allEndExits)],
   };
 }

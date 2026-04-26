@@ -362,8 +362,8 @@ export class CodeGenerator {
 		const data = getData(node);
 		const condition = (getStr(data.sourceText).trim() || getStr(data.label).trim() || "condition");
 
-		const yesEdge = this.pickEdge(outgoing, ["yes", "true", "next"]);
-		const noEdge = this.pickEdge(outgoing, ["no", "false", "done"])
+		const yesEdge = this.pickEdge(outgoing, ["yes", "next"]);
+		const noEdge = this.pickEdge(outgoing, ["no", "done"])
 			?? outgoing.find((e) => e !== yesEdge);
 
 		const yesTarget = yesEdge ? String(yesEdge.target) : undefined;
@@ -482,8 +482,8 @@ export class CodeGenerator {
 			const label = getStr(data.label).trim();
 
 			const outgoing = getOutgoingEdges(this.edges, id);
-			const bodyEdge = this.pickEdge(outgoing, ["yes", "each", "true", "body", "next"]);
-			const exitEdge = this.pickEdge(outgoing, ["no", "false", "done", "exit"])
+			const bodyEdge = this.pickEdge(outgoing, ["yes", "each", "body", "next"]);
+			const exitEdge = this.pickEdge(outgoing, ["no", "done", "exit"])
 				?? outgoing.find((e) => String(e.target) !== String(bodyEdge?.target));
 
 			switch (construct) {

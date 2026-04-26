@@ -8,12 +8,23 @@ import {
 	SMALL_SHAPE_WRAPPER_HEIGHT,
 } from '../../styles/design-tokens';
 
-const HIDDEN_HANDLE_STYLE: React.CSSProperties = {
+const VISIBLE_HANDLE_STYLE: React.CSSProperties = {
 	opacity: 1,
 	width: 2,
 	height: 2,
 	background: 'black',
 	border: 'transparent',
+};
+
+const HIDDEN_HANDLE_STYLE: React.CSSProperties = {
+	opacity: 0,
+	width: 0,
+	height: 0,
+	minWidth: 0,
+	minHeight: 0,
+	background: 'transparent',
+	border: 'transparent',
+	pointerEvents: 'none',
 };
 
 /**
@@ -49,6 +60,7 @@ export function NodeHandles({
 }) {
 	const sideInset = config.sideInset ?? 0;
 	const flowInset = config.flowInset ?? 0;
+	const handleStyle = isConnectable ? VISIBLE_HANDLE_STYLE : HIDDEN_HANDLE_STYLE;
 
 	return (
 		<>
@@ -59,7 +71,7 @@ export function NodeHandles({
 					type="target"
 					position={Position.Top}
 					isConnectable={isConnectable}
-					style={{ ...HIDDEN_HANDLE_STYLE, top: flowInset }}
+					style={{ ...handleStyle, top: flowInset }}
 				/>
 			)}
 			{config.sides && (
@@ -69,14 +81,14 @@ export function NodeHandles({
 						type="target"
 						position={Position.Left}
 						isConnectable={isConnectable}
-						style={{ ...HIDDEN_HANDLE_STYLE, left: sideInset }}
+						style={{ ...handleStyle, left: sideInset }}
 					/>
 					<Handle
 						id="target-right"
 						type="target"
 						position={Position.Right}
 						isConnectable={isConnectable}
-						style={{ ...HIDDEN_HANDLE_STYLE, right: sideInset }}
+						style={{ ...handleStyle, right: sideInset }}
 					/>
 				</>
 			)}
@@ -88,7 +100,7 @@ export function NodeHandles({
 					type="source"
 					position={Position.Bottom}
 					isConnectable={isConnectable}
-					style={{ ...HIDDEN_HANDLE_STYLE, bottom: flowInset }}
+					style={{ ...handleStyle, bottom: flowInset }}
 				/>
 			)}
 			{config.sides && (
@@ -98,14 +110,14 @@ export function NodeHandles({
 						type="source"
 						position={Position.Left}
 						isConnectable={isConnectable}
-						style={{ ...HIDDEN_HANDLE_STYLE, left: sideInset }}
+						style={{ ...handleStyle, left: sideInset }}
 					/>
 					<Handle
 						id="source-right"
 						type="source"
 						position={Position.Right}
 						isConnectable={isConnectable}
-						style={{ ...HIDDEN_HANDLE_STYLE, right: sideInset }}
+						style={{ ...handleStyle, right: sideInset }}
 					/>
 				</>
 			)}
