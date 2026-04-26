@@ -9,6 +9,7 @@ import {
 	type NodeChange,
 	type ReactFlowInstance,
 } from '@xyflow/react';
+import { nanoid } from 'nanoid';
 import type { ActivityNodeType } from '../model/types';
 
 const DEFAULT_LABEL_BY_TYPE: Record<ActivityNodeType, string> = {
@@ -45,7 +46,7 @@ export function createActivityNode(
 	const renderType = type === 'start' ? 'initial' : type;
 
 	return {
-		id: `${idPrefix}-${currentIndex}`,
+		id: `${idPrefix}-${nanoid(10)}`,
 		type: renderType,
 		draggable: true,
 		position: {

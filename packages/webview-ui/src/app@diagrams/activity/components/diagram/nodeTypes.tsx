@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
-import { Diamond } from '../components/Diamond';
-import { HANDLE_CONFIGS, NodeHandles } from '../components/handles';
-import { nodeStyles } from './node-styles';
+import { Diamond } from './Diamond';
+import { HANDLE_CONFIGS, NodeHandles } from './handles';
+import { nodeStyles } from '../../styles/node-styles';
 import {
 	DECISION_HEIGHT,
 	FINAL_DOT_SIZE,
@@ -9,7 +9,7 @@ import {
 	INITIAL_DOT_SIZE,
 	MERGE_DIAMOND_SIZE,
 	NODE_WRAPPER_WIDTH,
-} from './design-tokens';
+} from '../../styles/design-tokens';
 
 type NodeData = {
 	label?: string;

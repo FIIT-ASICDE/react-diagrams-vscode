@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-	ReactFlow,
-	Background,
-	Controls,
-	SmoothStepEdge,
 	type Connection,
 	type Edge,
 	type EdgeChange,
@@ -11,18 +7,17 @@ import {
 	type NodeChange,
 	type ReactFlowInstance,
 } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 
 import { vscode } from '../../app@vscode/api';
 import type { ActivityGraphPayload } from '@react-diagrams/core/app@vscode';
 import type { ActivityNodeType } from './model/types';
 
-import { nodeTypes } from './diagram-rendering/nodeTypes';
-import ElkPathEdge from './components/BackEdge';
-import DynamicPathEdge from './components/PlaygroundEdge';
+import { nodeTypes } from './components/diagram/nodeTypes';
+import ElkPathEdge from './components/diagram/ViewEdge';
+import DynamicPathEdge from './components/diagram/PlaygroundEdge';
 import { applyActivityElkLayout } from './diagram-rendering/elk-layout';
 import { generateCodeFromDiagram } from './logic/diagram-code-generation';
-import { useDiagramReadOnlyNavigator } from './logic/useDiagramHistoryNavigator';
+import { useDiagramNavigationStore } from './logic/navigation/use-diagram-navigation-store';
 import {
 	appendNode,
 	applyEdgeChangesToEdges,
@@ -32,17 +27,12 @@ import {
 	createActivityNode,
 } from './logic/graph-edit-utils';
 
-import { AutoFitOnSnapshotChange } from './logic/auto-fit';
 import { useActivityMessages } from './logic/use-activity-messages';
 import { useImageCapture } from './logic/use-image-capture';
-import { DiagramToolbar, type ViewMode } from './components/Toolbar';
-import { SourcePreviewPanel } from './components/SourcePreviewPanel';
-import {
-	EdgeEditDialog,
-	NodeEditDialog,
-	type EdgeEditDraft,
-	type NodeEditDraft,
-} from './components/rename-dialog';
+import { DiagramToolbar, type ViewMode } from './components/main/Toolbar';
+import { DiagramCanvas } from './components/main/DiagramCanvas';
+import { DiagramModals, type ModalState } from './components/main/DiagramModals';
+import type { NodeEditDraft, EdgeEditDraft } from './components/modals/rename-dialog';
 
 
 const VIEWER_NODE_TYPES = nodeTypes;
@@ -61,11 +51,6 @@ const PLAYGROUND_EDGE_TYPES = {
 
 function truncate(text: string, maxLength: number) {
 	return text.length <= maxLength ? text : `${text.slice(0, maxLength - 3)}...`;
-}
-
-function getNodeFullText(node: Node | null): string {
-	if (!node) return '';
-	return getNodeData(node).sourceText.trim();
 }
 
 function getNodeData(node: Node) {
@@ -106,12 +91,6 @@ function createNodeEditDraft(node: Node): NodeEditDraft {
 	};
 }
 
-type ModalState =
-	| { type: 'preview'; node: Node }
-	| { type: 'nodeEdit'; draft: NodeEditDraft }
-	| { type: 'edgeEdit'; draft: EdgeEditDraft }
-	| null;
-
 function buildErrorGraph(message: string): { nodes: Node[]; edges: Edge[] } {
 	return {
 		nodes: [
@@ -132,30 +111,30 @@ export default function ActivityDiagram() {
 
 	const [modalState, setModalState] = useState<ModalState>(null);
 
-	const nodeCounter = useRef(1);
 	const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
 	const playgroundSnapshotDepthRef = useRef<number | null>(null);
 	const playgroundSnapshotSourceFileRef = useRef<string | null>(null);
 
-	const navigator = useDiagramReadOnlyNavigator();
-	const {
-		canGoBack,
-		visibleRevision,
-		visibleNodes,
-		visibleEdges,
-		currentTitle,
-		stackRef,
-		applyIncomingDiagramPayload,
-		replaceCurrentDiagramPayload,
-		setRootError,
-		markPendingPreview,
-		clearPendingPreview,
-		goBack,
-	} = navigator;
+	const stack = useDiagramNavigationStore((s) => s.stack);
+	const currentIndex = useDiagramNavigationStore((s) => s.currentIndex);
+	const visibleRevision = useDiagramNavigationStore((s) => s.visibleRevision);
+	const applyIncomingDiagramPayload = useDiagramNavigationStore((s) => s.applyIncomingDiagramPayload);
+	const replaceCurrentDiagramPayload = useDiagramNavigationStore((s) => s.replaceCurrentDiagramPayload);
+	const setRootError = useDiagramNavigationStore((s) => s.setRootError);
+	const markPendingPreview = useDiagramNavigationStore((s) => s.markPendingPreview);
+	const clearPendingPreview = useDiagramNavigationStore((s) => s.clearPendingPreview);
+	const goBack = useDiagramNavigationStore((s) => s.goBack);
+
+	const currentDiagram = stack[currentIndex];
+	const visibleNodes = currentDiagram?.nodes ?? [];
+	const visibleEdges = currentDiagram?.edges ?? [];
+	const currentTitle = currentDiagram?.title ?? 'Diagram';
+	const canGoBack = currentIndex > 0;
 
 	const activeNodes = viewMode === 'playground' ? playgroundNodes : visibleNodes;
 	const activeEdges = viewMode === 'playground' ? playgroundEdges : visibleEdges;
 	const isEditable = viewMode === 'playground';
+	const isPlayground = viewMode === 'playground';
 
 	const getActiveGraph = useCallback(
 		() => ({
@@ -246,13 +225,6 @@ export default function ActivityDiagram() {
 		return () => window.removeEventListener('activity/edgeLabelContextMenu', handler);
 	}, [viewMode]);
 
-	// Keep node-id counter ahead of any nodes already in playground.
-	useEffect(() => {
-		if (viewMode === 'playground') {
-			nodeCounter.current = playgroundNodes.length + 1;
-		}
-	}, [viewMode, playgroundNodes.length]);
-
 	// ── Viewer-side: drilldown ───────────────────────────────────────────
 
 	const openNodeDiagram = useCallback(
@@ -260,7 +232,8 @@ export default function ActivityDiagram() {
 			if (viewMode !== 'viewer') return;
 			if (String(node.type ?? 'action') !== 'expandable') return;
 
-			const sourceText = getNodeFullText(node);
+			const data = (node.data ?? {}) as Record<string, unknown>;
+			const sourceText = String(data.sourceText ?? data.label ?? '').trim();
 			if (!sourceText) return;
 
 			const title = String(
@@ -277,8 +250,9 @@ export default function ActivityDiagram() {
 	const addPlaygroundNode = useCallback(
 		(type: ActivityNodeType) => {
 			setPlaygroundNodes((nodes) => {
+				const currentNodeIndex = nodes.length + 1;
 				const node = centerNodeInViewport(
-					createActivityNode(type, nodeCounter.current++, false),
+				createActivityNode(type, currentNodeIndex, false),
 					reactFlowRef.current,
 					window.innerWidth,
 					window.innerHeight,
@@ -290,7 +264,6 @@ export default function ActivityDiagram() {
 	);
 
 	const clearPlayground = useCallback(() => {
-		nodeCounter.current = 1;
 		setPlaygroundNodes([]);
 		setPlaygroundEdges([]);
 		setModalState(null);
@@ -331,10 +304,14 @@ export default function ActivityDiagram() {
 			return;
 		}
 
-		const currentTop = stackRef.current[stackRef.current.length - 1];
+		// Read current navigation state directly from the store (avoids stale closure).
+		const { stack: navStack, currentIndex: navIndex } = useDiagramNavigationStore.getState();
+		const effectiveDepth = navIndex + 1;
+		const currentTop = navStack[navIndex];
+
 		const canReplaceCurrentPlaygroundSnapshot =
 			playgroundSnapshotDepthRef.current !== null &&
-			stackRef.current.length === playgroundSnapshotDepthRef.current &&
+			effectiveDepth === playgroundSnapshotDepthRef.current &&
 			playgroundSnapshotSourceFileRef.current !== null &&
 			currentTop?.sourceFile === playgroundSnapshotSourceFileRef.current;
 
@@ -345,9 +322,9 @@ export default function ActivityDiagram() {
 				sourceFile: playgroundSnapshotSourceFileRef.current ?? undefined,
 			} as ActivityGraphPayload);
 		} else {
-			const snapshotIndex = stackRef.current.length + 1;
+			const snapshotIndex = effectiveDepth + 1;
 			const sourceFile = `Playground Snapshot ${snapshotIndex}.tsx`;
-			playgroundSnapshotDepthRef.current = stackRef.current.length + 1;
+			playgroundSnapshotDepthRef.current = effectiveDepth + 1;
 			playgroundSnapshotSourceFileRef.current = sourceFile;
 
 			void applyIncomingDiagramPayload({
@@ -358,7 +335,7 @@ export default function ActivityDiagram() {
 		}
 
 		setViewMode('viewer');
-	}, [applyIncomingDiagramPayload, getActiveGraph, replaceCurrentDiagramPayload, stackRef]);
+	}, [applyIncomingDiagramPayload, getActiveGraph, replaceCurrentDiagramPayload]);
 
 	const switchToViewer = useCallback(() => {
 		if (viewMode === 'playground') {
@@ -489,11 +466,11 @@ export default function ActivityDiagram() {
 
 	// ── Render ───────────────────────────────────────────────────────────
 
-	const isPlayground = viewMode === 'playground';
-	const previewNode = modalState?.type === 'preview' ? modalState.node : null;
-	const nodeEditDraft = modalState?.type === 'nodeEdit' ? modalState.draft : null;
-	const edgeEditDraft = modalState?.type === 'edgeEdit' ? modalState.draft : null;
 	const focusTrigger = `${viewMode}:${viewMode === 'viewer' ? visibleRevision : 'mode'}`;
+
+	const handleCanvasInit = useCallback((instance: ReactFlowInstance<Node, Edge>) => {
+		reactFlowRef.current = instance;
+	}, []);
 
 	return (
 		<div className="relative h-full w-full">
@@ -510,66 +487,32 @@ export default function ActivityDiagram() {
 				onGenerateSkeleton={generateSkeleton}
 			/>
 
-			{viewMode === 'viewer' && previewNode && (
-				<SourcePreviewPanel
-					node={previewNode}
-					sourceText={getNodeFullText(previewNode)}
-					onClose={() => setModalState(null)}
-				/>
-			)}
+			<DiagramModals
+				modalState={modalState}
+				viewMode={viewMode}
+				onClose={() => setModalState(null)}
+				onNodeEditChange={(draft) => setModalState({ type: 'nodeEdit', draft })}
+				onNodeEditSave={saveNodeEditDraft}
+				onEdgeEditChange={(draft) => setModalState({ type: 'edgeEdit', draft })}
+				onEdgeEditSave={saveEdgeEditDraft}
+			/>
 
-			{isPlayground && nodeEditDraft && (
-				<NodeEditDialog
-					draft={nodeEditDraft}
-					onChange={(draft) => setModalState({ type: 'nodeEdit', draft })}
-					onSave={saveNodeEditDraft}
-					onCancel={() => setModalState(null)}
-				/>
-			)}
-
-			{isPlayground && edgeEditDraft && (
-				<EdgeEditDialog
-					draft={edgeEditDraft}
-					onChange={(draft) => setModalState({ type: 'edgeEdit', draft })}
-					onSave={saveEdgeEditDraft}
-					onCancel={() => setModalState(null)}
-				/>
-			)}
-
-			<ReactFlow
-				className="download-image"
+			<DiagramCanvas
 				nodes={activeNodes}
 				edges={activeEdges}
-				style={{ backgroundColor: 'white' }}
-				onInit={(instance) => {
-					reactFlowRef.current = instance;
-				}}
+				isEditable={isEditable}
+				isPlayground={isPlayground}
+				edgeTypes={edgeTypes}
+				nodeTypes={VIEWER_NODE_TYPES}
+				focusTrigger={focusTrigger}
+				onInit={handleCanvasInit}
 				onNodeClick={onNodeClick}
 				onNodeContextMenu={onNodeContextMenu}
 				onEdgeContextMenu={onEdgeContextMenu}
 				onNodesChange={isPlayground ? onNodesChange : undefined}
 				onEdgesChange={isPlayground ? onEdgesChange : undefined}
 				onConnect={isPlayground ? onConnect : undefined}
-				nodeTypes={VIEWER_NODE_TYPES}
-				edgeTypes={edgeTypes}
-				nodesDraggable={isEditable}
-				nodesConnectable={isEditable}
-				elementsSelectable
-				edgesFocusable={isEditable}
-				nodesFocusable={isEditable}
-				panOnDrag
-				zoomOnScroll
-				zoomOnPinch
-				zoomOnDoubleClick={false}
-				snapToGrid
-			>
-				<AutoFitOnSnapshotChange focusTrigger={focusTrigger} />
-				<Controls />
-				<Background 
-				gap={25} 
-				size={2} 
-				color={ isPlayground ? "rgba(0, 0, 0, 0.68)" : "rgb(233, 233, 233)"  }/>
-			</ReactFlow>
+			/>
 		</div>
 	);
 }

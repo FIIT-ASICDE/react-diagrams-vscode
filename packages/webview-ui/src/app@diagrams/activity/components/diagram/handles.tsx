@@ -6,7 +6,7 @@ import {
 	MERGE_DIAMOND_SIZE,
 	NODE_WRAPPER_WIDTH,
 	SMALL_SHAPE_WRAPPER_HEIGHT,
-} from '../diagram-rendering/design-tokens';
+} from '../../styles/design-tokens';
 
 const HIDDEN_HANDLE_STYLE: React.CSSProperties = {
 	opacity: 1,

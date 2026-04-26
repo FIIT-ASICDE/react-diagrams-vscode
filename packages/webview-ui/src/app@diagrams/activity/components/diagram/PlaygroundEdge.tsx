@@ -1,19 +1,24 @@
 import type { EdgeProps } from '@xyflow/react';
-import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from '@xyflow/react';
-
-type Point = { x: number; y: number };
+import {
+	BaseEdge,
+	EdgeLabelRenderer,
+	getSmoothStepPath,
+} from '@xyflow/react';
 
 const LABEL_OFFSET_FROM_END = 28;
 
-function pointBackFromEnd(prev: Point, end: Point, offset: number): Point {
-	const dx = end.x - prev.x;
-	const dy = end.y - prev.y;
-	const length = Math.sqrt(dx * dx + dy * dy) || 1;
+function getPointNearEnd(path: string, offset: number) {
+	const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+	const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
 
-	return {
-		x: end.x - (dx / length) * offset,
-		y: end.y - (dy / length) * offset,
-	};
+	pathEl.setAttribute('d', path);
+	svg.appendChild(pathEl);
+
+	const totalLength = pathEl.getTotalLength();
+
+	const point = pathEl.getPointAtLength(Math.max(totalLength - offset, 0));
+
+	return { x: point.x, y: point.y };
 }
 
 export default function DynamicPathEdge(props: EdgeProps) {
@@ -41,11 +46,7 @@ export default function DynamicPathEdge(props: EdgeProps) {
 		offset: 24,
 	});
 
-	const labelPos = pointBackFromEnd(
-		{ x: sourceX, y: sourceY },
-		{ x: targetX, y: targetY },
-		LABEL_OFFSET_FROM_END,
-	);
+	const labelPos = getPointNearEnd(path, LABEL_OFFSET_FROM_END);
 
 	return (
 		<>
@@ -62,12 +63,12 @@ export default function DynamicPathEdge(props: EdgeProps) {
 							position: 'absolute',
 							transform: `translate(-50%, -50%) translate(${labelPos.x}px, ${labelPos.y}px)`,
 							background: 'black',
-							padding: '1px 4px',
-							fontSize: 10,
-							pointerEvents: 'all',
-							borderRadius: 3,
+							padding: '2px 6px',
+							fontSize: 11,
+							borderRadius: 4,
 							color: 'white',
 							whiteSpace: 'nowrap',
+							pointerEvents: 'all',
 						}}
 						className="nodrag nopan"
 						onContextMenu={(event) => {

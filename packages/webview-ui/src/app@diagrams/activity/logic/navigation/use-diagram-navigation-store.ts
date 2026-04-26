@@ -1,0 +1,205 @@
+import { create } from 'zustand';
+import type { Edge, Node } from '@xyflow/react';
+import type { ActivityGraphPayload } from '@react-diagrams/core/app@vscode';
+import { applyActivityElkLayout } from '../../diagram-rendering/elk-layout';
+
+/**
+ * One entry in the diagram navigation stack.
+ *
+ *   - root: the diagram for the file the user is looking at
+ *   - children: diagrams produced by drilling into an expandable node
+ */
+export type DiagramViewItem = {
+	title: string;
+	sourceFile?: string;
+	sourceText?: string;
+	nodes: Node[];
+	edges: Edge[];
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fileNameFromPath(sourceFile?: string): string | undefined {
+	if (!sourceFile) return undefined;
+	return sourceFile.replace(/\\/g, '/').split('/').pop();
+}
+
+function pickTitle(
+	payload: ActivityGraphPayload,
+	pendingTitle: string | undefined,
+	stackDepth: number,
+): string {
+	const trimmed = pendingTitle?.trim();
+	if (trimmed) return trimmed;
+
+	const sourceFile = typeof payload.sourceFile === 'string' ? payload.sourceFile : '';
+	const fileName = fileNameFromPath(sourceFile);
+
+	if (stackDepth === 0) {
+		return fileName ? `Root: ${fileName}` : 'Root Diagram';
+	}
+	return fileName ?? `Expanded ${stackDepth}`;
+}
+
+async function layoutOrPassThrough(
+	nodes: Node[],
+	edges: Edge[],
+): Promise<{ nodes: Node[]; edges: Edge[] }> {
+	try {
+		return await applyActivityElkLayout(nodes, edges);
+	} catch (error) {
+		console.error('Failed to apply activity ELK layout in webview', error);
+		return { nodes, edges };
+	}
+}
+
+// ─── Store ────────────────────────────────────────────────────────────────────
+
+type DiagramNavigationState = {
+	stack: DiagramViewItem[];
+	/** 0-based index into stack; -1 when stack is empty. */
+	currentIndex: number;
+	pendingPreviewTitle?: string;
+	visibleRevision: number;
+
+	applyIncomingDiagramPayload: (payload: ActivityGraphPayload) => Promise<Node[]>;
+	replaceCurrentDiagramPayload: (payload: ActivityGraphPayload) => Promise<Node[]>;
+	setRootError: (nodes: Node[], edges: Edge[]) => void;
+	markPendingPreview: (title: string) => void;
+	clearPendingPreview: () => void;
+	goBack: () => void;
+	reset: () => void;
+};
+
+export const useDiagramNavigationStore = create<DiagramNavigationState>((set, get) => ({
+	stack: [],
+	currentIndex: -1,
+	pendingPreviewTitle: undefined,
+	visibleRevision: 0,
+
+	applyIncomingDiagramPayload: async (payload) => {
+		const incomingNodes = Array.isArray(payload.nodes) ? (payload.nodes as Node[]) : [];
+		const incomingEdges = Array.isArray(payload.edges) ? (payload.edges as Edge[]) : [];
+
+		const layouted = await layoutOrPassThrough(incomingNodes, incomingEdges);
+
+		const payloadWithSource = payload as ActivityGraphPayload & { sourceText?: unknown };
+
+		// Read state after the async ELK call so it is always fresh.
+		const { stack, currentIndex, pendingPreviewTitle, visibleRevision } = get();
+
+		// Truncate any "forward" entries that exist past the current position
+		// (can occur after goBack() followed by a new push).
+		const base = stack.slice(0, currentIndex + 1);
+
+		const entry: DiagramViewItem = {
+			title: pickTitle(payload, pendingPreviewTitle, base.length),
+			sourceFile: typeof payload.sourceFile === 'string' ? payload.sourceFile : undefined,
+			sourceText:
+				typeof payloadWithSource.sourceText === 'string'
+					? payloadWithSource.sourceText
+					: undefined,
+			nodes: layouted.nodes,
+			edges: layouted.edges,
+		};
+
+		const newStack = [...base, entry];
+
+		set({
+			stack: newStack,
+			currentIndex: newStack.length - 1,
+			pendingPreviewTitle: undefined,
+			visibleRevision: visibleRevision + 1,
+		});
+
+		return layouted.nodes;
+	},
+
+	replaceCurrentDiagramPayload: async (payload) => {
+		const incomingNodes = Array.isArray(payload.nodes) ? (payload.nodes as Node[]) : [];
+		const incomingEdges = Array.isArray(payload.edges) ? (payload.edges as Edge[]) : [];
+
+		const layouted = await layoutOrPassThrough(incomingNodes, incomingEdges);
+
+		const payloadWithSource = payload as ActivityGraphPayload & { sourceText?: unknown };
+
+		// Read state after the async ELK call so it is always fresh.
+		const { stack, currentIndex, pendingPreviewTitle, visibleRevision } = get();
+
+		if (stack.length === 0) {
+			const fallbackEntry: DiagramViewItem = {
+				title: pickTitle(payload, pendingPreviewTitle, 0),
+				sourceFile: typeof payload.sourceFile === 'string' ? payload.sourceFile : undefined,
+				sourceText:
+					typeof payloadWithSource.sourceText === 'string'
+						? payloadWithSource.sourceText
+						: undefined,
+				nodes: layouted.nodes,
+				edges: layouted.edges,
+			};
+
+			set({
+				stack: [fallbackEntry],
+				currentIndex: 0,
+				pendingPreviewTitle: undefined,
+				visibleRevision: visibleRevision + 1,
+			});
+
+			return layouted.nodes;
+		}
+
+		const current = stack[currentIndex];
+		const updated: DiagramViewItem = {
+			...current,
+			sourceFile:
+				typeof payload.sourceFile === 'string' ? payload.sourceFile : current.sourceFile,
+			sourceText:
+				typeof payloadWithSource.sourceText === 'string'
+					? payloadWithSource.sourceText
+					: current.sourceText,
+			nodes: layouted.nodes,
+			edges: layouted.edges,
+		};
+
+		const newStack = [...stack];
+		newStack[currentIndex] = updated;
+
+		set({
+			stack: newStack,
+			pendingPreviewTitle: undefined,
+			visibleRevision: visibleRevision + 1,
+		});
+
+		return layouted.nodes;
+	},
+
+	setRootError: (nodes, edges) => {
+		set((state) => ({
+			stack: [{ title: 'Root Error', nodes, edges }],
+			currentIndex: 0,
+			visibleRevision: state.visibleRevision + 1,
+		}));
+	},
+
+	markPendingPreview: (title) => {
+		set({ pendingPreviewTitle: title });
+	},
+
+	clearPendingPreview: () => {
+		set({ pendingPreviewTitle: undefined });
+	},
+
+	goBack: () => {
+		set((state) => {
+			if (state.currentIndex <= 0) return {};
+			return {
+				currentIndex: state.currentIndex - 1,
+				visibleRevision: state.visibleRevision + 1,
+			};
+		});
+	},
+
+	reset: () => {
+		set({ stack: [], currentIndex: -1, pendingPreviewTitle: undefined, visibleRevision: 0 });
+	},
+}));

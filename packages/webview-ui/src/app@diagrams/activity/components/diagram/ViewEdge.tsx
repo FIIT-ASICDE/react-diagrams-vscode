@@ -4,6 +4,7 @@ import { BaseEdge, EdgeLabelRenderer } from '@xyflow/react';
 type Point = { x: number; y: number };
 
 const LABEL_OFFSET_FROM_END = 28;
+const EDGE_GAP = 10; // 👈 toto si doladíš (8–14 vyzerá dobre)
 
 function hasElkPoints(data: unknown): data is { points: Point[] } {
 	if (!data || typeof data !== 'object') return false;
@@ -24,11 +25,17 @@ function pointsToPath(points: Point[]): string {
 	return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
 }
 
-/**
- * Position the label `offset` pixels back from `end`, along the line from
- * `prev` to `end`. Used for both ELK-routed edges (last bend point as
- * `prev`) and the fallback orthogonal route.
- */
+function offsetPoint(from: Point, to: Point, offset: number): Point {
+	const dx = to.x - from.x;
+	const dy = to.y - from.y;
+	const length = Math.sqrt(dx * dx + dy * dy) || 1;
+
+	return {
+		x: from.x + (dx / length) * offset,
+		y: from.y + (dy / length) * offset,
+	};
+}
+
 function pointBackFromEnd(prev: Point, end: Point, offset: number): Point {
 	const dx = end.x - prev.x;
 	const dy = end.y - prev.y;
@@ -46,26 +53,49 @@ export default function ElkPathEdge(props: EdgeProps) {
 	let labelPos: Point;
 
 	if (hasElkPoints(data)) {
-		const points = data.points;
+		const points = [...data.points];
+
+		// 👉 posuň prvý a posledný bod
+		points[0] = offsetPoint(points[0], points[1], EDGE_GAP);
+		points[points.length - 1] = offsetPoint(
+			points[points.length - 1],
+			points[points.length - 2],
+			EDGE_GAP,
+		);
+
 		path = pointsToPath(points);
+
 		labelPos = pointBackFromEnd(
 			points[points.length - 2],
 			points[points.length - 1],
 			LABEL_OFFSET_FROM_END,
 		);
 	} else {
-		// Fallback: orthogonal route from source down then across to target.
-		path = `M ${sourceX} ${sourceY} L ${sourceX} ${targetY} L ${targetX} ${targetY}`;
+		// fallback
+		const source: Point = { x: sourceX, y: sourceY };
+		const target: Point = { x: targetX, y: targetY };
+
+		const adjustedSource = offsetPoint(source, target, EDGE_GAP);
+		const adjustedTarget = offsetPoint(target, source, EDGE_GAP);
+
+		path = `M ${adjustedSource.x} ${adjustedSource.y}
+		        L ${adjustedSource.x} ${adjustedTarget.y}
+		        L ${adjustedTarget.x} ${adjustedTarget.y}`;
+
 		labelPos = pointBackFromEnd(
-			{ x: sourceX, y: sourceY },
-			{ x: targetX, y: targetY },
+			adjustedSource,
+			adjustedTarget,
 			LABEL_OFFSET_FROM_END,
 		);
 	}
 
 	return (
 		<>
-			<BaseEdge path={path} markerEnd={markerEnd} style={{ fill: 'none', ...style }} />
+			<BaseEdge
+				path={path}
+				markerEnd={markerEnd}
+				style={{ fill: 'none', ...style }}
+			/>
 
 			{label && (
 				<EdgeLabelRenderer>
@@ -85,6 +115,7 @@ export default function ElkPathEdge(props: EdgeProps) {
 						onContextMenu={(event) => {
 							event.preventDefault();
 							event.stopPropagation();
+
 							window.dispatchEvent(
 								new CustomEvent('activity/edgeLabelContextMenu', {
 									detail: {

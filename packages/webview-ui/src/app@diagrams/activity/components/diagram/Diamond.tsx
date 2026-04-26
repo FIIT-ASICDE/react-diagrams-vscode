@@ -1,4 +1,4 @@
-import { tokens } from '../diagram-rendering/design-tokens';
+import { tokens } from '../../styles/design-tokens';
 
 type Props = {
 	width: number;

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { VSCodeButton } from '@vscode/webview-ui-toolkit/react';
-import type { ActivityNodeType } from '../model/types';
+import type { ActivityNodeType } from '../../model/types';
 
 export type ViewMode = 'viewer' | 'playground';
 
