@@ -54,7 +54,7 @@ export function DiagramCanvas({
 
 	return (
 		<>
-		<pre
+		{/* <pre
 			style={{
 				maxHeight: 240,
 				overflow: 'auto',
@@ -67,7 +67,7 @@ export function DiagramCanvas({
 			}}
 		>
 			{debugGraphJson}
-		</pre>
+		</pre> */}
 		<ReactFlow
 			className="download-image"
 			nodes={nodes}
