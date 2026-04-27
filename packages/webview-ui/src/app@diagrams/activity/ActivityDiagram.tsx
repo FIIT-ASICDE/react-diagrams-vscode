@@ -29,6 +29,7 @@ import {
 
 import { useActivityMessages } from './logic/use-activity-messages';
 import { useImageCapture } from './logic/use-image-capture';
+import { toTrimmedNodeLabel } from './logic/rename-utils';
 import { DiagramToolbar, type ViewMode } from './components/main/Toolbar';
 import { DiagramCanvas } from './components/main/DiagramCanvas';
 import { DiagramModals, type ModalState } from './components/main/DiagramModals';
@@ -364,6 +365,7 @@ export default function ActivityDiagram() {
 	const saveNodeEditDraft = useCallback(() => {
 		if (!modalState || modalState.type !== 'nodeEdit') return;
 		const { draft } = modalState;
+		const label = toTrimmedNodeLabel(draft.sourceText);
 		setPlaygroundNodes((nodes) => {
 			const next = nodes.map((node) => {
 				if (String(node.id) !== draft.nodeId) return node;
@@ -375,7 +377,7 @@ export default function ActivityDiagram() {
 					...node,
 					data: {
 						...previousData,
-						label: draft.label,
+						label,
 						sourceText: draft.sourceText,
 						...(draft.deps !== undefined ? { deps: draft.deps } : {}),
 						...constructUpdate,
@@ -488,7 +490,7 @@ export default function ActivityDiagram() {
 	}, []);
 
 	return (
-		<div className="relative h-full w-full">
+		<div className="flex h-full w-full flex-col">
 			<DiagramToolbar
 				mode={viewMode}
 				currentTitle={currentTitle}
@@ -501,6 +503,7 @@ export default function ActivityDiagram() {
 				onGenerateSkeleton={generateSkeleton}
 			/>
 
+			<div className="relative flex-1 overflow-hidden">
 			<DiagramModals
 				modalState={modalState}
 				viewMode={viewMode}
@@ -527,6 +530,7 @@ export default function ActivityDiagram() {
 				onEdgesChange={isPlayground ? onEdgesChange : undefined}
 				onConnect={isPlayground ? onConnect : undefined}
 			/>
+			</div>
 		</div>
 	);
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { VSCodeButton } from '@vscode/webview-ui-toolkit/react';
+import { toTrimmedNodeLabel } from '../../logic/rename-utils';
 
 export type NodeEditDraft = {
 	nodeId: string;
@@ -64,11 +65,12 @@ type NodeDialogProps = {
 };
 
 export function NodeEditDialog({ draft, onChange, onSave, onCancel }: NodeDialogProps) {
-	const labelRef = useRef<HTMLInputElement | null>(null);
+	const sourceTextRef = useRef<HTMLTextAreaElement | null>(null);
 	const constructOptions = getConstructOptions(draft.nodeType);
+	const derivedLabel = toTrimmedNodeLabel(draft.sourceText);
 
 	useEffect(() => {
-		labelRef.current?.focus();
+		sourceTextRef.current?.focus();
 	}, []);
 
 	const handleCopy = () => {
@@ -86,23 +88,20 @@ export function NodeEditDialog({ draft, onChange, onSave, onCancel }: NodeDialog
 					Edit Node
 				</div>
 
-				<input
-					ref={labelRef}
-					className="mb-3 w-full rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
-					value={draft.label}
-					placeholder="Node label"
-					onChange={(event) => onChange({ ...draft, label: event.target.value })}
-					onKeyDown={(event) => {
-						if (event.key === 'Escape') onCancel();
-					}}
-				/>
+				<div className="mb-2 text-xs text-[var(--vscode-descriptionForeground)]">
+					Label preview: <span className="font-mono">{derivedLabel || '(empty)'}</span>
+				</div>
 
 				
 				<textarea
+					ref={sourceTextRef}
 					className="h-64 w-full resize-y rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
 					value={draft.sourceText}
 					placeholder="Node sourceText"
-					onChange={(event) => onChange({ ...draft, sourceText: event.target.value })}
+					onChange={(event) => {
+						const sourceText = event.target.value;
+						onChange({ ...draft, sourceText, label: toTrimmedNodeLabel(sourceText) });
+					}}
 					onKeyDown={(event) => {
 						if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') onSave();
 						if (event.key === 'Escape') onCancel();

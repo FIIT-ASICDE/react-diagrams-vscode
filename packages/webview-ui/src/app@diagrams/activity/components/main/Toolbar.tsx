@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { VSCodeButton } from '@vscode/webview-ui-toolkit/react';
 import type { ActivityNodeType } from '../../model/types';
 
 export type ViewMode = 'viewer' | 'playground';
@@ -16,15 +14,32 @@ type Props = {
 	onGenerateSkeleton: () => void;
 };
 
-const ADD_BUTTONS: { type: ActivityNodeType; label: string }[] = [
-	{ type: 'start', label: 'Start' },
-	{ type: 'action', label: 'Action' },
-	{ type: 'decision', label: 'Decision' },
-	{ type: 'merge', label: 'Merge' },
-	{ type: 'expandable', label: 'Expandable' },
-	{ type: 'loop', label: 'Loop' },
-	{ type: 'end', label: 'End' },
+const NODE_BUTTONS: { type: ActivityNodeType; label: string; symbol: string }[] = [
+	{ type: 'start',      label: 'Start',      symbol: '◉' },
+	{ type: 'action',     label: 'Action',     symbol: '▭' },
+	{ type: 'decision',   label: 'Decision',   symbol: '◇' },
+	{ type: 'merge',      label: 'Merge',      symbol: '⋈' },
+	{ type: 'loop',       label: 'Loop',       symbol: '↺' },
+	{ type: 'end',        label: 'End',        symbol: '⊛' },
 ];
+
+// ─── Shared primitive styles ─────────────────────────────────────────────────
+
+const BASE_BTN =
+	'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors focus:outline-none disabled:pointer-events-none disabled:opacity-40 cursor-pointer';
+
+const GHOST_BTN =
+	`${BASE_BTN} text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)]`;
+
+const PRIMARY_BTN =
+	`${BASE_BTN} bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)] hover:bg-[var(--vscode-button-hoverBackground)]`;
+
+const DANGER_BTN =
+	`${BASE_BTN} text-[var(--vscode-errorForeground)] hover:bg-[var(--vscode-inputValidation-errorBackground,rgba(255,0,0,.12))]`;
+
+function Separator() {
+	return <div className="mx-1 h-4 w-px shrink-0 bg-[var(--vscode-panel-border)]" />;
+}
 
 export function DiagramToolbar({
 	mode,
@@ -35,80 +50,123 @@ export function DiagramToolbar({
 	onSwitchToPlayground,
 	onAddNode,
 	onClearPlayground,
-	onGenerateSkeleton
+	onGenerateSkeleton,
 }: Props) {
-	const [addMenuOpen, setAddMenuOpen] = useState(false);
-
 	const isViewer = mode === 'viewer';
 	const isPlayground = mode === 'playground';
 
 	return (
-		<div className="absolute left-2 top-2 z-10 w-[360px] rounded-lg border border-zinc-700/70 bg-zinc-950/95 shadow-xl backdrop-blur">
-			<div className="flex h-10 items-center gap-2 border-b border-zinc-800 px-2">
-				<VSCodeButton
-					appearance="secondary"
-					disabled={isPlayground || !canGoBack}
+		<div
+			className="z-10 flex flex-col border-b border-[var(--vscode-panel-border)] bg-[var(--vscode-editor-background)] select-none shrink-0"
+			style={{ boxShadow: '0 1px 4px rgba(0,0,0,.25)' }}
+		>
+			{/* ── Primary bar ────────────────────────────────────────── */}
+			<div className="flex h-9 items-center gap-0.5 px-2">
+				{/* Back */}
+				<button
+					type="button"
+					className={GHOST_BTN}
+					disabled={!canGoBack || isPlayground}
 					onClick={onBack}
+					title="Back"
 				>
-					←
-				</VSCodeButton>
+					<span>←</span>
+					<span>Back</span>
+				</button>
 
-				<VSCodeButton
-					appearance={isViewer ? 'primary' : 'secondary'}
-					onClick={onSwitchToViewer}
-				>
-					Viewer
-				</VSCodeButton>
+				<Separator />
 
-				<VSCodeButton
-					appearance={isPlayground ? 'primary' : 'secondary'}
-					onClick={onSwitchToPlayground}
+				{/* Mode toggle — pill tabs */}
+				<div
+					className="flex overflow-hidden rounded border border-[var(--vscode-panel-border)]"
+					role="tablist"
 				>
-					Playground
-				</VSCodeButton>
+					<button
+						type="button"
+						role="tab"
+						aria-selected={isViewer}
+						className={`${BASE_BTN} rounded-none px-3 ${
+							isViewer
+								? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+								: 'text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)]'
+						}`}
+						onClick={onSwitchToViewer}
+					>
+						Viewer
+					</button>
+					<div className="w-px shrink-0 bg-[var(--vscode-panel-border)]" />
+					<button
+						type="button"
+						role="tab"
+						aria-selected={isPlayground}
+						className={`${BASE_BTN} rounded-none px-3 ${
+							isPlayground
+								? 'bg-[var(--vscode-button-background)] text-[var(--vscode-button-foreground)]'
+								: 'text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)]'
+						}`}
+						onClick={onSwitchToPlayground}
+					>
+						Playground
+					</button>
+				</div>
+
+				<Separator />
+
+				{/* Title */}
+				<span
+					className="flex-1 truncate text-xs text-[var(--vscode-descriptionForeground)]"
+					title={isPlayground ? 'Playground' : currentTitle}
+				>
+					{isPlayground ? 'Playground' : currentTitle}
+				</span>
 			</div>
 
-			<div className="break-words px-3 py-1.5 text-xs text-zinc-300">
-				{isPlayground ? 'Playground' : currentTitle}
-			</div>
-			
+			{/* ── Playground action bar ───────────────────────────────── */}
 			{isPlayground && (
-				<div className="flex items-center gap-2 border-t border-zinc-800 px-2 py-2">
-					<div className="relative flex-1">
-						<VSCodeButton
-							appearance="secondary"
-							className="w-full"
-							onClick={() => setAddMenuOpen((open) => !open)}
+				<div className="flex h-8 items-center gap-0.5 border-t border-[var(--vscode-panel-border)] px-2">
+					{/* Add-node label */}
+					<span className="mr-1 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--vscode-descriptionForeground)]">
+						Add
+					</span>
+
+					{/* Node type buttons */}
+					{NODE_BUTTONS.map(({ type, label, symbol }) => (
+						<button
+							key={type}
+							type="button"
+							className={GHOST_BTN}
+							onClick={() => onAddNode(type)}
+							title={`Add ${label} node`}
 						>
-							+ Add Node
-						</VSCodeButton>
+							<span aria-hidden="true">{symbol}</span>
+							<span>{label}</span>
+						</button>
+					))}
 
-						{addMenuOpen && (
-							<div className="absolute left-0 top-9 z-20 w-full overflow-hidden rounded-md border border-zinc-700 bg-zinc-950 shadow-xl">
-								{ADD_BUTTONS.map(({ type, label }) => (
-									<button
-										key={type}
-										type="button"
-										className="block w-full px-3 py-2 text-left text-xs text-zinc-200 hover:bg-zinc-800"
-										onClick={() => {
-											onAddNode(type);
-											setAddMenuOpen(false);
-										}}
-									>
-										{label}
-									</button>
-								))}
-							</div>
-						)}
-					</div>
+					{/* Spacer */}
+					<div className="flex-1" />
 
-					<VSCodeButton appearance="primary" onClick={onGenerateSkeleton}>
-						Generate
-					</VSCodeButton>
+					<Separator />
 
-					<VSCodeButton appearance="secondary" onClick={onClearPlayground}>
-						Clear
-					</VSCodeButton>
+					{/* Generate */}
+					<button
+						type="button"
+						className={PRIMARY_BTN}
+						onClick={onGenerateSkeleton}
+						title="Generate code skeleton from diagram"
+					>
+						<span>Generate Skeleton</span>
+					</button>
+
+					{/* Clear */}
+					<button
+						type="button"
+						className={DANGER_BTN}
+						onClick={onClearPlayground}
+						title="Clear playground"
+					>
+						<span>Clear</span>
+					</button>
 				</div>
 			)}
 		</div>

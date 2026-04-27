@@ -1,7 +1,7 @@
 import { type Node, type Edge } from "@xyflow/react";
 import { START_EDGE_SOURCE_ID, type FuncArg } from "../shared/types";
 import { indent, normalize, sanitizeStatement, stringifyLabel } from "../shared/string-utils";
-import { checkStructure, formatFunctionHeader, looksAsync } from "../graph/node-utils";
+import { formatFunctionHeader, looksAsync } from "../graph/node-utils";
 import { findLabeledEdge, getOutgoingEdges } from "../graph/traversal";
 import type { Construct } from "../shared/construct";
 
@@ -106,7 +106,6 @@ export class CodeGenerator {
 		private readonly nodes: Node[],
 		private readonly edges: Edge[],
 	) {
-		checkStructure(nodes, edges);
 		this.nodeById = new Map(nodes.map((node) => [String(node.id), node]));
 		this.asyncMode = looksAsync(nodes);
 	}

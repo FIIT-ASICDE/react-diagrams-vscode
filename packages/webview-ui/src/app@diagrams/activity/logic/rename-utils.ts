@@ -3,7 +3,7 @@ import type { EdgeRenameDraft, RenameDraft } from '../model/types';
 
 const MAX_NODE_LABEL_LENGTH = 20;
 
-function trimNodeLabel(text: string): string {
+export function toTrimmedNodeLabel(text: string): string {
 	const normalized = text.replace(/\s+/g, ' ').trim();
 	if (normalized.length <= MAX_NODE_LABEL_LENGTH) {
 		return normalized;
@@ -34,7 +34,7 @@ export function applyRenameToNodes(nodes: Node[], draft: RenameDraft): Node[] {
 			...candidate,
 			data: {
 				...((candidate.data as Record<string, unknown> | undefined) ?? {}),
-				label: trimNodeLabel(fullText),
+				label: toTrimmedNodeLabel(fullText),
 				sourceText: fullText,
 				...(draft.deps !== undefined ? { deps: draft.deps } : {}),
 			},
