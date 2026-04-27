@@ -1,39 +1,69 @@
-/**
- * Design tokens for activity diagram nodes.
- *
- * All node components consume these instead of hard-coding colors / sizes.
- * Numeric tokens stay in sync with elk-layout.ts node-size estimates so
- * the rendered shape doesn't overflow its layouted bounding box.
- */
 export const tokens = {
-	ink: '#1f2328',
-	inkSoft: '#57606a',
+	// base
+	ink: '#111827',
+	inkSoft: '#4b5563',
 	paper: '#ffffff',
-	border: '#1f2328',
-	borderSoft: '#8c959f',
-	expandableTint: '#eef6ee',
-	expandableBorder: '#2da44e',
-	shadow: '0 1px 2px rgba(0,0,0,0.06)',
+
+	// borders
+	border: '#111827',
+	borderSoft: '#d1d5db',
+
+	// neutral nodes
+	semanticNeutralTint: '#f9fafb',
+	semanticNeutralBorder: '#9ca3af',
+
+	// activity / action nodes
+	semanticInfoTint: '#eef6ff',
+	semanticInfoBorder: '#2563eb',
+
+	// loops
+	semanticLoopTint: '#f5f0ff',
+	semanticLoopBorder: '#7c3aed',
+
+	// success / final
+	semanticSuccessTint: '#ecfdf3',
+	semanticSuccessBorder: '#16a34a',
+
+	// decisions / merge
+	semanticWarningTint: '#fff7db',
+	semanticWarningBorder: '#ca8a04',
+
+	// danger / error
+	semanticDangerTint: '#fff1f2',
+	semanticDangerBorder: '#e11d48',
+
+	// expandable / collapsed details
+	expandableTint: '#ecfeff',
+	expandableBorder: '#0891b2',
+
+	// shapes
+	initialDotFill: '#111827',
+	finalRingBorder: '#111827',
+	finalDotFill: '#111827',
+	decisionFill: '#fff7db',
+	decisionBorder: '#ca8a04',
+	mergeFill: '#f9fafb',
+	mergeBorder: '#6b7280',
+
+	// edges / arrows
+	edge: '#64748b',
+	edgeActive: '#2563eb',
+	edgeMuted: '#cbd5e1',
+
+	// shadows
+	shadow: '0 4px 10px rgba(17, 24, 39, 0.08), 0 1px 3px rgba(17, 24, 39, 0.06)',
+	shadowStrong: '0 8px 22px rgba(17, 24, 39, 0.14), 0 2px 6px rgba(17, 24, 39, 0.08)',
+
+	// fonts
 	font:
-		"ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-	mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+		"Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+	mono: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
 } as const;
 
-/** All node wrappers share this width so ELK can predict layout sizes. */
 export const NODE_WRAPPER_WIDTH = 200;
-
-/** Visible diamond size for decision/loop nodes. */
 export const DECISION_HEIGHT = 90;
-
-/** Visible diamond size for merge nodes. */
 export const MERGE_DIAMOND_SIZE = 40;
-
-/** Wrapper height used by small-shape nodes (merge / initial / final). */
 export const SMALL_SHAPE_WRAPPER_HEIGHT = 50;
-
-/** Initial ("start") node circle diameter. */
 export const INITIAL_DOT_SIZE = 28;
-
-/** Final ("end") bull's-eye outer / inner sizes. */
 export const FINAL_RING_SIZE = 32;
 export const FINAL_DOT_SIZE = 18;

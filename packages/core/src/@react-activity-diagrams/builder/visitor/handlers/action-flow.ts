@@ -31,7 +31,7 @@ export function visitHook(host: StatementVisitorHost, hookMeta: HookMeta): Build
     deps: hookMeta.dependencyText,
   });
 
-  return { entry: bodyId, exits: [bodyId], endExits: [] };
+  return { entry: bodyId, exits: [bodyId], returnExits: [], throwExits: [] };
 }
 
 // ── Expression statements (incl. forEach detection) ───────────────────────
@@ -48,13 +48,6 @@ export function visitExpressionStatement(host: StatementVisitorHost, stmt: Expre
 
 // ── ForEach-like calls ─────────────────────────────────────────────────────
 
-/**
- * Extract the metadata bits we need to reconstruct a forEach-like call
- * later in CodeGen. Returns sensible fallbacks when the AST shape isn't
- * what we expected (chained calls, computed property access, callbacks
- * that aren't inline functions, etc.) — those still get a loop node, just
- * with less faithful re-emission.
- */
 function extractForEachMeta(callExpression: CallExpression): {
   iterable: string;
   callee: string;
@@ -94,9 +87,6 @@ function formatParams(fn: ArrowFunction | FunctionExpression): string {
 export function visitForEachLike(host: StatementVisitorHost, callExpression: CallExpression): BuildResult {
   const meta = extractForEachMeta(callExpression);
 
-  // The loop node carries metadata only — no body in sourceText. CodeGen
-  // reconstructs `${iterable}.${callee}(${params} => { body })` and walks
-  // the body subgraph just like for a `while` loop.
   const loopId = host.createLoopNode(
     compactLabel(meta.iterable),
     meta.iterable,
@@ -109,23 +99,41 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
     forEachParams: meta.params,
   });
 
-  const callbackBranch = getCallbackBranch(callExpression);
-  const innerDecisionCount = callbackBranch ? countDecisionsInBranch(callbackBranch) : 0;
-  const body = callbackBranch ? host.visitBranch(callbackBranch) : undefined;
+  const ctx = host.pushLoopContext(loopId);
+  try {
+    const callbackBranch = getCallbackBranch(callExpression);
+    const innerDecisionCount = callbackBranch ? countDecisionsInBranch(callbackBranch) : 0;
+    const body = callbackBranch ? host.visitBranch(callbackBranch) : undefined;
 
-  if (body?.entry) {
-    host.writer.addEdge(loopId, body.entry, 'each', false);
-    host.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
-    return { entry: loopId, exits: [loopId], endExits: body.endExits };
+    if (body?.entry) {
+      host.writer.addEdge(loopId, body.entry, 'each', false);
+      host.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
+
+      for (const continueId of ctx.pendingContinues) {
+        host.writer.addEdge(continueId, loopId, '', true);
+      }
+
+      return {
+        entry: loopId,
+        exits: [loopId, ...ctx.pendingBreaks],
+        returnExits: body.returnExits,
+        throwExits: body.throwExits,
+      };
+    }
+
+    host.writer.addEdge(loopId, loopId, 'each', true);
+    return {
+      entry: loopId,
+      exits: [loopId, ...ctx.pendingBreaks],
+      returnExits: [],
+      throwExits: [],
+    };
+  } finally {
+    host.popContext();
   }
-
-  // Empty / non-walkable callback — render as a self-loop body so the
-  // diagram is still readable.
-  host.writer.addEdge(loopId, loopId, 'each', true);
-  return { entry: loopId, exits: [loopId], endExits: [] };
 }
 
-// ── Plain action / return / throw / break / continue ──────────────────────
+// ── Plain action / return / throw ─────────────────────────────────────────
 
 export function visitAction(host: StatementVisitorHost, label: string, sourceText?: string): BuildResult {
   // Plain actions don't carry a construct. CodeGen falls back to its
@@ -134,9 +142,13 @@ export function visitAction(host: StatementVisitorHost, label: string, sourceTex
   const id = host.writer.addFlowNode('action', compactLabel(label), {
     sourceText,
   });
-  return { entry: id, exits: [id], endExits: [] };
+  return { entry: id, exits: [id], returnExits: [], throwExits: [] };
 }
 
+/**
+ * `return` exits via returnExits — eventually routed to the function's
+ * End node. NOT throwExits.
+ */
 export function visitReturn(host: StatementVisitorHost, stmt: ReturnStatement): BuildResult {
   const expressionText = stmt.getExpression()?.getText();
   const label = expressionText ? `return ${expressionText}` : 'return';
@@ -145,9 +157,18 @@ export function visitReturn(host: StatementVisitorHost, stmt: ReturnStatement): 
     construct: 'return',
   });
 
-  return { entry: id, exits: [], endExits: [id] };
+  return { entry: id, exits: [], returnExits: [id], throwExits: [] };
 }
 
+/**
+ * `throw` exits via throwExits — eventually routed to the function's
+ * ErrorEnd node (UNLESS caught by an enclosing try / catch on the way
+ * out, in which case visitTry redirects this entry to the catch entry).
+ *
+ * Crucially throwExits MUST NOT be merged with returnExits or normal
+ * exits — exception flow has different downstream semantics from
+ * success flow.
+ */
 export function visitThrow(host: StatementVisitorHost, stmt: ThrowStatement): BuildResult {
   const expressionText = stmt.getExpression()?.getText();
   const label = expressionText ? `throw ${expressionText}` : 'throw';
@@ -156,5 +177,5 @@ export function visitThrow(host: StatementVisitorHost, stmt: ThrowStatement): Bu
     construct: 'throw',
   });
 
-  return { entry: id, exits: [], endExits: [id] };
+  return { entry: id, exits: [], returnExits: [], throwExits: [id] };
 }

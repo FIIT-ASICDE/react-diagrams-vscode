@@ -6,6 +6,7 @@ import {
 	ForOfStatement,
 	ForStatement,
 	IfStatement,
+	LabeledStatement,
 	Node as MorphNode,
 	ReturnStatement,
 	Statement,
@@ -19,7 +20,12 @@ import { GraphWriter } from '../graph-writer';
 import { getExpandableMeta, getHookMeta } from './metadata';
 import type { BuildResult } from './types';
 import { compactLabel, getFallthroughEdgeLabel } from './utils';
-import type { StatementVisitorHost } from './handlers/host-context';
+import type {
+	ControlContext,
+	LoopContext,
+	StatementVisitorHost,
+	SwitchContext,
+} from './handlers/host-context';
 import {
 	visitAction,
 	visitExpressionStatement,
@@ -39,7 +45,12 @@ import {
 import { visitSwitch } from './handlers/switch-flow';
 
 export class StatementVisitor implements StatementVisitorHost {
+	private readonly contextStack: ControlContext[] = [];
+	private pendingLabel: string | undefined;
+
 	constructor(public writer: GraphWriter) {}
+
+	// ── Merge / exit helpers ───────────────────────────────────────────
 
 	private createMergeForSources(sources: string[]): string | undefined {
 		const uniqueSources = [...new Set(sources)].filter(Boolean);
@@ -60,10 +71,88 @@ export class StatementVisitor implements StatementVisitorHost {
 		return mergeId ? [mergeId] : uniqueSources;
 	}
 
+	// ── Context stack API ──────────────────────────────────────────────
+
+	pushLoopContext(loopId: string): LoopContext {
+		const label = this.pendingLabel;
+		this.pendingLabel = undefined;
+
+		const ctx: LoopContext = {
+			kind: 'loop',
+			loopId,
+			label,
+			pendingBreaks: [],
+			pendingContinues: [],
+		};
+		this.contextStack.push(ctx);
+		return ctx;
+	}
+
+	pushSwitchContext(): SwitchContext {
+		const label = this.pendingLabel;
+		this.pendingLabel = undefined;
+
+		const ctx: SwitchContext = {
+			kind: 'switch',
+			label,
+			pendingBreaks: [],
+		};
+		this.contextStack.push(ctx);
+		return ctx;
+	}
+
+	popContext(): void {
+		this.contextStack.pop();
+	}
+
+	findBreakContext(label?: string): ControlContext | undefined {
+		for (let i = this.contextStack.length - 1; i >= 0; i -= 1) {
+			const ctx = this.contextStack[i];
+			if (label) {
+				if (ctx.label === label) return ctx;
+			} else {
+				return ctx;
+			}
+		}
+		return undefined;
+	}
+
+	findContinueContext(label?: string): LoopContext | undefined {
+		for (let i = this.contextStack.length - 1; i >= 0; i -= 1) {
+			const ctx = this.contextStack[i];
+			if (ctx.kind !== 'loop') continue;
+			if (label) {
+				if (ctx.label === label) return ctx;
+			} else {
+				return ctx;
+			}
+		}
+		return undefined;
+	}
+
+	setPendingLabel(label: string): void {
+		this.pendingLabel = label;
+	}
+
+	getContextStack(): readonly ControlContext[] {
+		return this.contextStack;
+	}
+
+	// ── Statement traversal ────────────────────────────────────────────
+
+	/**
+	 * Visit a sequence of statements in source order.
+	 *
+	 * Aggregates return / throw exits across all statements (they all
+	 * flow to function-level End / ErrorEnd respectively, so they're
+	 * additive). Normal `exits` are pipelined: each statement's exits
+	 * become the next statement's incoming edges.
+	 */
 	visitStatements(statements: Statement[]): BuildResult {
 		let entry: string | undefined;
 		let pendingExits: string[] = [];
-		const endExits: string[] = [];
+		const returnExits: string[] = [];
+		const throwExits: string[] = [];
 
 		for (let index = 0; index < statements.length; index += 1) {
 			if (statements[index].getKind() === SyntaxKind.ImportDeclaration) {
@@ -80,13 +169,15 @@ export class StatementVisitor implements StatementVisitorHost {
 			}
 
 			pendingExits = result.exits;
-			endExits.push(...result.endExits);
+			returnExits.push(...result.returnExits);
+			throwExits.push(...result.throwExits);
 		}
 
 		return {
 			entry,
 			exits: entry ? [...new Set(pendingExits)] : [],
-			endExits: [...new Set(endExits)],
+			returnExits: [...new Set(returnExits)],
+			throwExits: [...new Set(throwExits)],
 		};
 	}
 
@@ -108,14 +199,12 @@ export class StatementVisitor implements StatementVisitorHost {
 				sourceText = `return ${sourceText};`;
 			}
 
-			// Expandables produced by getExpandableMeta are ALL function-shaped
-			// (function decl / variable holding an arrow / return-arrow). Hooks
-			// go through getHookMeta above. So construct is always 'function' here.
 			const id = this.writer.addFlowNode('expandable', compactLabel(expandableMeta.label), {
 				sourceText,
 				construct: 'function',
+				nodeKind: expandableMeta.nodeKind,
 			});
-			return { entry: id, exits: [id], endExits: [] };
+			return { entry: id, exits: [id], returnExits: [], throwExits: [] };
 		}
 
 		switch (stmt.getKind()) {
@@ -153,10 +242,13 @@ export class StatementVisitor implements StatementVisitorHost {
 				return visitThrow(this, stmt as ThrowStatement);
 
 			case SyntaxKind.BreakStatement:
-				return this.visitTerminating(stmt as BreakStatement, 'break');
+				return this.visitBreak(stmt as BreakStatement);
 
 			case SyntaxKind.ContinueStatement:
-				return this.visitTerminating(stmt as ContinueStatement, 'continue');
+				return this.visitContinue(stmt as ContinueStatement);
+
+			case SyntaxKind.LabeledStatement:
+				return this.visitLabeled(stmt as LabeledStatement);
 
 			case SyntaxKind.Block:
 				return this.visitStatements((stmt as Block).getStatements());
@@ -166,18 +258,77 @@ export class StatementVisitor implements StatementVisitorHost {
 		}
 	}
 
+	// ── Labeled statement ──────────────────────────────────────────────
+
+	private visitLabeled(stmt: LabeledStatement): BuildResult {
+		const labelName = stmt.getLabel().getText();
+		this.pendingLabel = labelName;
+
+		const inner = stmt.getStatement();
+		const result = this.visitStatement(inner);
+
+		if (result.entry) {
+			this.tagLoopLabelIfPossible(result.entry, labelName);
+		}
+
+		this.pendingLabel = undefined;
+
+		return result;
+	}
+
+	private tagLoopLabelIfPossible(nodeId: string, labelName: string): void {
+		const writerWithNodes = this.writer as unknown as { nodes?: import('@xyflow/react').Node[] };
+		const node = writerWithNodes.nodes?.find((n) => n.id === nodeId);
+		if (!node || node.type !== 'loop') return;
+		node.data = { ...(node.data ?? {}), loopLabel: labelName };
+	}
+
+	// ── Break / continue ───────────────────────────────────────────────
+
 	/**
-	 * Render `break` / `continue` as a regular action node tagged with the
-	 * matching construct. CodeGen reads the construct, emits the keyword,
-	 * and stops traversal — no text-sniffing required.
+	 * Render `break [label]` as a regular action node tagged with
+	 * `construct: 'break'`. Register on the matching control context;
+	 * the surrounding loop / switch wires it to the right post-construct
+	 * target when popping its context.
+	 *
+	 * Outside any loop / switch (malformed source), fall back to
+	 * returnExits so the action at least terminates flow at End.
 	 */
-	private visitTerminating(stmt: BreakStatement | ContinueStatement, construct: 'break' | 'continue'): BuildResult {
+	private visitBreak(stmt: BreakStatement): BuildResult {
 		const id = this.writer.addFlowNode('action', compactLabel(stmt.getText()), {
 			sourceText: stmt.getText(),
-			construct,
+			construct: 'break',
 		});
-		return { entry: id, exits: [], endExits: [id] };
+
+		const labelName = stmt.getLabel()?.getText();
+		const ctx = this.findBreakContext(labelName);
+
+		if (!ctx) {
+			return { entry: id, exits: [], returnExits: [id], throwExits: [] };
+		}
+
+		ctx.pendingBreaks.push(id);
+		return { entry: id, exits: [], returnExits: [], throwExits: [] };
 	}
+
+	private visitContinue(stmt: ContinueStatement): BuildResult {
+		const id = this.writer.addFlowNode('action', compactLabel(stmt.getText()), {
+			sourceText: stmt.getText(),
+			construct: 'continue',
+		});
+
+		const labelName = stmt.getLabel()?.getText();
+		const ctx = this.findContinueContext(labelName);
+
+		if (!ctx) {
+			return { entry: id, exits: [], returnExits: [id], throwExits: [] };
+		}
+
+		ctx.pendingContinues.push(id);
+		return { entry: id, exits: [], returnExits: [], throwExits: [] };
+	}
+
+	// ── Branch entry ───────────────────────────────────────────────────
 
 	visitBranch(node: MorphNode): BuildResult {
 		if (MorphNode.isBlock(node)) {
@@ -191,21 +342,21 @@ export class StatementVisitor implements StatementVisitorHost {
 		return visitAction(this, node.getText());
 	}
 
+	// ── Node creation primitives ───────────────────────────────────────
+
 	createDecisionNode(label: string, sourceText: string): string {
-		// `construct` is set by callers (visitIf / visitSwitch / visitTry).
 		return this.writer.addFlowNode('decision', label, { sourceText });
 	}
 
 	createLoopNode(label: string, sourceText: string): string {
-		// `construct` is set by callers (visitWhile / visitFor / visitForEachLike / etc.).
 		return this.writer.addFlowNode('loop', label, { sourceText });
 	}
 
 	connectLoopBackEdges(exits: string[], loopId: string, _innerDecisionCount: number): void {
 		const uniqueExits = [...new Set(exits)].filter((exit) => exit && exit !== loopId);
-
 		for (const exit of uniqueExits) {
-			this.writer.addEdge(exit, loopId, '', true);
+			const label = getFallthroughEdgeLabel(exit) ?? '';
+			this.writer.addEdge(exit, loopId, label, true);
 		}
 	}
 

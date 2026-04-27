@@ -9,36 +9,23 @@ import {
 	getOutgoingEdges,
 	getPrimaryNext,
 } from "../graph/traversal";
+import type { Construct } from "../shared/construct";
 
 // ─── Types ────────────────────────────────────────────────────────────────
-
-type Construct =
-	| "if"
-	| "switch"
-	| "try"
-	| "while"
-	| "do-while"
-	| "for"
-	| "for-of"
-	| "for-in"
-	| "foreach"
-	| "function"
-	| "hook"
-	| "return"
-	| "throw"
-	| "break"
-	| "continue";
 
 type AnyNodeData = {
 	label?: unknown;
 	sourceText?: unknown;
 	construct?: unknown;
+	loopLabel?: unknown;
+	loopKind?: unknown;
 	forHeader?: unknown;
 	forOfBinding?: unknown;
 	forEachIterable?: unknown;
 	forEachCallee?: unknown;
 	forEachParams?: unknown;
 	deps?: unknown;
+	originalSource?: unknown;
 };
 
 const getData = (node: Node): AnyNodeData => (node.data as AnyNodeData | undefined) ?? {};
@@ -111,20 +98,6 @@ export class CodeGenerator {
 
 	// ── Core traversal ─────────────────────────────────────────────────────
 
-	/**
-	 * Dispatch order:
-	 *
-	 *   1. Skip / loop guards (suppressed nodes, recursion limits, etc.)
-	 *   2. data.construct — the canonical "what does this node represent"
-	 *      tag. Set by the parser, set by the playground UI; covers
-	 *      every control-flow construct we know how to emit.
-	 *   3. node.type fallback — for nodes that don't carry a construct
-	 *      (typically plain action statements, merges, starts, ends).
-	 *
-	 * No more "is this a try? let me look at the outgoing edge labels"
-	 * heuristic. No more "is this a switch? let me count case labels".
-	 * The parser tells us, the UI tells us, we just read the field.
-	 */
 	private visit(node: Node, level: number, stopAt?: string, localVisited: Set<string> = new Set()): void {
 		this.depth += 1;
 		if (this.depth > this.maxDepth) {
@@ -160,7 +133,6 @@ export class CodeGenerator {
 
 			const construct = getConstruct(node);
 
-			// 1) Construct-driven dispatch — single source of truth.
 			if (construct) {
 				switch (construct) {
 					case "try":
@@ -193,8 +165,6 @@ export class CodeGenerator {
 				}
 			}
 
-			// 2) Type-based fallback — unmarked nodes still need to do
-			//    something sensible.
 			switch (node.type) {
 				case "merge":
 				case "initial":
@@ -205,13 +175,14 @@ export class CodeGenerator {
 					this.emitExpandable(node, id, level, stopAt, localVisited);
 					return;
 				case "decision":
-					// Untagged decision → assume `if`.
 					this.emitIf(node, id, level, stopAt, localVisited);
 					return;
-				case "loop":
-					// Untagged loop → assume `while`.
-					this.emitLoop(node, id, "while", level, stopAt, localVisited);
+				case "loop": {
+					// Fall back to legacy `loopKind` field if `construct` missing.
+					const loopKind = getStr(getData(node).loopKind) as Construct | "";
+					this.emitLoop(node, id, (loopKind || "while") as Construct, level, stopAt, localVisited);
 					return;
+				}
 				case "action":
 				default:
 					this.emitAction(node, id, level, stopAt, localVisited);
@@ -261,7 +232,7 @@ export class CodeGenerator {
 		}
 	}
 
-	// ── Expandable (function / hook) ───────────────────────────────────────
+	// ── Expandable ─────────────────────────────────────────────────────────
 
 	private emitExpandable(node: Node, id: string, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
 		const data = getData(node);
@@ -286,18 +257,11 @@ export class CodeGenerator {
 			this.code += `${indent(level)}${text}\n`;
 		}
 
-		// Even untagged actions can be terminating — e.g. legacy diagrams
-		// where construct wasn't set. Fallback regex keeps those working.
 		if (this.terminatesByText(text)) return;
 
 		this.continueFrom(id, level, stopAt, localVisited);
 	}
 
-	/**
-	 * Emit a terminating action (return / throw / break / continue) and
-	 * stop traversal. The construct tag tells us we terminate; we don't
-	 * need to look at the text to find out.
-	 */
 	private emitTerminatingAction(node: Node, level: number): void {
 		const data = getData(node);
 		const text = getStr(data.sourceText).trim() || sanitizeStatement(getStr(data.label).trim());
@@ -308,7 +272,6 @@ export class CodeGenerator {
 		}
 	}
 
-	/** Fallback for actions without an explicit terminating construct. */
 	private terminatesByText(statement: string): boolean {
 		const s = statement.trim();
 		return /^return\b/.test(s) || /^throw\b/.test(s) || /^break\b/.test(s) || /^continue\b/.test(s);
@@ -321,14 +284,6 @@ export class CodeGenerator {
 		return n === "exception" || n === "catch" || n === "error";
 	}
 
-	/**
-	 * Emit a try/catch[/finally] from a `construct: 'try'` decision node.
-	 *
-	 * The decision has two outgoing edges: an unlabeled (or `try`) edge
-	 * to the try body, and an `exception` edge to the catch body. We
-	 * walk both into a join, suppress the subgraph so it isn't visited
-	 * again as part of the outer flow, then continue past the join.
-	 */
 	private emitTry(node: Node, id: string, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
 		const outgoing = getOutgoingEdges(this.edges, id);
 		const exceptionEdge = outgoing.find((e) => this.isExceptionEdgeLabel(e.label));
@@ -362,8 +317,8 @@ export class CodeGenerator {
 		const data = getData(node);
 		const condition = (getStr(data.sourceText).trim() || getStr(data.label).trim() || "condition");
 
-		const yesEdge = this.pickEdge(outgoing, ["yes", "next"]);
-		const noEdge = this.pickEdge(outgoing, ["no", "done"])
+		const yesEdge = this.pickEdge(outgoing, ["yes", "true", "next"]);
+		const noEdge = this.pickEdge(outgoing, ["no", "false", "done"])
 			?? outgoing.find((e) => e !== yesEdge);
 
 		const yesTarget = yesEdge ? String(yesEdge.target) : undefined;
@@ -390,18 +345,6 @@ export class CodeGenerator {
 
 	// ── Switch ─────────────────────────────────────────────────────────────
 
-	/**
-	 * Parse one outgoing edge's label into one or more case headers.
-	 *
-	 *   "case 1"                  → ["case 1:"]
-	 *   "case 1, 2"               → ["case 1:", "case 2:"]
-	 *   "case 1, 2, default"      → ["case 1:", "case 2:", "default:"]
-	 *   "default"                 → ["default:"]
-	 *
-	 * Bare comma-separated values after the first one are interpreted as
-	 * additional case labels in the same group (the source had `case 1:
-	 * case 2:` etc. sharing a body).
-	 */
 	private parseSwitchLabels(rawLabel: unknown): string[] {
 		const text = stringifyLabel(rawLabel).trim();
 		if (!text) return [];
@@ -459,19 +402,6 @@ export class CodeGenerator {
 
 	// ── Loops ──────────────────────────────────────────────────────────────
 
-	/**
-	 * Loop emission contract:
-	 *
-	 *   - The loop NODE carries metadata (construct, plus type-specific
-	 *     fields like forHeader / forOfBinding / forEachIterable). It
-	 *     NEVER carries the body. The body lives in the graph as ordinary
-	 *     action / decision / loop nodes connected by a `yes` / `each`
-	 *     edge from the loop, with a back-edge to the loop.
-	 *
-	 *   - This dispatcher reads `construct` and reconstructs the
-	 *     appropriate syntax. The body is always traversed via
-	 *     emitLoopBody.
-	 */
 	private emitLoop(node: Node, id: string, construct: Construct, level: number, stopAt: string | undefined, localVisited: Set<string>): void {
 		if (this.activeLoopHeaders.has(id)) return;
 		this.activeLoopHeaders.add(id);
@@ -480,11 +410,18 @@ export class CodeGenerator {
 			const data = getData(node);
 			const sourceText = getStr(data.sourceText).trim();
 			const label = getStr(data.label).trim();
+			const loopLabel = getStr(data.loopLabel).trim();
 
 			const outgoing = getOutgoingEdges(this.edges, id);
-			const bodyEdge = this.pickEdge(outgoing, ["yes", "each", "body", "next"]);
-			const exitEdge = this.pickEdge(outgoing, ["no", "done", "exit"])
+			const bodyEdge = this.pickEdge(outgoing, ["yes", "each", "true", "body", "next"]);
+			const exitEdge = this.pickEdge(outgoing, ["no", "false", "done", "exit"])
 				?? outgoing.find((e) => String(e.target) !== String(bodyEdge?.target));
+
+			// `outerLabel:` line goes BEFORE the loop, so `break outer;`
+			// inside any nested context resolves correctly at runtime.
+			if (loopLabel) {
+				this.code += `${indent(level)}${loopLabel}:\n`;
+			}
 
 			switch (construct) {
 				case "foreach":
@@ -570,8 +507,6 @@ export class CodeGenerator {
 		const bodyNode = this.nodeById.get(String(bodyEdge.target));
 		if (bodyNode) this.visit(bodyNode, level, stopAt, new Set());
 	}
-
-	// ── Edge picking ───────────────────────────────────────────────────────
 
 	private pickEdge(outgoing: Edge[], preferredLabels: string[]): Edge | undefined {
 		const labeled = findLabeledEdge(outgoing, preferredLabels);

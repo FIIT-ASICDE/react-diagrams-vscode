@@ -1,17 +1,11 @@
-import { Node as MorphNode, Statement, SwitchStatement, SyntaxKind } from 'ts-morph';
+import { Statement, SwitchStatement, SyntaxKind } from 'ts-morph';
 import { compactLabel, getFallthroughEdgeLabel } from '../utils';
 import type { BuildResult } from '../types';
 import type { StatementVisitorHost } from './host-context';
 
 interface SwitchCaseGroup {
-  /** Case / default labels that share this group's body. */
   labels: string[];
-
-  /** Statements inside the group's clause(s), break/continue included. */
   clauseStatements: Statement[];
-
-  /** Whether the body ends with a `break` (control leaves the switch). */
-  hasBreak: boolean;
 }
 
 function setNodeData(host: StatementVisitorHost, nodeId: string, extra: Record<string, unknown>): void {
@@ -26,13 +20,16 @@ function setNodeData(host: StatementVisitorHost, nodeId: string, extra: Record<s
  * Build a switch as a normal-flow subgraph.
  *
  *   - decision node holds the switch expression, tagged construct: 'switch'
- *   - one outgoing edge per case GROUP (a group is the set of `case X:` /
- *     `default:` labels that share a body); the edge's label is a
- *     comma-separated list of those labels, e.g. `"case 1, 2, default"`
+ *   - one outgoing edge per case GROUP; the edge label is the group's
+ *     case labels comma-separated, e.g. `"case 1, 2, default"`
  *   - case bodies render through the regular statement visitor — `break`
- *     is a regular action node with its own `construct: 'break'`
- *   - fall-through groups wire their exits into the next group's entry
- *   - all final exits join at a single merge that is the switch's exit
+ *     becomes an action node tagged construct: 'break' AND registers
+ *     itself on the switch's break-context, so we don't have to detect
+ *     break-vs-fallthrough here. After visiting all bodies we collect
+ *     pendingBreaks from the context and wire them to the post-switch
+ *     merge.
+ *   - groups whose body has natural fall-through exits (no break) wire
+ *     those into the next group's entry
  */
 export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): BuildResult {
   const expressionText = stmt.getExpression().getText();
@@ -53,84 +50,78 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
 
     const clauseStatements = clause.getStatements();
     if (clauseStatements.length > 0) {
-      groups.push({
-        labels: pendingLabels,
-        clauseStatements,
-        hasBreak: clauseStatements.some(containsBreakForCurrentSwitch),
-      });
+      groups.push({ labels: pendingLabels, clauseStatements });
       pendingLabels = [];
     }
   }
 
-  // Trailing label-only clauses (e.g. `case 5:` with no body).
   if (pendingLabels.length > 0) {
-    groups.push({
-      labels: pendingLabels,
-      clauseStatements: [],
-      hasBreak: true,
-    });
+    groups.push({ labels: pendingLabels, clauseStatements: [] });
   }
 
   if (groups.length === 0) {
-    return { entry: decisionId, exits: [decisionId], endExits: [] };
+    return { entry: decisionId, exits: [decisionId], returnExits: [], throwExits: [] };
   }
 
-  // ── Phase 2: render bodies ────────────────────────────────────────────
+  // ── Phase 2: render bodies under a shared switch context ──────────────
+
+  const ctx = host.pushSwitchContext();
 
   type RenderedGroup = {
     labels: string[];
     entry?: string;
-    exits: string[];
     fallthrough: string[];
-    endExits: string[];
+    returnExits: string[];
+    throwExits: string[];
   };
 
-  const rendered: RenderedGroup[] = groups.map((group) => {
-    if (group.clauseStatements.length === 0) {
-      return { labels: group.labels, entry: undefined, exits: [], fallthrough: [], endExits: [] };
-    }
+  let rendered: RenderedGroup[];
 
-    const result = host.visitStatementsInline(group.clauseStatements);
+  try {
+    rendered = groups.map((group) => {
+      if (group.clauseStatements.length === 0) {
+        return {
+          labels: group.labels,
+          entry: undefined,
+          fallthrough: [],
+          returnExits: [],
+          throwExits: [],
+        };
+      }
 
-    if (group.hasBreak) {
+      const result = host.visitStatementsInline(group.clauseStatements);
+
+      // result.exits are now ONLY the natural fall-through exits.
+      // `break` actions inside the body returned exits: [], so the
+      // visitor never collected them — they're on ctx.pendingBreaks.
       return {
         labels: group.labels,
         entry: result.entry,
-        exits: result.exits,
-        fallthrough: [],
-        endExits: result.endExits,
+        fallthrough: result.exits,
+        returnExits: result.returnExits,
+        throwExits: result.throwExits,
       };
-    }
-
-    return {
-      labels: group.labels,
-      entry: result.entry,
-      exits: [],
-      fallthrough: result.exits,
-      endExits: result.endExits,
-    };
-  });
+    });
+  } finally {
+    host.popContext();
+  }
 
   // ── Phase 3: connect ──────────────────────────────────────────────────
 
+  // We need a merge if any case will produce flow that needs to land
+  // somewhere after the switch:
+  //   - empty (label-only) groups need somewhere to land
+  //   - pending breaks need somewhere to land
+  //   - a group with fall-through but no next group needs somewhere too
   const needsMerge = rendered.some((group, index) => {
-    if (!group.entry) {
-      return true;
-    }
-
-    if (group.exits.length > 0) {
-      return true;
-    }
-
-    if (group.fallthrough.length > 0 && !findNextGroupEntry(rendered, index)) {
-      return true;
-    }
-
+    if (!group.entry) return true;
+    if (group.fallthrough.length > 0 && !findNextGroupEntry(rendered, index)) return true;
     return false;
-  });
+  }) || ctx.pendingBreaks.length > 0;
 
   const mergeId = needsMerge ? host.writer.addFlowNode('merge', '') : undefined;
-  const allEndExits: string[] = [];
+  const allReturnExits: string[] = [];
+  const allThrowExits: string[] = [];
 
   for (let index = 0; index < rendered.length; index += 1) {
     const group = rendered[index];
@@ -145,12 +136,6 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
 
     host.writer.addEdge(decisionId, group.entry, edgeLabel, false);
 
-    for (const exit of group.exits) {
-      if (mergeId) {
-        host.writer.addEdge(exit, mergeId);
-      }
-    }
-
     if (group.fallthrough.length > 0) {
       const nextEntry = findNextGroupEntry(rendered, index);
       const target = nextEntry ?? mergeId;
@@ -162,13 +147,21 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
       }
     }
 
-    allEndExits.push(...group.endExits);
+    allReturnExits.push(...group.returnExits);
+    allThrowExits.push(...group.throwExits);
+  }
+
+  if (mergeId) {
+    for (const breakId of ctx.pendingBreaks) {
+      host.writer.addEdge(breakId, mergeId);
+    }
   }
 
   return {
     entry: decisionId,
     exits: mergeId ? [mergeId] : [],
-    endExits: [...new Set(allEndExits)],
+    returnExits: [...new Set(allReturnExits)],
+    throwExits: [...new Set(allThrowExits)],
   };
 }
 
@@ -190,30 +183,4 @@ function findNextGroupEntry(groups: { entry?: string }[], fromIndex: number): st
     if (groups[i].entry) return groups[i].entry;
   }
   return undefined;
-}
-
-function containsBreakForCurrentSwitch(node: MorphNode): boolean {
-  if (node.getKind() === SyntaxKind.BreakStatement) {
-    return true;
-  }
-
-  // Don't descend into nested loops / switches — their breaks belong to them.
-  if (
-    MorphNode.isSwitchStatement(node) ||
-    MorphNode.isForStatement(node) ||
-    MorphNode.isForInStatement(node) ||
-    MorphNode.isForOfStatement(node) ||
-    MorphNode.isWhileStatement(node) ||
-    MorphNode.isDoStatement(node)
-  ) {
-    return false;
-  }
-
-  for (const child of node.getChildren()) {
-    if (containsBreakForCurrentSwitch(child)) {
-      return true;
-    }
-  }
-
-  return false;
 }

@@ -50,7 +50,24 @@ export function DiagramCanvas({
 	onEdgesChange,
 	onConnect,
 }: DiagramCanvasProps) {
+	const debugGraphJson = JSON.stringify({ nodes, edges }, null, 2);
+
 	return (
+		<>
+		<pre
+			style={{
+				maxHeight: 240,
+				overflow: 'auto',
+				padding: '8px 10px',
+				margin: 0,
+				backgroundColor: '#f7f7f7',
+				borderBottom: '1px solid #ddd',
+				fontSize: 11,
+				lineHeight: 1.35,
+			}}
+		>
+			{debugGraphJson}
+		</pre>
 		<ReactFlow
 			className="download-image"
 			nodes={nodes}
@@ -84,5 +101,6 @@ export function DiagramCanvas({
 				color={isPlayground ? 'rgba(0, 0, 0, 0.68)' : 'rgb(233, 233, 233)'}
 			/>
 		</ReactFlow>
+		</>
 	);
 }

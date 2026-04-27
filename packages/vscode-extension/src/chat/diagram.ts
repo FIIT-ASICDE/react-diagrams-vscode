@@ -82,7 +82,6 @@ async function handleChatRequest(
   }
 
   const tools = collectAvailableTools(context);
-
   const finalText = await runAgenticLoop({
     model, tools, snapshot, context, focus, request, token, stream,
   });

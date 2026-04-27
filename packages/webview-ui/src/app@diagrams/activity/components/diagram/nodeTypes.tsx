@@ -15,6 +15,8 @@ type NodeData = {
 	label?: string;
 	color?: string;
 	deps?: string;
+	sourceText?: string;
+	construct?: string;
 	previewWidth?: number;
 	previewHeight?: number;
 };
@@ -34,6 +36,17 @@ type NodeProps = {
 	isConnectable: boolean;
 };
 
+function isDangerAction(data: NodeData): boolean {
+	const construct = String(data.construct ?? '').toLowerCase();
+	if (construct === 'return' || construct === 'throw' || construct === 'break' || construct === 'continue') {
+		return true;
+	}
+
+	const statement = String(data.sourceText ?? data.label ?? '').trim().toLowerCase();
+	return /^(return|throw|break|continue)\b/.test(statement)
+		|| /^catch\b/.test(statement);
+}
+
 // ─── Reusable shell ─────────────────────────────────────────────────────────
 
 function NodeShell({ children }: { children: React.ReactNode }) {
@@ -42,14 +55,24 @@ function NodeShell({ children }: { children: React.ReactNode }) {
 
 // ─── Stadium-shape nodes (action / expandable) ──────────────────────────────
 
-const ActionNode = memo(({ data, isConnectable }: NodeProps) => (
-	<NodeShell>
-		<NodeHandles isConnectable={isConnectable} config={HANDLE_CONFIGS.flowOnly} />
-		<div style={{ ...nodeStyles.action, background: data.color ?? nodeStyles.action.background }}>
-			{getRenderedNodeLabel(data, 'Action')}
-		</div>
-	</NodeShell>
-));
+const ActionNode = memo(({ data, isConnectable }: NodeProps) => {
+	const danger = isDangerAction(data);
+
+	return (
+		<NodeShell>
+			<NodeHandles isConnectable={isConnectable} config={HANDLE_CONFIGS.flowOnly} />
+			<div
+				style={{
+					...nodeStyles.action,
+					...(danger ? nodeStyles.actionDanger : null),
+					background: data.color ?? (danger ? nodeStyles.actionDanger.background : nodeStyles.action.background),
+				}}
+			>
+				{getRenderedNodeLabel(data, 'Action')}
+			</div>
+		</NodeShell>
+	);
+});
 
 const ExpandableNode = memo(({ data, isConnectable }: NodeProps) => (
 	<NodeShell>
@@ -76,12 +99,18 @@ function DiamondLabelNode({
 	data,
 	isConnectable,
 	defaultLabel,
-}: NodeProps & { defaultLabel: string }) {
+	diamondStyle,
+}: NodeProps & { defaultLabel: string; diamondStyle: { fill: string; stroke: string } }) {
 	return (
 		<NodeShell>
 			<NodeHandles isConnectable={isConnectable} config={HANDLE_CONFIGS.decision} />
 			<div style={nodeStyles.decisionWrap}>
-				<Diamond width={NODE_WRAPPER_WIDTH} height={DECISION_HEIGHT} />
+				<Diamond
+					width={NODE_WRAPPER_WIDTH}
+					height={DECISION_HEIGHT}
+					fill={diamondStyle.fill}
+					stroke={diamondStyle.stroke}
+				/>
 				<div style={nodeStyles.decisionLabel}>{getRenderedNodeLabel(data, defaultLabel)}</div>
 			</div>
 		</NodeShell>
@@ -89,11 +118,11 @@ function DiamondLabelNode({
 }
 
 const DecisionNode = memo((props: NodeProps) => (
-	<DiamondLabelNode {...props} defaultLabel="Decision" />
+	<DiamondLabelNode {...props} defaultLabel="Decision" diamondStyle={nodeStyles.decisionDiamond} />
 ));
 
 const LoopNode = memo((props: NodeProps) => (
-	<DiamondLabelNode {...props} defaultLabel="Loop" />
+	<DiamondLabelNode {...props} defaultLabel="Loop" diamondStyle={nodeStyles.loopDiamond} />
 ));
 
 // ─── Small-shape nodes (merge / initial / final) ────────────────────────────
@@ -102,7 +131,12 @@ const MergeNode = memo(({ isConnectable }: NodeProps) => (
 	<NodeShell>
 		<NodeHandles isConnectable={isConnectable} config={HANDLE_CONFIGS.mergeSmallShape} />
 		<div style={nodeStyles.smallShapeWrap}>
-			<Diamond width={MERGE_DIAMOND_SIZE} height={MERGE_DIAMOND_SIZE} />
+			<Diamond
+				width={MERGE_DIAMOND_SIZE}
+				height={MERGE_DIAMOND_SIZE}
+				fill={nodeStyles.mergeDiamond.fill}
+				stroke={nodeStyles.mergeDiamond.stroke}
+			/>
 		</div>
 	</NodeShell>
 ));

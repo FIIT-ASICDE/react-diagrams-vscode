@@ -35,8 +35,8 @@ addEdge(source: string, target: string, label?: string, isBackEdge = false): voi
     label,
     type: isBackEdge ? 'back' : 'default',   // ← 'default' instead of 'smoothstep'
     style: isBackEdge
-      ? { strokeDasharray: '6 4', stroke: '#024105' }
-      : { stroke: 'rgb(0, 5, 71)', strokeWidth: 1 },
+      ? { strokeDasharray: '6 4', stroke: '#5c0202' }
+      : { stroke: 'rgb(0, 0, 0)', strokeWidth: 1 },
     markerEnd: {
       type: 'arrowclosed',
       color: '#000000',
