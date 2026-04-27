@@ -10,6 +10,11 @@ export function activate(context: ExtensionContext) {
 		ComponentStatePanel.render(context.extensionUri);
 	});
 
+	const requestStateDiagramImage = commands.registerCommand("vs-code-ext.requestStateDiagramImage", () => {
+		if (!ComponentStatePanel.current?.requestCurrentDiagramImage())
+			window.showWarningMessage("Component State Panel is rquired to be opened and visible to generate the state diagram image.");
+	});
+
 	const showActivityCommand = commands.registerCommand("vs-code-ext.componentActivity", () => {
 		ComponentActivityPanel.render(context.extensionUri);
 	});
@@ -40,7 +45,7 @@ export function activate(context: ExtensionContext) {
 	// const diagramChatParticipant = registerDiagramChatParticipant(context);
 
 	const autoRestartInDev = setupAutoRestartInDevelopment(context);
-	context.subscriptions.push(showComponentStateDiagram, refreshCurrentPanelOnSave, showActivityCommand, /*diagramChatParticipant,*/ settingsChange, autoRestartInDev);
+	context.subscriptions.push(showComponentStateDiagram, requestStateDiagramImage, refreshCurrentPanelOnSave, showActivityCommand, /*diagramChatParticipant,*/ settingsChange, autoRestartInDev);
 }
 
 function setupAutoRestartInDevelopment(context: ExtensionContext) {

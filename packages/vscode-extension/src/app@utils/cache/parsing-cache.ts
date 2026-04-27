@@ -1,5 +1,8 @@
 import { TextDocument, workspace } from "vscode";
 import { normalizeFilePath } from "../index";
+import MIMEType from "whatwg-mimetype";
+
+export type MimeType = MIMEType | string;
 
 export function getRootPath(targetDocument?: TextDocument) {
 	if (!targetDocument)
@@ -78,7 +81,7 @@ export class ParsingCache<T = any> {
 }
 
 export type ImageCacheEntry = CacheEntry<Uint8Array, Uint8Array> & {
-	mediaType: string;
+	mimeType: MimeType;
 };
 
 export class ParsingImageCache<T = any> extends ParsingCache<T> {
@@ -98,7 +101,7 @@ export class ParsingImageCache<T = any> extends ParsingCache<T> {
 		this.images.clear();
 	}
 
-	updateImageEntry(document: TextDocument, data: Uint8Array, mediaType = "image/png", forceUpdate = false) {
+	updateImageEntry(document: TextDocument, data: Uint8Array, mimeType: MimeType = "image/png", forceUpdate = false) {
 		const existing = forceUpdate && this.getImage(document);
 		if (existing)
 			return existing;
@@ -108,7 +111,7 @@ export class ParsingImageCache<T = any> extends ParsingCache<T> {
 			data,
 			documentVersion: document.version,
 			document,
-			mediaType,
+			mimeType,
 			updatedAt: Date.now(),
 		};
 
@@ -116,8 +119,8 @@ export class ParsingImageCache<T = any> extends ParsingCache<T> {
 		return entry;
 	}
 
-	updateImage(document: TextDocument, data: Uint8Array, mediaType = "image/png", forceUpdate = false) {
-		return this.updateImageEntry(document, data, mediaType, forceUpdate).data;
+	updateImage(document: TextDocument, data: Uint8Array, mimeType: MimeType = "image/png", forceUpdate = false) {
+		return this.updateImageEntry(document, data, mimeType, forceUpdate).data;
 	}
 
 	getImage(filePath: TextDocument | string | undefined = this.getCurrentDocument()) {

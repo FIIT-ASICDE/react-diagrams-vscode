@@ -191,14 +191,14 @@ const NODE_COLORS = {
 	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 75, blockedHueRanges: [ [350, 20] ] })} 88%, transparent)`,
 };
 
-export function getNodeColor(type: string, text: string) {
+export function getNodeColor(type: string, text: string): string {
 	const clr = NODE_COLORS[type]
 	if (clr)
 		return typeof clr == 'function' ? clr(text) : clr;
 	return NODE_COLORS.neutral;
 }
 
-export function getGraphNodeVisual(graphNode): { type: string; data: any } {
+export function getGraphNodeVisual(graphNode) {
 	if (graphNode.nodeType == 'state-update') {
 		return {
 			type: 'stateUpdateNode',

@@ -1,7 +1,7 @@
 import { Disposable, TextDocument, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
 import { getConfigOption, getNonce, getUri, jumpToPosition, saveDiagramImage } from "../app@utils";
 import { basename, extname } from "path";
-import { componentStateCache, getRootPath } from "../app@utils/cache";
+import { componentStateCache, getRootPath, ImageCacheEntry } from "../app@utils/cache";
 
 export class ComponentStatePanel {
 	public static readonly NAME = "Component State";
@@ -15,6 +15,9 @@ export class ComponentStatePanel {
 	private disposables: Disposable[] = [];
 	// private currentFilePath?: string;
 	private refreshRequestId = 0;
+
+	private pendingImageRequest?: Promise<ImageCacheEntry | undefined>;
+	private pendingImageRequestResolve?: (value: ImageCacheEntry | undefined) => void;
 
 	/**
 	 * The ComponentStatePanel class private constructor (called only from the render method).
@@ -65,7 +68,7 @@ export class ComponentStatePanel {
 	}
 
 	public static updateCache(document?: TextDocument, forceUpdate?) {
-		const result = ComponentStatePanel.doCommonChecksAndGet(document);
+		const result = ComponentStatePanel.doCommonChecksAndGetDoc(document);
 		if (!result)
 			return;
 
@@ -81,7 +84,7 @@ export class ComponentStatePanel {
 	// }
 
 	public async refresh(document?: TextDocument, forceUpdate?) {
-		const result = ComponentStatePanel.doCommonChecksAndGet(document);
+		const result = ComponentStatePanel.doCommonChecksAndGetDoc(document);
 		if (!result)
 			return;
 		const { activeFilePath, rootPath, targetDocument } = result;
@@ -126,10 +129,23 @@ export class ComponentStatePanel {
 	}
 
 	public postMessage(type: string, data?) {
-		this.panel.webview.postMessage({ type, data });
+		return this.panel.webview.postMessage({ type, data });
 	}
 
-	public static doCommonChecksAndGet(doc?: TextDocument) {
+	public requestCurrentDiagramImage(saveToDisk = true) {
+		if (!this.panel.visible)
+			return null;
+		if (this.pendingImageRequest)
+			return this.pendingImageRequest;
+
+		const { promise, resolve } = Promise.withResolvers<ImageCacheEntry | undefined>();
+		this.pendingImageRequest = promise;
+		this.pendingImageRequestResolve = resolve;
+		this.postMessage("requestDiagramImage", { saveToDisk });
+		return this.pendingImageRequest;
+	}
+
+	public static doCommonChecksAndGetDoc(doc?: TextDocument) {
 		const targetDocument = doc ?? window.activeTextEditor?.document;
 		if (!targetDocument) {
 			window.showWarningMessage("No active editor found. Open a React component file first.");
@@ -210,10 +226,10 @@ export class ComponentStatePanel {
 
 	private webviewMessageListener(message: any) {
 		const { type, data } = message;
+		console.debug("Message received from webview:", type, data);
 
 		switch (type) {
 			case "refresh":
-				console.debug("Refresh requested from webview");
 				void this.refresh(componentStateCache.getCurrentDocument());
 				return;
 			case "nodeDblClick":
@@ -226,7 +242,14 @@ export class ComponentStatePanel {
 				return;
 
 			case "onDiagramImage":
-				void saveDiagramImage(data, componentStateCache);
+				const { targetDocument } = ComponentStatePanel.doCommonChecksAndGetDoc(componentStateCache.getCurrentDocument()) ?? {};
+				if (!targetDocument)
+					return;
+
+				saveDiagramImage(targetDocument, data, componentStateCache, data?.saveToDisk).then(this.pendingImageRequestResolve).finally(() => {
+					this.pendingImageRequestResolve = undefined;
+					this.pendingImageRequest = undefined;
+				});
 				return;
 		}
 	}

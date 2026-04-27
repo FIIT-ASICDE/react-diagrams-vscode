@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Background, Controls, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState, useReactFlow, type Edge, type Node } from '@xyflow/react';
 import { nodeTypes } from './rendering/nodes';
 import { edgeTypes } from './rendering/edges';
@@ -6,6 +6,7 @@ import { renderXyFlow, type StateDiagramProps } from './rendering/render';
 import { downloadDiagramImage, snapdomToPngDataUrl } from '@/app@utils/utils';
 import { VSCodeButton } from "@vscode/webview-ui-toolkit/react";
 import { vscode } from '@/app@vscode/api';
+import type { Message } from '@react-diagrams/core/app@vscode';
 // import { toPng } from 'html-to-image';
 
 const fitToViewOptions = { padding: 0.025, duration: 100 };
@@ -52,9 +53,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 			}
 		});
 
-		return () => {
-			cancelled = true;
-		};
+		return () => { cancelled = true };
 	}, [model]);
 
 	useEffect(() => {
@@ -65,22 +64,37 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		vscode.postMessage("nodeDblClick", { data: { ...node.data, name: undefined, children: undefined } });
 	}
 
-	let pendingImgRequest: Promise<string | null> | null = null;
-	const onDiagramImage = async () => { 
+	let pendingImgRequest = useRef<Promise<string | null> | null>(null);
+	const onDiagramImage = useCallback(async (saveToDisk = true) => { 
+		console.debug("Image requested", saveToDisk);
 		if (cachedImage) {
-			vscode.postMessage("onDiagramImage", { dataUrl: cachedImage });
+			vscode.postMessage("onDiagramImage", { dataUrl: cachedImage, saveToDisk });
 			return;
 		}
 
 		try {
-			const dataUrl = await (pendingImgRequest ?? (pendingImgRequest = downloadDiagramImage(nodes, snapdomToPngDataUrl)));
+			const dataUrl = await (pendingImgRequest.current ?? (pendingImgRequest.current = downloadDiagramImage(nodes, snapdomToPngDataUrl)));
 			setCachedImage(dataUrl);
-			vscode.postMessage("onDiagramImage", { dataUrl }) 
+			vscode.postMessage("onDiagramImage", { dataUrl, saveToDisk });
+		}
+		catch (error) {
+			console.error("Download failed", error);
 		}
 		finally {
-			pendingImgRequest = null;
+			pendingImgRequest.current = null;
 		}
-	}
+	}, [nodes, cachedImage]);
+
+	useEffect(() => {
+		const onMessage = (event: MessageEvent<Message>) => {
+			// console.debug("Received message", event.data.data);
+			if (event.data?.type == 'requestDiagramImage')
+				void onDiagramImage(event.data.data?.saveToDisk);
+		};
+
+		window.addEventListener('message', onMessage);
+		return () => window.removeEventListener('message', onMessage);
+	}, [onDiagramImage]);
 
 	return (
 		<div className="h-full w-full">
@@ -109,7 +123,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 				{hasModel && <>
 					<VSCodeButton
 						className={`z-10 absolute left-2.25 top-2.5 scale-[0.8]`}
-						onClick={onDiagramImage}
+						onClick={() => onDiagramImage(true)}
 					>
 						Image
 					</VSCodeButton>

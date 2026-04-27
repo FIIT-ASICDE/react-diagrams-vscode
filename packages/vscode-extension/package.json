@@ -29,6 +29,10 @@
         "title": "React Component State"
       },
       {
+        "command": "vs-code-ext.requestStateDiagramImage",
+        "title": "Request State Diagram Image"
+      },
+      {
         "command": "vs-code-ext.componentActivity",
         "title": "React Component Activity"
       }

@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { basename, dirname, extname, normalize } from "path";
-import vscode, { Position, Selection, TextDocumentShowOptions, TextEditorRevealType, Uri, Webview, window, workspace } from "vscode";
+import vscode, { Position, Selection, TextDocument, TextDocumentShowOptions, TextEditorRevealType, Uri, Webview, window, workspace } from "vscode";
 import { ParsingImageCache } from "./cache";
 import decodeDataUrl from "data-urls";
 
@@ -43,20 +43,17 @@ export function getConfigOption<T>(section: string, key: string, defaultValue?: 
 	return [defaultValue ? config.get<T>(key, defaultValue) : config.get<T>(key), config] as const;
 }
 
-export async function saveDiagramImage(data: { dataUrl?: string; }, cache: ParsingImageCache) {
-	const document = cache.getCurrentDocument();
-	if (!document) {
-		window.showWarningMessage("No active React component file found for this diagram image.");
+export async function saveDiagramImage(document: TextDocument, data: { dataUrl?: string; }, cache: ParsingImageCache, saveToDisk = true) {
+	const image = decodeDataUrl(data.dataUrl ?? "");
+	if (!image) {
+		window.showWarningMessage("Could not parse the data to create the diagram image.");
 		return;
 	}
 	
-	const image = decodeDataUrl(data.dataUrl ?? "");
-	if (!image) {
-		window.showWarningMessage("Could not create the diagram image.");
-		return;
-	}
+	const cachedImage = cache.updateImageEntry(document, image.body, image.mimeType);
+	if (!saveToDisk)
+		return cachedImage;
 
-	const cachedImage = cache.updateImage(document, image.body, image.mimeType.toString());
 	const fileName = `${basename(document.uri.fsPath, extname(document.uri.fsPath))}.state-diagram.png`;
 	const defaultUri = Uri.joinPath(Uri.file(dirname(document.uri.fsPath)), fileName);
 	const targetUri = await window.showSaveDialog({
@@ -67,8 +64,9 @@ export async function saveDiagramImage(data: { dataUrl?: string; }, cache: Parsi
 	});
 
 	if (!targetUri)
-		return;
+		return cachedImage;
 
-	await workspace.fs.writeFile(targetUri, cachedImage);
+	await workspace.fs.writeFile(targetUri, cachedImage.data);
 	window.showInformationMessage(`Diagram image saved to ${targetUri.fsPath}`);
+	return cachedImage;
 }

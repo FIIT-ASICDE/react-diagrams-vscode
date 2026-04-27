@@ -48,7 +48,7 @@ function App() {
 				{/* <VSCodePanelTab id="tests" className="mx-2">Tests</VSCodePanelTab> */}
 				{showDebugTab && <VSCodePanelTab id="debug" className="mx-2">Debug</VSCodePanelTab>}
 
-				<VSCodePanelView id="diagram" className="h-full p-1">
+				<VSCodePanelView id="diagram" className="h-full p-px">
 					<StateDiagram model={model} />
 				</VSCodePanelView>
 
