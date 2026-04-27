@@ -39,7 +39,7 @@ export class ComponentStatePanel {
 	 * @param extensionUri The URI of the directory containing the extension.
 	 */
 	public static async render(extensionUri: Uri) {
-		const openOnSide = getConfigOption<boolean>('state.diagram', 'openStatePanelOnTheSide');
+		const [openOnSide] = getConfigOption<boolean>('state.diagram', 'openStatePanelOnTheSide');
 
 		if (ComponentStatePanel.current) { // Already exists, show it
 			console.debug("ComponentStatePanel already exists, showing existing panel");
@@ -69,10 +69,11 @@ export class ComponentStatePanel {
 		if (!result)
 			return;
 
-		const useGuardsWhenPossible = getConfigOption<boolean>('state.diagram', 'useGuardsWhenPossible');
+		const [useGuardsWhenPossible, config] = getConfigOption<boolean>('state.diagram', 'useGuardsWhenPossible');
+		const knownStateVariableHooks = config.get<string[]>('knownStateVariableHooks', ["useState"]);
 
 		const { rootPath, targetDocument } = result;
-		return componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible }, forceUpdate);
+		return componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible, knownStateVariableHooks }, forceUpdate);
 	}
 
 	// public static isShowingDocument(document: TextDocument) {
@@ -90,9 +91,10 @@ export class ComponentStatePanel {
 		this.panel.title = `${ComponentStatePanel.NAME} (${basename(activeFilePath)})`;
 
 		try {
-			const useGuardsWhenPossible = getConfigOption<boolean>('state.diagram', 'useGuardsWhenPossible');
+			const [useGuardsWhenPossible, config] = getConfigOption<boolean>('state.diagram', 'useGuardsWhenPossible');
+			const knownStateVariableHooks = config.get<string[]>('knownStateVariableHooks', ["useState"]);
 
-			const model = await componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible }, forceUpdate);
+			const model = await componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible, knownStateVariableHooks }, forceUpdate);
 
 			if (requestId != this.refreshRequestId) // Ignore if a newer refresh started while this parse was running.
 				return console.debug("Outdated refresh result discarded");
