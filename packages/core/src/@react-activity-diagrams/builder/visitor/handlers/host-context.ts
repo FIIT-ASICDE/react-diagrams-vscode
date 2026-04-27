@@ -17,14 +17,15 @@ import type { BuildResult } from '../types';
  */
 export type LoopContext = {
   kind: 'loop';
-  loopId: string;
+  continueTarget: string;
+  breakTarget: string;
   label?: string;
   pendingBreaks: string[];
-  pendingContinues: string[];
 };
 
 export type SwitchContext = {
   kind: 'switch';
+  breakTarget: string;
   label?: string;
   pendingBreaks: string[];
 };
@@ -46,10 +47,9 @@ export interface StatementVisitorHost {
   // ── Break / continue context API ────────────────────────────────────
 
   pushLoopContext(loopId: string): LoopContext;
-  pushSwitchContext(): SwitchContext;
+  pushSwitchContext(breakTarget: string): SwitchContext;
   popContext(): void;
-  findBreakContext(label?: string): ControlContext | undefined;
-  findContinueContext(label?: string): LoopContext | undefined;
+  findNearestContext(kinds: Array<'loop' | 'switch'>, label?: string): ControlContext | undefined;
   setPendingLabel(label: string): void;
 
   /**

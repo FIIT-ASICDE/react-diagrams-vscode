@@ -28,9 +28,6 @@ function setNodeData(host: StatementVisitorHost, nodeId: string, extra: Record<s
  * with the natural loop exit by the caller.
  */
 function wirePendingBreaksAndContinues(host: StatementVisitorHost, ctx: LoopContext): string[] {
-  for (const continueId of ctx.pendingContinues) {
-    host.writer.addEdge(continueId, ctx.loopId, '', true);
-  }
   return ctx.pendingBreaks;
 }
 
@@ -196,7 +193,7 @@ function snapshotPending(host: StatementVisitorHost): ContextSnapshot {
   for (const ctx of host.getContextStack()) {
     snap.set(ctx, {
       breaks: new Set(ctx.pendingBreaks),
-      continues: new Set(ctx.kind === 'loop' ? ctx.pendingContinues : []),
+      continues: new Set<string>(),
     });
   }
   return snap;
@@ -221,11 +218,8 @@ function diffPending(host: StatementVisitorHost, before: ContextSnapshot): Redir
     }
 
     if (ctx.kind === 'loop') {
-      for (const id of ctx.pendingContinues) {
-        if (!beforeForCtx.continues.has(id)) {
-          entries.push({ nodeId: id, ctx, kind: 'continue' });
-        }
-      }
+      // Continue edges are wired immediately in StatementVisitor.visitContinue.
+      // We intentionally do not track them as pending redirect entries.
     }
   }
 
@@ -236,9 +230,6 @@ function removeFromContext(ctx: ControlContext, kind: 'break' | 'continue', node
   if (kind === 'break') {
     const i = ctx.pendingBreaks.indexOf(nodeId);
     if (i !== -1) ctx.pendingBreaks.splice(i, 1);
-  } else if (ctx.kind === 'loop') {
-    const i = ctx.pendingContinues.indexOf(nodeId);
-    if (i !== -1) ctx.pendingContinues.splice(i, 1);
   }
 }
 
@@ -464,7 +455,7 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
   for (const [loopCtx, sources] of continueGroups) {
     const sliced = spliceFinallyCopy(host, finallyBlock, sources);
     for (const exit of sliced.exits) {
-      host.writer.addEdge(exit, loopCtx.loopId, '', true);
+      host.writer.addEdge(exit, loopCtx.continueTarget, '', true);
     }
     aggregateReturnExits.push(...sliced.returnExits);
     aggregateThrowExits.push(...sliced.throwExits);

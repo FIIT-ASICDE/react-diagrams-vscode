@@ -79,21 +79,22 @@ export class StatementVisitor implements StatementVisitorHost {
 
 		const ctx: LoopContext = {
 			kind: 'loop',
-			loopId,
+			continueTarget: loopId,
+			breakTarget: loopId,
 			label,
 			pendingBreaks: [],
-			pendingContinues: [],
 		};
 		this.contextStack.push(ctx);
 		return ctx;
 	}
 
-	pushSwitchContext(): SwitchContext {
+	pushSwitchContext(breakTarget: string): SwitchContext {
 		const label = this.pendingLabel;
 		this.pendingLabel = undefined;
 
 		const ctx: SwitchContext = {
 			kind: 'switch',
+			breakTarget,
 			label,
 			pendingBreaks: [],
 		};
@@ -105,22 +106,10 @@ export class StatementVisitor implements StatementVisitorHost {
 		this.contextStack.pop();
 	}
 
-	findBreakContext(label?: string): ControlContext | undefined {
+	findNearestContext(kinds: Array<'loop' | 'switch'>, label?: string): ControlContext | undefined {
 		for (let i = this.contextStack.length - 1; i >= 0; i -= 1) {
 			const ctx = this.contextStack[i];
-			if (label) {
-				if (ctx.label === label) return ctx;
-			} else {
-				return ctx;
-			}
-		}
-		return undefined;
-	}
-
-	findContinueContext(label?: string): LoopContext | undefined {
-		for (let i = this.contextStack.length - 1; i >= 0; i -= 1) {
-			const ctx = this.contextStack[i];
-			if (ctx.kind !== 'loop') continue;
+			if (!kinds.includes(ctx.kind)) continue;
 			if (label) {
 				if (ctx.label === label) return ctx;
 			} else {
@@ -301,10 +290,10 @@ export class StatementVisitor implements StatementVisitorHost {
 		});
 
 		const labelName = stmt.getLabel()?.getText();
-		const ctx = this.findBreakContext(labelName);
+		const ctx = this.findNearestContext(['loop', 'switch'], labelName);
 
 		if (!ctx) {
-			return { entry: id, exits: [], returnExits: [id], throwExits: [] };
+			return { entry: id, exits: [id], returnExits: [], throwExits: [] };
 		}
 
 		ctx.pendingBreaks.push(id);
@@ -318,13 +307,13 @@ export class StatementVisitor implements StatementVisitorHost {
 		});
 
 		const labelName = stmt.getLabel()?.getText();
-		const ctx = this.findContinueContext(labelName);
+		const ctx = this.findNearestContext(['loop'], labelName);
 
-		if (!ctx) {
-			return { entry: id, exits: [], returnExits: [id], throwExits: [] };
+		if (!ctx || ctx.kind !== 'loop') {
+			return { entry: id, exits: [id], returnExits: [], throwExits: [] };
 		}
 
-		ctx.pendingContinues.push(id);
+		this.writer.addEdge(id, ctx.continueTarget, '', true);
 		return { entry: id, exits: [], returnExits: [], throwExits: [] };
 	}
 

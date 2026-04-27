@@ -109,10 +109,6 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
       host.writer.addEdge(loopId, body.entry, 'each', false);
       host.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
 
-      for (const continueId of ctx.pendingContinues) {
-        host.writer.addEdge(continueId, loopId, '', true);
-      }
-
       return {
         entry: loopId,
         exits: [loopId, ...ctx.pendingBreaks],
