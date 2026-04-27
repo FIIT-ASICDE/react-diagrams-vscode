@@ -30,13 +30,14 @@ addEdge(source: string, target: string, label?: string, isBackEdge = false): voi
     id: `edge-${this.nextEdgeId++}`,
     source,
     target,
-    // Let React Flow pick default handles. ELK will route to/from node boundaries.
-    animated: isBackEdge ? true : undefined,
+    animated: isBackEdge ? true : false,
     label,
-    type: isBackEdge ? 'back' : 'default',   // ← 'default' instead of 'smoothstep'
-    style: isBackEdge
-      ? { strokeDasharray: '6 4', stroke: '#5c0202' }
-      : { stroke: 'rgb(0, 0, 0)', strokeWidth: 1 },
+    type: isBackEdge ? 'back' : 'default',
+    style: {
+      stroke: 'rgb(0, 0, 0)',
+      strokeWidth: 1,
+      ...(isBackEdge && { strokeDasharray: '6 4', stroke: 'rgb(200, 0, 0)' }),
+    },
     markerEnd: {
       type: 'arrowclosed',
       color: '#000000',

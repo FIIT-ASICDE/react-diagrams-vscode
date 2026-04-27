@@ -3,12 +3,12 @@ import { BaseEdge, EdgeLabelRenderer } from '@xyflow/react';
 
 type Point = { x: number; y: number };
 
-const LABEL_OFFSET_FROM_END = 28;
-const EDGE_GAP = 10; // 👈 toto si doladíš (8–14 vyzerá dobre)
+const LABEL_OFFSET_FROM_END = 44;
 
 function hasElkPoints(data: unknown): data is { points: Point[] } {
 	if (!data || typeof data !== 'object') return false;
 	const pts = (data as { points?: unknown }).points;
+
 	return (
 		Array.isArray(pts) &&
 		pts.length >= 2 &&
@@ -25,76 +25,61 @@ function pointsToPath(points: Point[]): string {
 	return points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
 }
 
-function offsetPoint(from: Point, to: Point, offset: number): Point {
-	const dx = to.x - from.x;
-	const dy = to.y - from.y;
-	const length = Math.sqrt(dx * dx + dy * dy) || 1;
-
-	return {
-		x: from.x + (dx / length) * offset,
-		y: from.y + (dy / length) * offset,
-	};
+function distance(a: Point, b: Point): number {
+	return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
-function pointBackFromEnd(prev: Point, end: Point, offset: number): Point {
-	const dx = end.x - prev.x;
-	const dy = end.y - prev.y;
-	const length = Math.sqrt(dx * dx + dy * dy) || 1;
-	return {
-		x: end.x - (dx / length) * offset,
-		y: end.y - (dy / length) * offset,
-	};
+function pointBackFromEnd(points: Point[], offset: number): Point {
+	let remaining = offset;
+
+	for (let i = points.length - 1; i > 0; i -= 1) {
+		const end = points[i];
+		const start = points[i - 1];
+		const len = distance(start, end);
+
+		if (len >= remaining) {
+			const t = (len - remaining) / len;
+			return {
+				x: start.x + (end.x - start.x) * t,
+				y: start.y + (end.y - start.y) * t,
+			};
+		}
+
+		remaining -= len;
+	}
+
+	return points[0];
+}
+
+function fallbackPoints(props: EdgeProps): Point[] {
+	const { sourceX, sourceY, targetX, targetY } = props;
+	const midY = sourceY + (targetY - sourceY) / 2;
+
+	return [
+		{ x: sourceX, y: sourceY },
+		{ x: sourceX, y: midY },
+		{ x: targetX, y: midY },
+		{ x: targetX, y: targetY },
+	];
 }
 
 export default function ElkPathEdge(props: EdgeProps) {
-	const { id, style, label, data, markerEnd, sourceX, sourceY, targetX, targetY } = props;
+	const { id, style, label, data, markerEnd } = props;
 
-	let path: string;
-	let labelPos: Point;
-
-	if (hasElkPoints(data)) {
-		const points = [...data.points];
-
-		// 👉 posuň prvý a posledný bod
-		points[0] = offsetPoint(points[0], points[1], EDGE_GAP);
-		points[points.length - 1] = offsetPoint(
-			points[points.length - 1],
-			points[points.length - 2],
-			EDGE_GAP,
-		);
-
-		path = pointsToPath(points);
-
-		labelPos = pointBackFromEnd(
-			points[points.length - 2],
-			points[points.length - 1],
-			LABEL_OFFSET_FROM_END,
-		);
-	} else {
-		// fallback
-		const source: Point = { x: sourceX, y: sourceY };
-		const target: Point = { x: targetX, y: targetY };
-
-		const adjustedSource = offsetPoint(source, target, EDGE_GAP);
-		const adjustedTarget = offsetPoint(target, source, EDGE_GAP);
-
-		path = `M ${adjustedSource.x} ${adjustedSource.y}
-		        L ${adjustedSource.x} ${adjustedTarget.y}
-		        L ${adjustedTarget.x} ${adjustedTarget.y}`;
-
-		labelPos = pointBackFromEnd(
-			adjustedSource,
-			adjustedTarget,
-			LABEL_OFFSET_FROM_END,
-		);
-	}
+	const points = hasElkPoints(data) ? data.points : fallbackPoints(props);
+	const path = pointsToPath(points);
+	const labelPos = pointBackFromEnd(points, LABEL_OFFSET_FROM_END);
 
 	return (
 		<>
 			<BaseEdge
 				path={path}
 				markerEnd={markerEnd}
-				style={{ fill: 'none', ...style }}
+				style={{
+					fill: 'none',
+					strokeWidth: 1.5,
+					...style,
+				}}
 			/>
 
 			{label && (
@@ -104,12 +89,13 @@ export default function ElkPathEdge(props: EdgeProps) {
 							position: 'absolute',
 							transform: `translate(-50%, -50%) translate(${labelPos.x}px, ${labelPos.y}px)`,
 							background: 'black',
-							padding: '1px 4px',
-							fontSize: 10,
+							padding: '2px 6px',
+							fontSize: 11,
 							pointerEvents: 'all',
-							borderRadius: 3,
+							borderRadius: 4,
 							color: 'white',
 							whiteSpace: 'nowrap',
+							zIndex: 20,
 						}}
 						className="nodrag nopan"
 						onContextMenu={(event) => {

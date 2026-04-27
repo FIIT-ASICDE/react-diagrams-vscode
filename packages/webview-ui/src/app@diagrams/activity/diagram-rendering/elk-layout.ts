@@ -24,6 +24,78 @@ function estimateNodeSize(_node: Node): { width: number; height: number } {
 
 const elk = new ELK();
 
+function snapPolylineToNodeBoundaries(
+	points: Point[],
+	edge: Edge,
+	nodeBoxById: Map<string, Box>,
+	nodes: Node[],
+): Point[] {
+	if (points.length < 2) return points;
+
+	const sourceBox = nodeBoxById.get(String(edge.source));
+	const targetBox = nodeBoxById.get(String(edge.target));
+	if (!sourceBox || !targetBox) return points;
+
+	const sourceNode = nodes.find((node) => String(node.id) === String(edge.source));
+	const targetNode = nodes.find((node) => String(node.id) === String(edge.target));
+
+	const nextAfterSource = points[1];
+	const beforeTarget = points[points.length - 2];
+
+	const snapped = [...points];
+
+	snapped[0] = intersectNodeBoundary(sourceBox, nextAfterSource, sourceNode);
+	snapped[snapped.length - 1] = intersectNodeBoundary(targetBox, beforeTarget, targetNode);
+
+	return snapped;
+}
+
+function intersectNodeBoundary(box: Box, toward: Point, node?: Node): Point {
+	const center = {
+		x: box.x + box.width / 2,
+		y: box.y + box.height / 2,
+	};
+
+	const dx = toward.x - center.x;
+	const dy = toward.y - center.y;
+
+	if (dx === 0 && dy === 0) {
+		return center;
+	}
+
+	if (node?.type === 'decision') {
+		return intersectDiamond(center, box.width, box.height, dx, dy);
+	}
+
+	return intersectRect(center, box.width, box.height, dx, dy);
+}
+
+function intersectRect(center: Point, width: number, height: number, dx: number, dy: number): Point {
+	const halfW = width / 2;
+	const halfH = height / 2;
+
+	const tx = dx === 0 ? Infinity : halfW / Math.abs(dx);
+	const ty = dy === 0 ? Infinity : halfH / Math.abs(dy);
+	const t = Math.min(tx, ty);
+
+	return {
+		x: center.x + dx * t,
+		y: center.y + dy * t,
+	};
+}
+
+function intersectDiamond(center: Point, width: number, height: number, dx: number, dy: number): Point {
+	const halfW = width / 2;
+	const halfH = height / 2;
+
+	const t = 1 / (Math.abs(dx) / halfW + Math.abs(dy) / halfH);
+
+	return {
+		x: center.x + dx * t,
+		y: center.y + dy * t,
+	};
+}
+
 export async function applyActivityElkLayout(
   nodes: Node[],
   edges: Edge[],
@@ -31,10 +103,15 @@ export async function applyActivityElkLayout(
 ): Promise<LayoutResult> {
   const isHorizontal = direction === 'RIGHT';
 
-  // ELK runs the layered algorithm on a DAG. Back-edges are routed
-  // separately so the layered pass stays acyclic.
-  const downwardEdges = edges.filter((edge) => !isBackEdge(edge));
-  const backEdges = edges.filter((edge) => isBackEdge(edge));
+  // Temporarily reverse back edges so ELK layouts them as normal forward edges
+  // This keeps everything in strict TOP_DOWN flow through the graph layers
+  const normalEdges = edges.filter(e => !isBackEdge(e));
+  const backEdges = edges.filter(isBackEdge);
+  const reversedBackEdges = backEdges.map(edge => ({
+    ...edge,
+    source: edge.target,
+    target: edge.source,
+  }));
 
   const elkGraph: ElkNode = {
     id: 'root',
@@ -55,7 +132,7 @@ export async function applyActivityElkLayout(
       const { width, height } = estimateNodeSize(node);
       return { id: String(node.id), width, height };
     }),
-    edges: downwardEdges.map((edge) => ({
+    edges: [...normalEdges, ...reversedBackEdges].map((edge) => ({
       id: String(edge.id),
       sources: [String(edge.source)],
       targets: [String(edge.target)],
@@ -95,7 +172,7 @@ export async function applyActivityElkLayout(
     elkEdgeById.set(elkEdge.id, elkEdge);
   }
 
-  const layoutedDownwardEdges: Edge[] = downwardEdges.map((edge) => {
+  const layoutedNormalEdges: Edge[] = normalEdges.map((edge) => {
     const elkEdge = elkEdgeById.get(String(edge.id));
     const section = elkEdge?.sections?.[0];
     if (!section) return edge;
@@ -105,7 +182,7 @@ export async function applyActivityElkLayout(
       ...(section.bendPoints ?? []).map((point) => ({ x: point.x, y: point.y })),
       { x: section.endPoint.x, y: section.endPoint.y },
     ];
-
+    const adjustedPoints = snapPolylineToNodeBoundaries(points, edge, nodeBoxById, nodes);
     return {
       ...edge,
       data: {
@@ -115,11 +192,34 @@ export async function applyActivityElkLayout(
     };
   });
 
-  const layoutedBackEdges = routeBackEdges(backEdges, nodeBoxById, layoutedNodes);
+  const layoutedBackEdges: Edge[] = reversedBackEdges.map((reversedEdge) => {
+    const elkEdge = elkEdgeById.get(String(reversedEdge.id));
+    const section = elkEdge?.sections?.[0];
+    
+    // Get the original back edge to restore source/target
+    const originalBackEdge = backEdges.find(e => e.id === reversedEdge.id)!;
+    
+    if (!section) return originalBackEdge;
+
+    // Reverse the points since we laid out the reversed edge
+    const points = [
+      { x: section.endPoint.x, y: section.endPoint.y },
+      ...(section.bendPoints ?? []).reverse().map((point) => ({ x: point.x, y: point.y })),
+      { x: section.startPoint.x, y: section.startPoint.y },
+    ];
+
+    return {
+      ...originalBackEdge,
+      data: {
+        ...(originalBackEdge.data ?? {}),
+        points,
+      },
+    };
+  });
 
   return {
     nodes: layoutedNodes,
-    edges: [...layoutedDownwardEdges, ...layoutedBackEdges],
+    edges: [...layoutedNormalEdges, ...layoutedBackEdges],
   };
 }
 
@@ -141,71 +241,83 @@ export async function applyActivityElkLayout(
  * — so collision with arbitrary node placements isn't a concern.
  */
 function routeBackEdges(
-  backEdges: Edge[],
-  nodeBoxById: Map<string, Box>,
-  layoutedNodes: Node[],
+	backEdges: Edge[],
+	nodeBoxById: Map<string, Box>,
+	layoutedNodes: Node[],
 ): Edge[] {
-  if (backEdges.length === 0) return [];
+	if (backEdges.length === 0) return [];
 
-  // Bounding box of the laid-out graph. If it's empty (no positioned
-  // nodes), we have nothing sensible to route against.
-  const allBoxes = layoutedNodes
-    .map((node) => nodeBoxById.get(String(node.id)))
-    .filter((box): box is Box => Boolean(box));
+	const allBoxes = layoutedNodes
+		.map((node) => nodeBoxById.get(String(node.id)))
+		.filter((box): box is Box => Boolean(box));
 
-  if (allBoxes.length === 0) return backEdges;
+	if (allBoxes.length === 0) return backEdges;
 
-  const graphLeft = Math.min(...allBoxes.map((box) => box.x));
-  const graphRight = Math.max(...allBoxes.map((box) => box.x + box.width));
+	const graphLeft = Math.min(...allBoxes.map((box) => box.x));
+	const graphRight = Math.max(...allBoxes.map((box) => box.x + box.width));
 
-  // Right lanes grow rightward from the graph's right edge.
-  // Left lanes grow leftward from the graph's left edge.
-  const firstRightLaneX = graphRight + BACK_EDGE_LANE_GAP;
-  const firstLeftLaneX = graphLeft - BACK_EDGE_LANE_GAP;
+	const firstRightLaneX = graphRight + BACK_EDGE_LANE_GAP;
+	const firstLeftLaneX = graphLeft - BACK_EDGE_LANE_GAP;
 
-  let rightLaneCount = 0;
-  let leftLaneCount = 0;
+	let rightLaneCount = 0;
+	let leftLaneCount = 0;
 
-  return backEdges.map((edge) => {
-    const srcBox = nodeBoxById.get(String(edge.source));
-    const tgtBox = nodeBoxById.get(String(edge.target));
-    if (!srcBox || !tgtBox) return edge;
+	return backEdges.map((edge) => {
+		const srcBox = nodeBoxById.get(String(edge.source));
+		const tgtBox = nodeBoxById.get(String(edge.target));
 
-    const side = chooseBackEdgeSide(srcBox, tgtBox, graphLeft, graphRight);
+		if (!srcBox || !tgtBox) return edge;
 
-    let laneX: number;
-    let srcAnchor: Point;
-    let tgtAnchor: Point;
+		const side = chooseBackEdgeSide(srcBox, tgtBox, graphLeft, graphRight);
 
-    if (side === 'right') {
-      laneX = firstRightLaneX + rightLaneCount * BACK_EDGE_LANE_SPACING;
-      rightLaneCount += 1;
-      srcAnchor = rightAnchor(srcBox);
-      tgtAnchor = rightAnchor(tgtBox);
-    } else {
-      laneX = firstLeftLaneX - leftLaneCount * BACK_EDGE_LANE_SPACING;
-      leftLaneCount += 1;
-      srcAnchor = leftAnchor(srcBox);
-      tgtAnchor = leftAnchor(tgtBox);
-    }
+		const sourceExit = bottomAnchor(srcBox);
+		const targetEnter = topAnchor(tgtBox);
 
-    const points: Point[] = [
-      srcAnchor,
-      { x: laneX, y: srcAnchor.y },
-      { x: laneX, y: tgtAnchor.y },
-      tgtAnchor,
-    ];
+		let laneX: number;
 
-    return {
-      ...edge,
-      data: {
-        ...(edge.data ?? {}),
-        points,
-      },
-    };
-  });
+		if (side === 'right') {
+			laneX = firstRightLaneX + rightLaneCount * BACK_EDGE_LANE_SPACING;
+			rightLaneCount += 1;
+		} else {
+			laneX = firstLeftLaneX - leftLaneCount * BACK_EDGE_LANE_SPACING;
+			leftLaneCount += 1;
+		}
+
+		const sourceStubY = sourceExit.y + 24;
+		const targetStubY = targetEnter.y - 24;
+
+		const points: Point[] = [
+			sourceExit,
+			{ x: sourceExit.x, y: sourceStubY },
+			{ x: laneX, y: sourceStubY },
+			{ x: laneX, y: targetStubY },
+			{ x: targetEnter.x, y: targetStubY },
+			targetEnter,
+		];
+
+		return {
+			...edge,
+			data: {
+				...(edge.data ?? {}),
+				points,
+			},
+		};
+	});
 }
 
+function topAnchor(box: Box): Point {
+	return {
+		x: box.x + box.width / 2,
+		y: box.y,
+	};
+}
+
+function bottomAnchor(box: Box): Point {
+	return {
+		x: box.x + box.width / 2,
+		y: box.y + box.height,
+	};
+}
 /**
  * Pick the cheaper side (left vs right) for routing a back-edge between
  * `srcBox` and `tgtBox`. Cost is the total horizontal distance the edge
