@@ -59,32 +59,18 @@ export class DiagramBuilder {
     writer.addEdge(startId, main.entry);
 
     // ── Success-side End: normal exits + return exits ─────────────────
-    //
-    // Both buckets converge at the function's End node, but if there are
-    // many sources we route them through a merge first to keep the graph
-    // tidy. Normal and return are allowed to share this merge — they
-    // both represent "function completed without unhandled exception".
 
     const successSources = [
       ...new Set([...main.exits, ...main.returnExits]),
     ];
 
-    if (successSources.length > 0) {
-      const endId = writer.addFlowNode('end', 'End');
-      this.wireSourcesToTerminal(writer, successSources, endId);
-    }
+    this.wireSourcesToSeparateTerminals(writer, successSources, 'End');
 
     // ── Error-side End: unhandled throws only ─────────────────────────
-    //
-    // Only created when there's actually a throw escaping. Throws never
-    // share a merge with success-side flows.
 
     const throwSources = [...new Set(main.throwExits)];
 
-    if (throwSources.length > 0) {
-      const errorEndId = writer.addFlowNode('end', 'ErrorEnd');
-      this.wireSourcesToTerminal(writer, throwSources, errorEndId);
-    }
+    this.wireSourcesToSeparateTerminals(writer, throwSources, 'ErrorEnd');
 
     // Edge case: function had a body but produced NEITHER success nor
     // throw exits (every path was already terminated somewhere in the
@@ -101,36 +87,22 @@ export class DiagramBuilder {
     return { nodes: this.nodes, edges: this.edges };
   }
 
-  /**
-   * Wire a list of source nodes to a single terminal (End / ErrorEnd).
-   * If there are multiple sources, route through a merge node first.
-   * Decision / loop sources receive a 'no' label (they're falling through
-   * the falsy branch of their condition).
-   */
-  private wireSourcesToTerminal(writer: GraphWriter, sources: string[], terminalId: string): void {
+  private wireSourcesToSeparateTerminals(
+    writer: GraphWriter,
+    sources: string[],
+    terminalLabel: 'End' | 'ErrorEnd',
+  ): void {
     if (sources.length === 0) return;
 
-    if (sources.length === 1) {
-      const onlyExit = sources[0];
+    for (const source of sources) {
+      const terminalId = writer.addFlowNode('end', terminalLabel);
       writer.addEdge(
-        onlyExit,
+        source,
         terminalId,
-        onlyExit.startsWith('decision-') || onlyExit.startsWith('loop-') ? 'no' : undefined,
-        false,
-      );
-      return;
-    }
-
-    const mergeId = writer.addFlowNode('merge', '');
-    for (const exit of sources) {
-      writer.addEdge(
-        exit,
-        mergeId,
-        exit.startsWith('decision-') || exit.startsWith('loop-') ? 'no' : undefined,
+        source.startsWith('decision-') || source.startsWith('loop-') ? 'no' : undefined,
         false,
       );
     }
-    writer.addEdge(mergeId, terminalId);
   }
 
   private normalizeGraphStructure(): void {
