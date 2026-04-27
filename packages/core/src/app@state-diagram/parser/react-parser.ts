@@ -67,7 +67,7 @@ Step 4:
 		Loops should be incorporated into this with the backwards transitions cyclic transitions.
 */
 
-export function parseReactComponent(reactComponent: string, stateFlowOptions?: StateGraphOptions & { rootPath?: string }): StateDiagram {
+export function parseReactComponent(reactComponent: string, stateFlowOptions?: StateGraphOptions & { rootPath?: string, knownStateVariableHooks?: string[] }): StateDiagram {
 	const { sourceFile } = asSrcFile(reactComponent, stateFlowOptions?.rootPath);
 	try {
 		const component = resolveDefaultExportComponent(sourceFile);
@@ -79,7 +79,7 @@ export function parseReactComponent(reactComponent: string, stateFlowOptions?: S
 			};
 		}
 
-		const stateVariables = collectStateVariables(component, sourceFile);
+		const stateVariables = collectStateVariables(component, sourceFile, stateFlowOptions?.knownStateVariableHooks);
 		const mutatorBodies = populateStateUpdatesAndMutators(component, stateVariables);
 		buildTransitionFlowGraph(mutatorBodies, stateVariables, stateFlowOptions);
 

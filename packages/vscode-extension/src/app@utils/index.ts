@@ -37,8 +37,10 @@ export async function jumpToPosition(file: Uri | string, line: number, col: numb
 	existingEditor.revealRange(selection, TextEditorRevealType.InCenter);
 }
 
-export function getConfigOption<T>(section: string, key: string) {
-	return workspace.getConfiguration(section).get<T>(key);
+/** Get the value of the config key and the config itself */
+export function getConfigOption<T>(section: string, key: string, defaultValue?: T) {
+	const config = workspace.getConfiguration(section);
+	return [defaultValue ? config.get<T>(key, defaultValue) : config.get<T>(key), config] as const;
 }
 
 export async function saveDiagramImage(data: { dataUrl?: string; }, cache: ParsingImageCache) {

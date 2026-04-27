@@ -5,7 +5,7 @@ export type CodePos = {
 
 export type FunctionDeclarationKind = 'function' | 'arrow-function' | 'function-expression';
 
-export type StateHookKind = 'useState';
+export type StateHookKind = string /*| 'useState'*/;
 
 export type Id = string /*| number*/;
 

@@ -15,34 +15,40 @@ import { createId, getBindingElementName, getCodePos,  getFirstAncestorOfKinds }
 import { SupportedComponentDeclaration } from './types';
 import { truncate } from '../../app@core/utils';
 
-/** Returns a call expression when a node matches a tracked useState invocation. */
-function getTrackedUseStateCall(node: Node | undefined, useStateIdentifiers: Set<string>): CallExpression | undefined {
+/** Returns the matched hook call and its canonical hook name. */
+function getTrackedStateHookCall(node: Node | undefined, identifiers: Map<string, string>, hookNames: Set<string>) {
 	if (!node || !Node.isCallExpression(node))
 		return;
 
 	const expression = node.getExpression();
-	if (Node.isIdentifier(expression))
-		return useStateIdentifiers.has(expression.getText()) ? node : undefined;
+	if (Node.isIdentifier(expression)) {
+		const hookName = identifiers.get(expression.getText());
+		return hookName ? { call: node, hookName } : undefined;
+	}
 
-	if (Node.isPropertyAccessExpression(expression))
-		return expression.getName() == 'useState' ? node : undefined;
+	if (Node.isPropertyAccessExpression(expression)) {
+		const name = expression.getName();
+		return hookNames.has(name) ? { call: node, hookName: name } : undefined;
+	}
 }
 
-/** Collects local identifier names that refer to React's useState import. */
-function collectUseStateIdentifiers(sourceFile: SourceFile) {
-	const identifiers = new Set(['useState']);
+/** Builds a map from local identifiers to canonical hook names, scanning all imports for aliases. */
+function collectStateHookIdentifiers(sourceFile: SourceFile, hookNames: string[]) {
+	const hookNamesSet = new Set(hookNames);
+	// identity mapping: every hook name is also its own local name (handles bare usage)
+	const identifiers = new Map<string, string>(hookNames.map(n => [n, n]));
 
 	for (const importDeclaration of sourceFile.getImportDeclarations()) {
-		if (importDeclaration.getModuleSpecifierValue() != 'react')
-			continue;
-
 		for (const namedImport of importDeclaration.getNamedImports()) {
-			if (namedImport.getName() == 'useState')
-				identifiers.add(namedImport.getAliasNode()?.getText() ?? namedImport.getName());
+			if (!hookNamesSet.has(namedImport.getName()))
+				continue;
+
+			const localName = namedImport.getAliasNode()?.getText() ?? namedImport.getName();
+			identifiers.set(localName, namedImport.getName());
 		}
 	}
 
-	return identifiers;
+	return { identifiers, hookNamesSet };
 }
 
 export function inferStateTypeText(callExpression: Node) {
@@ -81,12 +87,12 @@ export function isDirectlyOwnedByComponent(declaration: Node, component: Support
 	return getFirstAncestorOfKinds(declaration, [Node.isFunctionDeclaration, Node.isFunctionExpression, Node.isArrowFunction, Node.isMethodDeclaration,]) == component
 }
 
-export function collectStateVariables(component: SupportedComponentDeclaration, sourceFile: SourceFile) {
+export function collectStateVariables(component: SupportedComponentDeclaration, sourceFile: SourceFile, hookNames = ['useState']) {
 	const body = component.getBody();
 	if (!body || !Node.isBlock(body))
 		return [];
 
-	const useStateIdentifiers = collectUseStateIdentifiers(sourceFile);
+	const { identifiers, hookNamesSet } = collectStateHookIdentifiers(sourceFile, hookNames);
 	const declarations = body.getDescendantsOfKind(SyntaxKind.VariableDeclaration);;
 	const stateVariables: StateVariable[] = [];
 
@@ -99,25 +105,26 @@ export function collectStateVariables(component: SupportedComponentDeclaration, 
 			continue;
 
 		const initializer = declaration.getInitializer();
-		const useStateCall = getTrackedUseStateCall(initializer, useStateIdentifiers);
-		if (!useStateCall)
+		const tracked = getTrackedStateHookCall(initializer, identifiers, hookNamesSet);
+		if (!tracked)
 			continue;
 
+		const { call: stateHookCall, hookName } = tracked;
 		const [stateElement, setterElement] = nameNode.getElements();
 		const stateName = getBindingElementName(stateElement);
 		const setterName = getBindingElementName(setterElement);
 		if (!stateName || !setterName || !Node.isBindingElement(stateElement))
 			continue;
 
-		// console.log(stateElement, setterElement, useStateCall, initializer);
+		// console.log(stateElement, setterElement, stateHookCall, initializer);
 		const pos = getCodePos(stateElement.getNameNode(), sourceFile);
 		const stateVariable: StateVariable = {
 			id: createId('state', stateName, pos),
-			hook: 'useState',
+			hook: hookName,
 			name: stateName,
 			setterName,
-			initializerText: useStateCall.getArguments()[0]?.getText(),
-			typeText: inferStateTypeText(useStateCall),
+			initializerText: stateHookCall.getArguments()[0]?.getText(),
+			typeText: inferStateTypeText(stateHookCall),
 			pos,
 
 			states: [],

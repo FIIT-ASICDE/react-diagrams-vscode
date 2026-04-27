@@ -198,8 +198,8 @@ export class GraphBuilder {
 		const elseBody = statement.getElseStatement();
 		const isElseif = Node.isIfStatement(elseBody);
 
-		if (this.options?.useGuardsWhenPossible && !isElseif && incoming.length == 1 && incoming[0].from.nodeType == 'state-update' && incoming[0].kind == StateTransitionKind.Normal) {
-			const from = incoming[0].from;
+		const { from, kind } = incoming[0];
+		if (this.options?.useGuardsWhenPossible && !isElseif && incoming.length == 1 && from.nodeType == 'state-update' && kind == StateTransitionKind.Normal) {
 
 			const thenIncoming: OpenEdge[] = [{ from, kind: StateTransitionKind.Then, label: `[${truncate(conditionText, 80)}]` }];
 			const thenOpen = this.visit(thenBody, thenIncoming, hasSetterAhead, context);

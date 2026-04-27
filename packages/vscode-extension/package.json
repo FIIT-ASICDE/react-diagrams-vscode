@@ -116,6 +116,14 @@
               "Enable participant to view diagram as image."
             ]
           }
+        },
+        "state.diagram.knownStateVariableHooks": {
+          "type": "array",
+          "description": "List of hook function names that declare state variables (useState, useCustomState). The first argument is treated as the initial value and the result must be a n-tuple in format [getter, setter, ...], similar to React's useState.",
+          "default": ["useState"],
+          "items": {
+            "type": "string"
+          }
         }
       }
     }
