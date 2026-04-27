@@ -15,7 +15,7 @@ import type { ActivityNodeType } from './model/types';
 import { nodeTypes } from './components/diagram/nodeTypes';
 import ElkPathEdge from './components/diagram/ViewEdge';
 import DynamicPathEdge from './components/diagram/PlaygroundEdge';
-import { applyActivityElkLayout } from './diagram-rendering/elk-layout';
+import { applyPlaygroundElkLayout } from './diagram-rendering/elk-layout';
 import { generateCodeFromDiagram } from './logic/diagram-code-generation';
 import { useDiagramNavigationStore } from './logic/navigation/use-diagram-navigation-store';
 import {
@@ -273,7 +273,7 @@ export default function ActivityDiagram() {
 		let layoutedNodes = nodes;
 		let layoutedEdges = edges;
 		try {
-			const layouted = await applyActivityElkLayout(nodes, edges);
+			const layouted = await applyPlaygroundElkLayout(nodes, edges);
 			layoutedNodes = layouted.nodes;
 			layoutedEdges = layouted.edges;
 		} catch (error) {
