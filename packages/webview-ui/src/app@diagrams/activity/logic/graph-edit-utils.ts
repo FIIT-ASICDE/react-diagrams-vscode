@@ -2,6 +2,7 @@ import {
 	addEdge,
 	applyEdgeChanges,
 	applyNodeChanges,
+	MarkerType,
 	type Connection,
 	type Edge,
 	type EdgeChange,
@@ -98,5 +99,20 @@ export function applyEdgeChangesToEdges(edges: Edge[], changes: EdgeChange<Edge>
 }
 
 export function connectEdges(edges: Edge[], params: Connection): Edge[] {
-	return addEdge(params, edges);
+	return addEdge(
+		{
+			...params,
+			type: 'default',
+			animated: false,
+			style: {
+				stroke: 'rgb(0, 0, 0)',
+				strokeWidth: 1,
+			},
+			markerEnd: {
+				type: MarkerType.ArrowClosed,
+				color: '#000000',
+			},
+		},
+		edges,
+	);
 }

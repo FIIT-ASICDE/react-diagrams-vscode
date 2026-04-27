@@ -34,6 +34,7 @@ function getConstructOptions(nodeType: string): readonly string[] {
 export type EdgeEditDraft = {
 	edgeId: string;
 	label: string;
+	edgeType: 'default' | 'back';
 };
 
 // Labels produced by the diagram builder or recognized by code generation.
@@ -46,6 +47,11 @@ const EDGE_LABEL_OPTIONS = [
   'finally',
   'default',
   'case',
+] as const;
+
+const EDGE_TYPE_OPTIONS = [
+	{ value: 'back', label: 'back (loop/back edge)' },
+	{ value: 'default', label: 'default (normal edge)' },
 ] as const;
 
 // ─── Node edit dialog ───────────────────────────────────────────────────────
@@ -161,8 +167,25 @@ export function EdgeEditDialog({ draft, onChange, onSave, onCancel }: EdgeDialog
 		<div className="absolute inset-0 z-30 flex items-start justify-center bg-black/20 pt-20">
 			<div className="w-[560px] max-w-[calc(100vw-48px)] rounded border border-[var(--vscode-editorWidget-border)] bg-[var(--vscode-editorWidget-background)] p-4 shadow-xl">
 				<div className="mb-3 text-sm font-semibold text-[var(--vscode-editor-foreground)]">
-					Edit Edge Label
+					Edit Edge
 				</div>
+
+				<select
+					className="mb-3 w-full rounded border border-[var(--vscode-input-border)] bg-[var(--vscode-input-background)] px-3 py-2 text-sm text-[var(--vscode-input-foreground)]"
+					value={draft.edgeType}
+					onChange={(event) =>
+						onChange({
+							...draft,
+							edgeType: event.target.value as EdgeEditDraft['edgeType'],
+						})
+					}
+				>
+					{EDGE_TYPE_OPTIONS.map((option) => (
+						<option key={option.value} value={option.value}>
+							{option.label}
+						</option>
+					))}
+				</select>
 
 				<select
 					ref={inputRef}

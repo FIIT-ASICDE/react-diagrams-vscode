@@ -128,7 +128,7 @@ export function NodeHandles({
 /** Predefined configs used by the node components. */
 export const HANDLE_CONFIGS = {
 	/** Action / expandable / textPreview — only flow handles, no sides. */
-	flowOnly: { flow: true, sides: true } satisfies HandlesConfig,
+	flowOnly: { flow: true, sides: false } satisfies HandlesConfig,
 
 	/** Decision / loop — narrow diamond, side handles close to centerline. */
 	decision: { flow: true, sides: true, sideInset: 25 } satisfies HandlesConfig,

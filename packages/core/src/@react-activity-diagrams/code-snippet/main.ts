@@ -3,6 +3,7 @@ import type { FuncArg } from "./shared/types";
 import { CodeGenerator } from "./codegen/CodeGenerator";
 
 export type { FuncArg } from "./shared/types";
+export * from "./codegen/diagram-check";
 
 export function convertDiagramToCode(
 	nodes: Node[],

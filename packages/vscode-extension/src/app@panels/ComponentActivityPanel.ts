@@ -12,7 +12,7 @@ import {
 } from "vscode";
 import { getNonce } from "../app@utils/crypto";
 import { getUri } from "../app@utils/urls";
-import { convertDiagramToCode, parseActivityComponent } from "@react-diagrams/core";
+import { checkStructure, convertDiagramToCode, parseActivityComponent } from "@react-diagrams/core";
 import type {
 	ActivityExtensionToWebviewMessage,
 	ActivityGraphPayload,
@@ -470,6 +470,15 @@ export class ComponentActivityPanel {
 	): Promise<string> {
 		if (!nodes.length) {
 			void window.showWarningMessage("Cannot generate skeleton: the activity diagram has no nodes.");
+			return "";
+		}
+
+		try {
+			checkStructure(nodes, edges);
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : "Unknown diagram structure error.";
+			void window.showErrorMessage(`Cannot generate skeleton: ${message}`);
 			return "";
 		}
 

@@ -11,7 +11,6 @@ type Props = {
 	onBack: () => void;
 	onSwitchToViewer: () => void;
 	onSwitchToPlayground: () => void;
-	onLoadCurrentIntoPlayground: () => void;
 	onAddNode: (type: ActivityNodeType) => void;
 	onClearPlayground: () => void;
 	onGenerateSkeleton: () => void;
@@ -23,6 +22,7 @@ const ADD_BUTTONS: { type: ActivityNodeType; label: string }[] = [
 	{ type: 'decision', label: 'Decision' },
 	{ type: 'merge', label: 'Merge' },
 	{ type: 'expandable', label: 'Expandable' },
+	{ type: 'loop', label: 'Loop' },
 	{ type: 'end', label: 'End' },
 ];
 
@@ -33,10 +33,9 @@ export function DiagramToolbar({
 	onBack,
 	onSwitchToViewer,
 	onSwitchToPlayground,
-	onLoadCurrentIntoPlayground,
 	onAddNode,
 	onClearPlayground,
-	onGenerateSkeleton,
+	onGenerateSkeleton
 }: Props) {
 	const [addMenuOpen, setAddMenuOpen] = useState(false);
 
@@ -72,15 +71,7 @@ export function DiagramToolbar({
 			<div className="break-words px-3 py-1.5 text-xs text-zinc-300">
 				{isPlayground ? 'Playground' : currentTitle}
 			</div>
-
-			{isViewer && (
-				<div className="border-t border-zinc-800 px-2 py-2">
-					<VSCodeButton appearance="secondary" className="w-full" onClick={onLoadCurrentIntoPlayground}>
-						Edit Copy
-					</VSCodeButton>
-				</div>
-			)}
-
+			
 			{isPlayground && (
 				<div className="flex items-center gap-2 border-t border-zinc-800 px-2 py-2">
 					<div className="relative flex-1">

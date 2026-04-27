@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+	MarkerType,
 	type Connection,
 	type Edge,
 	type EdgeChange,
@@ -15,7 +16,6 @@ import type { ActivityNodeType } from './model/types';
 import { nodeTypes } from './components/diagram/nodeTypes';
 import ElkPathEdge from './components/diagram/ViewEdge';
 import DynamicPathEdge from './components/diagram/PlaygroundEdge';
-import { applyPlaygroundElkLayout } from './diagram-rendering/elk-layout';
 import { generateCodeFromDiagram } from './logic/diagram-code-generation';
 import { useDiagramNavigationStore } from './logic/navigation/use-diagram-navigation-store';
 import {
@@ -101,6 +101,52 @@ function buildErrorGraph(message: string): { nodes: Node[]; edges: Edge[] } {
 	};
 }
 
+function applyEdgeVisualByType(edge: Edge, edgeType: 'default' | 'back'): Edge {
+	const previousData = (edge.data ?? {}) as Record<string, unknown>;
+
+	if (edgeType === 'back') {
+		return {
+			...edge,
+			type: 'back',
+			animated: true,
+			style: {
+				stroke: 'rgb(200, 0, 0)',
+				strokeWidth: 1,
+				strokeDasharray: '6 4',
+			},
+			markerEnd: {
+				type: MarkerType.ArrowClosed,
+				color: '#000000',
+			},
+			data: {
+				...previousData,
+				semanticKind: 'loop-back',
+			},
+		};
+	}
+
+	const semanticKind =
+		previousData.semanticKind === 'loop-back' ? 'normal' : previousData.semanticKind;
+
+	return {
+		...edge,
+		type: 'default',
+		animated: false,
+		style: {
+			stroke: 'rgb(0, 0, 0)',
+			strokeWidth: 1,
+		},
+		markerEnd: {
+			type: MarkerType.ArrowClosed,
+			color: '#000000',
+		},
+		data: {
+			...previousData,
+			...(semanticKind !== undefined ? { semanticKind } : {}),
+		},
+	};
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 
 export default function ActivityDiagram() {
@@ -112,14 +158,11 @@ export default function ActivityDiagram() {
 	const [modalState, setModalState] = useState<ModalState>(null);
 
 	const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
-	const playgroundSnapshotDepthRef = useRef<number | null>(null);
-	const playgroundSnapshotSourceFileRef = useRef<string | null>(null);
 
 	const stack = useDiagramNavigationStore((s) => s.stack);
 	const currentIndex = useDiagramNavigationStore((s) => s.currentIndex);
 	const visibleRevision = useDiagramNavigationStore((s) => s.visibleRevision);
 	const applyIncomingDiagramPayload = useDiagramNavigationStore((s) => s.applyIncomingDiagramPayload);
-	const replaceCurrentDiagramPayload = useDiagramNavigationStore((s) => s.replaceCurrentDiagramPayload);
 	const setRootError = useDiagramNavigationStore((s) => s.setRootError);
 	const markPendingPreview = useDiagramNavigationStore((s) => s.markPendingPreview);
 	const clearPendingPreview = useDiagramNavigationStore((s) => s.clearPendingPreview);
@@ -212,18 +255,21 @@ export default function ActivityDiagram() {
 			if (!detail || typeof detail.edgeId !== 'string') return;
 			if (viewMode !== 'playground') return;
 
+			const edge = playgroundEdges.find((candidate) => String(candidate.id) === detail.edgeId);
+
 			setModalState({
 				type: 'edgeEdit',
 				draft: {
 					edgeId: detail.edgeId,
 					label: typeof detail.label === 'string' ? detail.label : '',
+					edgeType: edge?.type === 'back' ? 'back' : 'default',
 				},
 			});
 		}
 
 		window.addEventListener('activity/edgeLabelContextMenu', handler);
 		return () => window.removeEventListener('activity/edgeLabelContextMenu', handler);
-	}, [viewMode]);
+	}, [playgroundEdges, viewMode]);
 
 	// ── Viewer-side: drilldown ───────────────────────────────────────────
 
@@ -270,29 +316,12 @@ export default function ActivityDiagram() {
 	}, []);
 
 	const openPlaygroundWithGraph = useCallback(async (nodes: Node[], edges: Edge[]) => {
-		let layoutedNodes = nodes;
-		let layoutedEdges = edges;
-		try {
-			const layouted = await applyPlaygroundElkLayout(nodes, edges);
-			layoutedNodes = layouted.nodes;
-			layoutedEdges = layouted.edges;
-		} catch (error) {
-			console.error('Failed to apply activity ELK layout when opening playground', error);
-		}
 
-		setPlaygroundNodes(layoutedNodes);
-		setPlaygroundEdges(layoutedEdges);
+		setPlaygroundNodes(nodes);
+		setPlaygroundEdges(edges);
 		setModalState(null);
 		setViewMode('playground');
 	}, []);
-
-	const loadCurrentIntoPlayground = useCallback(async () => {
-		playgroundSnapshotDepthRef.current = null;
-		playgroundSnapshotSourceFileRef.current = null;
-		const cloneNodes = visibleNodes.map((node) => ({ ...node }));
-		const cloneEdges = visibleEdges.map((edge) => ({ ...edge }));
-		await openPlaygroundWithGraph(cloneNodes, cloneEdges);
-	}, [openPlaygroundWithGraph, visibleEdges, visibleNodes]);
 
 	const commitPlaygroundToViewer = useCallback(() => {
 		const { nodes, edges } = getActiveGraph();
@@ -304,38 +333,18 @@ export default function ActivityDiagram() {
 			return;
 		}
 
-		// Read current navigation state directly from the store (avoids stale closure).
-		const { stack: navStack, currentIndex: navIndex } = useDiagramNavigationStore.getState();
-		const effectiveDepth = navIndex + 1;
-		const currentTop = navStack[navIndex];
+		const { currentIndex: navIndex } = useDiagramNavigationStore.getState();
+		const snapshotIndex = navIndex + 2;
+		const sourceFile = `Playground Snapshot ${snapshotIndex}.tsx`;
 
-		const canReplaceCurrentPlaygroundSnapshot =
-			playgroundSnapshotDepthRef.current !== null &&
-			effectiveDepth === playgroundSnapshotDepthRef.current &&
-			playgroundSnapshotSourceFileRef.current !== null &&
-			currentTop?.sourceFile === playgroundSnapshotSourceFileRef.current;
-
-		if (canReplaceCurrentPlaygroundSnapshot) {
-			void replaceCurrentDiagramPayload({
-				nodes,
-				edges,
-				sourceFile: playgroundSnapshotSourceFileRef.current ?? undefined,
-			} as ActivityGraphPayload);
-		} else {
-			const snapshotIndex = effectiveDepth + 1;
-			const sourceFile = `Playground Snapshot ${snapshotIndex}.tsx`;
-			playgroundSnapshotDepthRef.current = effectiveDepth + 1;
-			playgroundSnapshotSourceFileRef.current = sourceFile;
-
-			void applyIncomingDiagramPayload({
-				nodes,
-				edges,
-				sourceFile,
-			} as ActivityGraphPayload);
-		}
+		void applyIncomingDiagramPayload({
+			nodes,
+			edges,
+			sourceFile,
+		} as ActivityGraphPayload);
 
 		setViewMode('viewer');
-	}, [applyIncomingDiagramPayload, getActiveGraph, replaceCurrentDiagramPayload]);
+	}, [applyIncomingDiagramPayload, getActiveGraph]);
 
 	const switchToViewer = useCallback(() => {
 		if (viewMode === 'playground') {
@@ -383,7 +392,12 @@ export default function ActivityDiagram() {
 		const { draft } = modalState;
 		setPlaygroundEdges((edges) => {
 			const next = edges.map((edge) =>
-				String(edge.id) === draft.edgeId ? { ...edge, label: draft.label } : edge,
+				String(edge.id) === draft.edgeId
+					? {
+						...applyEdgeVisualByType(edge, draft.edgeType),
+						label: draft.label,
+					}
+					: edge,
 			);
 			return next;
 		});
@@ -427,6 +441,7 @@ export default function ActivityDiagram() {
 				draft: {
 					edgeId: String(edge.id),
 					label: typeof edge.label === 'string' ? edge.label : '',
+					edgeType: edge.type === 'back' ? 'back' : 'default',
 				},
 			});
 		},
@@ -481,7 +496,6 @@ export default function ActivityDiagram() {
 				onBack={goBack}
 				onSwitchToViewer={switchToViewer}
 				onSwitchToPlayground={switchToPlayground}
-				onLoadCurrentIntoPlayground={loadCurrentIntoPlayground}
 				onAddNode={addPlaygroundNode}
 				onClearPlayground={clearPlayground}
 				onGenerateSkeleton={generateSkeleton}
