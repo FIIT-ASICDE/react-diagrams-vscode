@@ -105,13 +105,17 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
   setNodeData(host, loopId, { construct: 'do-while' });
 
   const ctx = host.pushLoopContext(loopId);
+
   try {
     const loopBranch = stmt.getStatement();
     const body = host.visitBranch(loopBranch);
 
     if (!body.entry) {
-      host.writer.addEdge(loopId, loopId, 'yes', true);
+      // Empty body. Keep loop node as construct entry.
+      host.writer.addEdge(loopId, loopId, 'yes', false);
+
       const breakExits = wirePendingBreaksAndContinues(host, ctx);
+
       return {
         entry: loopId,
         exits: [loopId, ...breakExits],
@@ -120,15 +124,22 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
       };
     }
 
+    // IMPORTANT:
+    // For do-while, the construct entry must be loopId, not body.entry.
+    // CodeGen must see the loop node first so it can emit:
+    // do { body } while (condition)
+    host.writer.addEdge(loopId, body.entry, 'yes', false);
+
+    // Body natural fall-through goes back to the do-while test.
+    // This is a loop-back edge, so mark it as back=true.
     for (const exit of body.exits) {
-      host.writer.addEdge(exit, loopId, getFallthroughEdgeLabel(exit));
+      host.writer.addEdge(exit, loopId, getFallthroughEdgeLabel(exit), true);
     }
 
-    host.writer.addEdge(loopId, body.entry, 'yes', true);
-
     const breakExits = wirePendingBreaksAndContinues(host, ctx);
+
     return {
-      entry: body.entry,
+      entry: loopId,
       exits: [loopId, ...breakExits],
       returnExits: [...new Set(body.returnExits)],
       throwExits: [...new Set(body.throwExits)],
