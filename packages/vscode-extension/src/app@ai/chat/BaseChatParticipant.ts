@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import { componentStateCache } from "@/app@utils/cache";
 import { ChatContext, ChatResponseStream, CancellationToken, ChatRequest, ProviderResult, ChatResult } from "vscode";
 
 export function isPromptHelp(prompt: string): boolean {
@@ -7,10 +6,30 @@ export function isPromptHelp(prompt: string): boolean {
 	return ["?", "help", "", "what"].includes(normalized);
 }
 
+export type ContextDataStatus = "available" | "disabled" | "unavailable" | "unobtainable";
+
+export type ContextData<T> =
+	| { status: "available"; data: T }
+	| { status: Exclude<ContextDataStatus, "available"> };
+
+export function contextAvailable<T>(data: T): ContextData<T> {
+	return { status: "available", data };
+}
+
+export function contextStatus<T>(status: Exclude<ContextDataStatus, "available">): ContextData<T> {
+	return { status };
+}
+
+export function isContextAvailable<T>(value: ContextData<T>): value is { status: "available"; data: T } {
+	return value.status == "available";
+}
+
+export const statusTag = (status: ContextDataStatus): string => `<${status}>`;
+
 export type BaseChatContext = {
 	userPrompt: string;
 	currentFilePath?: string;
-	currentCodeOrSelection?: string;
+	currentCodeOrSelection: ContextData<string>;
 	codeContextKind: "selected" | "full-file";
 };
 
@@ -31,13 +50,13 @@ export abstract class BaseChatParticipant<C extends BaseChatContext> {
 	}
 
 	async handleCreateChatParticipant(request: ChatRequest, _chatContext: ChatContext, response: ChatResponseStream, token: CancellationToken): Promise<ProviderResult<ChatResult | void>> {
-		const snapshot = await this.getChatContext(request.prompt);
-		const promptWasVague = isPromptHelp(snapshot.userPrompt);
-
+		const promptWasVague = isPromptHelp(request.prompt);
 		if (promptWasVague) {
 			response.markdown(this.buildCapabilitiesIntro());
 			return;
 		}
+
+		const snapshot = await this.getChatContext(request.prompt);
 
 		response.markdown(this.buildContextHeader(snapshot));
 

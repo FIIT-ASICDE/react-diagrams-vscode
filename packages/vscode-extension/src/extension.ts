@@ -4,6 +4,7 @@ import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
 import { normalizeFilePath } from "./app@utils";
 // import { registerDiagramChatParticipant } from "@/app@ai/chat/BaseChatParticipant";
 import { componentStateCache } from "./app@utils/cache";
+import { StateDiagramParticipant } from "./app@ai/chat/state-diagrams/StateDiagramParticipant";
 
 export function activate(context: ExtensionContext) {
 	const showComponentStateDiagram = commands.registerCommand("vs-code-ext.componentState", () => {
@@ -19,7 +20,7 @@ export function activate(context: ExtensionContext) {
 		ComponentActivityPanel.render(context.extensionUri);
 	});
 
-	const refreshCurrentPanelOnSave = workspace.onDidSaveTextDocument((document) => {
+	const refreshStatePanelOnSave = workspace.onDidSaveTextDocument((document) => {
 		if (!ComponentStatePanel.current) {
 			return;
 		}
@@ -42,10 +43,11 @@ export function activate(context: ExtensionContext) {
 		}
 	});
 
-	// const diagramChatParticipant = registerDiagramChatParticipant(context);
+	const stateDiagramChatParticipant = new StateDiagramParticipant("vs-code-ext.state-diagram");
+	const stateDiagramChatParticipantReg = stateDiagramChatParticipant.register(context);
 
 	const autoRestartInDev = setupAutoRestartInDevelopment(context);
-	context.subscriptions.push(showComponentStateDiagram, requestStateDiagramImage, refreshCurrentPanelOnSave, showActivityCommand, /*diagramChatParticipant,*/ settingsChange, autoRestartInDev);
+	context.subscriptions.push(showComponentStateDiagram, requestStateDiagramImage, refreshStatePanelOnSave, stateDiagramChatParticipantReg, showActivityCommand, settingsChange, autoRestartInDev);
 }
 
 function setupAutoRestartInDevelopment(context: ExtensionContext) {

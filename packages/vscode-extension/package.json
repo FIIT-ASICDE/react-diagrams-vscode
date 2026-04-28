@@ -16,10 +16,10 @@
   "contributes": {
     "chatParticipants": [
       {
-        "id": "vs-code-ext.diagram",
-        "name": "diagram",
-        "fullName": "Diagram Assistant",
-        "description": "Understands TypeScript, TSX, and activity diagrams using your current code and diagram context.",
+        "id": "vs-code-ext.state-diagram",
+        "name": "state-diagram",
+        "fullName": "State Diagram Assistant",
+        "description": "Understands TypeScript, TSX, and state diagrams using your current code and diagram context.",
         "isSticky": true
       }
     ],
