@@ -21,6 +21,7 @@ import type {
 import { isActivityWebviewToExtensionMessage } from "@react-diagrams/core/app@vscode";
 import { Node, Edge } from "@xyflow/react";
 import type { DiagramContext } from "../chat/types";
+import { getConfig, updateConfig } from "../chat/config";
 import * as ts from "typescript";
 
 type ActivityGraph = {
@@ -816,6 +817,26 @@ export class ComponentActivityPanel {
 	}
 
 	private webviewMessageListener(message: unknown) {
+		if (!!message && typeof message === "object") {
+			const type = (message as { type?: unknown }).type;
+
+			if (type === "settings/get") {
+				void this.panel.webview.postMessage({
+					type: "settings/config",
+					data: getConfig(),
+				});
+				return;
+			}
+
+			if (type === "settings/update") {
+				const data = (message as { data?: unknown }).data;
+				void updateConfig(data)
+					.then((next) => this.panel.webview.postMessage({ type: "settings/config", data: next }))
+					.catch((error) => console.error("Failed to update chat settings:", error));
+				return;
+			}
+		}
+
 		if (isWebviewReadyMessage(message)) {
 			void this.onWebviewReady();
 			return;

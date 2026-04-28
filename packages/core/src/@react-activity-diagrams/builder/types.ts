@@ -8,7 +8,6 @@ export type FlowNodeData = {
 	/** Canonical semantic tag used by parser and CodeGen dispatch. */
 	construct?: Construct;
 	nodeKind?: string;
-	hasFalseBranch?: boolean;
 	deps?: string;
 
 	/**
@@ -63,20 +62,6 @@ export type FlowNodeData = {
 	forEachIterable?: string;
 	forEachCallee?: string;
 	forEachParams?: string;
-
-	/**
-	 * For "try" action nodes only. Verbatim original try/catch/finally
-	 * source so CodeGen can emit it as-is instead of reconstructing it
-	 * from the graph.
-	 */
-	originalSource?: string;
-
-	/**
-	 * Legacy — kept for compatibility with diagrams that still encode
-	 * for-of / for-in via separate sourceText (iterable) and loopBinding
-	 * fields. New parser puts everything into forOfBinding.
-	 */
-	loopBinding?: string;
 };
 
 export type FlowGraph = {

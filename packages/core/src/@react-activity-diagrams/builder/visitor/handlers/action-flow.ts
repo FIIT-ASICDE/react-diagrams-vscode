@@ -11,7 +11,7 @@ import {
 } from 'ts-morph';
 import { getCallbackBranch, isForEachLikeCall } from '../metadata';
 import type { BuildResult, HookMeta } from '../types';
-import { compactLabel, countDecisionsInBranch } from '../utils';
+import { compactLabel } from '../utils';
 import type { StatementVisitorHost } from './host-context';
 
 function setNodeData(host: StatementVisitorHost, nodeId: string, extra: Record<string, unknown>): void {
@@ -102,12 +102,11 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
   const ctx = host.pushLoopContext(loopId);
   try {
     const callbackBranch = getCallbackBranch(callExpression);
-    const innerDecisionCount = callbackBranch ? countDecisionsInBranch(callbackBranch) : 0;
     const body = callbackBranch ? host.visitBranch(callbackBranch) : undefined;
 
     if (body?.entry) {
       host.writer.addEdge(loopId, body.entry, 'each', false);
-      host.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
+      host.connectLoopBackEdges(body.exits, loopId);
 
       return {
         entry: loopId,

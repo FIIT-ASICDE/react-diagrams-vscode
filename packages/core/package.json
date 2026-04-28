@@ -13,6 +13,12 @@
       "require": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./constructs": {
+      "types": "./dist/@react-activity-diagrams/code-snippet/shared/construct.d.ts",
+      "import": "./dist/esm/@react-activity-diagrams/code-snippet/shared/construct.js",
+      "require": "./dist/@react-activity-diagrams/code-snippet/shared/construct.js",
+      "default": "./dist/@react-activity-diagrams/code-snippet/shared/construct.js"
+    },
     "./app@*": {
       "types": "./dist/app@*/index.d.ts",
       "import": "./dist/esm/app@*/index.js",

@@ -63,6 +63,10 @@ type DiagramNavigationState = {
 	visibleRevision: number;
 
 	applyIncomingDiagramPayload: (payload: ActivityGraphPayload) => Promise<Node[]>;
+	upsertDiagramPayloadBySourceFile: (
+		payload: ActivityGraphPayload,
+		sourceFile: string,
+	) => Promise<Node[]>;
 	replaceCurrentDiagramPayload: (payload: ActivityGraphPayload) => Promise<Node[]>;
 	setRootError: (nodes: Node[], edges: Edge[]) => void;
 	markPendingPreview: (title: string) => void;
@@ -108,6 +112,58 @@ export const useDiagramNavigationStore = create<DiagramNavigationState>((set, ge
 		set({
 			stack: newStack,
 			currentIndex: newStack.length - 1,
+			pendingPreviewTitle: undefined,
+			visibleRevision: visibleRevision + 1,
+		});
+
+		return layouted.nodes;
+	},
+
+	upsertDiagramPayloadBySourceFile: async (payload, sourceFile) => {
+		const incomingNodes = Array.isArray(payload.nodes) ? (payload.nodes as Node[]) : [];
+		const incomingEdges = Array.isArray(payload.edges) ? (payload.edges as Edge[]) : [];
+
+		const layouted = await layoutOrPassThrough(incomingNodes, incomingEdges);
+
+		const payloadWithSource = payload as ActivityGraphPayload & { sourceText?: unknown };
+		const normalizedSourceFile = sourceFile.trim();
+
+		// Read state after the async ELK call so it is always fresh.
+		const { stack, currentIndex, pendingPreviewTitle, visibleRevision } = get();
+
+		const base = stack.slice(0, currentIndex + 1);
+
+		const entry: DiagramViewItem = {
+			title: pickTitle(
+				{ ...payload, sourceFile: normalizedSourceFile } as ActivityGraphPayload,
+				pendingPreviewTitle,
+				base.length,
+			),
+			sourceFile: normalizedSourceFile,
+			sourceText:
+				typeof payloadWithSource.sourceText === 'string'
+					? payloadWithSource.sourceText
+					: undefined,
+			nodes: layouted.nodes,
+			edges: layouted.edges,
+		};
+
+		const existingIndex = base.findIndex((item) => item.sourceFile === normalizedSourceFile);
+		let newStack: DiagramViewItem[];
+		let newCurrentIndex: number;
+
+		if (existingIndex >= 0) {
+			newStack = [...base];
+			newStack[existingIndex] = entry;
+			newCurrentIndex = existingIndex;
+		} else {
+			newStack = [...base, entry];
+			newCurrentIndex = newStack.length - 1;
+		}
+
+		set({
+			stack: newStack,
+			currentIndex: newCurrentIndex,
 			pendingPreviewTitle: undefined,
 			visibleRevision: visibleRevision + 1,
 		});

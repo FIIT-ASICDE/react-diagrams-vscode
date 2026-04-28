@@ -10,6 +10,7 @@ import {
 	type NodeChange,
 	type ReactFlowInstance,
 } from '@xyflow/react';
+import { getDefaultConstructForNodeType } from '@react-diagrams/core/constructs';
 import { nanoid } from 'nanoid';
 import type { ActivityNodeType } from '../model/types';
 
@@ -24,19 +25,6 @@ const DEFAULT_LABEL_BY_TYPE: Record<ActivityNodeType, string> = {
 };
 
 const EXPANDABLE_DEFAULT_SOURCE = 'function name() {\n  // TODO\n}';
-
-function getDefaultConstructForNodeType(type: ActivityNodeType): string {
-	switch (type) {
-		case 'decision':
-			return 'if';
-		case 'loop':
-			return 'while';
-		case 'expandable':
-			return 'function';
-		default:
-			return 'unknown';
-	}
-}
 
 export function createActivityNode(
 	type: ActivityNodeType,

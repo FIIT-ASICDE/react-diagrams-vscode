@@ -1,5 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { VSCodeButton } from '@vscode/webview-ui-toolkit/react';
+import {
+	DECISION_CONSTRUCTS,
+	EXPANDABLE_CONSTRUCTS,
+	LOOP_CONSTRUCTS,
+	TERMINATOR_CONSTRUCTS,
+} from '@react-diagrams/core/constructs';
 import { toTrimmedNodeLabel } from '../../logic/rename-utils';
 
 export type NodeEditDraft = {
@@ -11,10 +17,10 @@ export type NodeEditDraft = {
 	construct?: string;
 };
 
-const DECISION_CONSTRUCT_OPTIONS = ['if', 'switch', 'try', 'unknown'] as const;
-const LOOP_CONSTRUCT_OPTIONS = ['while', 'do-while', 'for', 'for-of', 'for-in', 'foreach', 'unknown'] as const;
-const EXPANDABLE_CONSTRUCT_OPTIONS = ['function', 'hook', 'unknown'] as const;
-const ACTION_CONSTRUCT_OPTIONS = ['return', 'throw', 'break', 'continue', 'unknown'] as const;
+const DECISION_CONSTRUCT_OPTIONS = [...DECISION_CONSTRUCTS, 'unknown'] as const;
+const LOOP_CONSTRUCT_OPTIONS = [...LOOP_CONSTRUCTS, 'unknown'] as const;
+const EXPANDABLE_CONSTRUCT_OPTIONS = [...EXPANDABLE_CONSTRUCTS, 'unknown'] as const;
+const ACTION_CONSTRUCT_OPTIONS = [...TERMINATOR_CONSTRUCTS, 'unknown'] as const;
 const UNKNOWN_CONSTRUCT_OPTIONS = ['unknown'] as const;
 
 function getConstructOptions(nodeType: string): readonly string[] {

@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { isTerminatorConstruct } from '@react-diagrams/core/constructs';
 import { Diamond } from './Diamond';
 import { HANDLE_CONFIGS, NodeHandles } from './handles';
 import { nodeStyles } from '../../styles/node-styles';
@@ -38,7 +39,7 @@ type NodeProps = {
 
 function isDangerAction(data: NodeData): boolean {
 	const construct = String(data.construct ?? '').toLowerCase();
-	if (construct === 'return' || construct === 'throw' || construct === 'break' || construct === 'continue') {
+	if (isTerminatorConstruct(construct)) {
 		return true;
 	}
 

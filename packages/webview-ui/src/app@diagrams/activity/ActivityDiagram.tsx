@@ -1,165 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect } from 'react';
+import type { MouseEvent } from 'react';
 import {
-	MarkerType,
-	type Connection,
-	type Edge,
-	type EdgeChange,
 	type Node,
-	type NodeChange,
-	type ReactFlowInstance,
 } from '@xyflow/react';
 
 import { vscode } from '../../app@vscode/api';
-import type { ActivityGraphPayload } from '@react-diagrams/core/app@vscode';
-import type { ActivityNodeType } from './model/types';
+import type { ActivityWebviewMessenger } from './model/types';
 
 import { nodeTypes } from './components/diagram/nodeTypes';
-import ElkPathEdge from './components/diagram/ViewEdge';
-import DynamicPathEdge from './components/diagram/PlaygroundEdge';
-import { generateCodeFromDiagram } from './logic/diagram-code-generation';
 import { useDiagramNavigationStore } from './logic/navigation/use-diagram-navigation-store';
-import {
-	appendNode,
-	applyEdgeChangesToEdges,
-	applyNodeChangesToNodes,
-	centerNodeInViewport,
-	connectEdges,
-	createActivityNode,
-} from './logic/graph-edit-utils';
-
-import { useActivityMessages } from './logic/use-activity-messages';
-import { useImageCapture } from './logic/use-image-capture';
-import { toTrimmedNodeLabel } from './logic/rename-utils';
-import { DiagramToolbar, type ViewMode } from './components/main/Toolbar';
+import { DiagramToolbar } from './components/main/Toolbar';
 import { DiagramCanvas } from './components/main/DiagramCanvas';
-import { DiagramModals, type ModalState } from './components/main/DiagramModals';
-import type { NodeEditDraft, EdgeEditDraft } from './components/modals/rename-dialog';
-
-
-const VIEWER_NODE_TYPES = nodeTypes;
-
-const VIEWER_EDGE_TYPES = {
-	default: ElkPathEdge,
-	back: ElkPathEdge,
-};
-
-const PLAYGROUND_EDGE_TYPES = {
-	default: DynamicPathEdge,
-	back: DynamicPathEdge,
-};
-
-// ─── Utilities ──────────────────────────────────────────────────────────────
-
-function truncate(text: string, maxLength: number) {
-	return text.length <= maxLength ? text : `${text.slice(0, maxLength - 3)}...`;
-}
-
-function getNodeData(node: Node) {
-	const data = (node.data ?? {}) as Record<string, unknown>;
-
-	return {
-		label: String(data.label ?? ''),
-		sourceText: String(data.sourceText ?? data.label ?? ''),
-		deps: typeof data.deps === 'string' ? data.deps : undefined,
-	};
-}
-
-function getDefaultConstructForNodeType(nodeType: string): string {
-	switch (nodeType) {
-		case 'decision':
-			return 'if';
-		case 'loop':
-			return 'while';
-		case 'expandable':
-			return 'function';
-		default:
-			return 'action';
-	}
-}
-
-function createNodeEditDraft(node: Node): NodeEditDraft {
-	const data = (node.data ?? {}) as Record<string, unknown>;
-	const nodeData = getNodeData(node);
-	const nodeType = String(node.type ?? 'action');
-	const construct = typeof data.construct === 'string' ? data.construct : undefined;
-	return {
-		nodeId: String(node.id),
-		nodeType,
-		label: nodeData.label,
-		sourceText: nodeData.sourceText,
-		deps: nodeData.deps,
-		construct: construct ?? getDefaultConstructForNodeType(nodeType),
-	};
-}
-
-function buildErrorGraph(message: string): { nodes: Node[]; edges: Edge[] } {
-	return {
-		nodes: [
-			{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'Activity diagram error' } },
-			{ id: 'n2', position: { x: 0, y: 100 }, data: { label: truncate(message, 80) } },
-		],
-		edges: [{ id: 'n1-n2', source: 'n1', target: 'n2' }],
-	};
-}
-
-function applyEdgeVisualByType(edge: Edge, edgeType: 'default' | 'back'): Edge {
-	const previousData = (edge.data ?? {}) as Record<string, unknown>;
-
-	if (edgeType === 'back') {
-		return {
-			...edge,
-			type: 'back',
-			animated: true,
-			style: {
-				stroke: 'rgb(200, 0, 0)',
-				strokeWidth: 1,
-				strokeDasharray: '6 4',
-			},
-			markerEnd: {
-				type: MarkerType.ArrowClosed,
-				color: '#000000',
-			},
-			data: {
-				...previousData,
-				semanticKind: 'loop-back',
-			},
-		};
-	}
-
-	const semanticKind =
-		previousData.semanticKind === 'loop-back' ? 'normal' : previousData.semanticKind;
-
-	return {
-		...edge,
-		type: 'default',
-		animated: false,
-		style: {
-			stroke: 'rgb(0, 0, 0)',
-			strokeWidth: 1,
-		},
-		markerEnd: {
-			type: MarkerType.ArrowClosed,
-			color: '#000000',
-		},
-		data: {
-			...previousData,
-			...(semanticKind !== undefined ? { semanticKind } : {}),
-		},
-	};
-}
+import { DiagramModals } from './components/main/DiagramModals';
+import { useActivityCodegen } from './hooks/useActivityCodegen';
+import { useActivityExport } from './hooks/useActivityExport';
+import { useActivityMessages } from './hooks/useActivityMessages';
+import { useActivityModals } from './hooks/useActivityModals';
+import { useActivityPlayground } from './hooks/useActivityPlayground';
 
 // ─── Main component ─────────────────────────────────────────────────────────
 
 export default function ActivityDiagram() {
-	const [viewMode, setViewMode] = useState<ViewMode>('viewer');
-
-	const [playgroundNodes, setPlaygroundNodes] = useState<Node[]>([]);
-	const [playgroundEdges, setPlaygroundEdges] = useState<Edge[]>([]);
-
-	const [modalState, setModalState] = useState<ModalState>(null);
-
-	const reactFlowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
-
 	const stack = useDiagramNavigationStore((s) => s.stack);
 	const currentIndex = useDiagramNavigationStore((s) => s.currentIndex);
 	const visibleRevision = useDiagramNavigationStore((s) => s.visibleRevision);
@@ -175,102 +36,70 @@ export default function ActivityDiagram() {
 	const currentTitle = currentDiagram?.title ?? 'Diagram';
 	const canGoBack = currentIndex > 0;
 
-	const activeNodes = viewMode === 'playground' ? playgroundNodes : visibleNodes;
-	const activeEdges = viewMode === 'playground' ? playgroundEdges : visibleEdges;
-	const isEditable = viewMode === 'playground';
-	const isPlayground = viewMode === 'playground';
-
-	const getActiveGraph = useCallback(
-		() => ({
-			nodes: viewMode === 'playground' ? playgroundNodes : visibleNodes,
-			edges: viewMode === 'playground' ? playgroundEdges : visibleEdges,
-		}),
-		[playgroundEdges, playgroundNodes, viewMode, visibleEdges, visibleNodes],
-	);
-
-	const edgeTypes = useMemo(
-		() =>
-			viewMode === 'playground'
-				? PLAYGROUND_EDGE_TYPES
-				: VIEWER_EDGE_TYPES,
-		[viewMode],
-	);
-
 	const postMessage = useCallback((type: string, data: unknown = {}) => {
-		vscode.postMessage(type, data);
+		vscode.postMessage(type as never, data as never);
 	}, []);
 
-	const captureImage = useImageCapture();
+	const {
+		viewMode,
+		playgroundEdges,
+		setPlaygroundNodes,
+		setPlaygroundEdges,
+		activeNodes,
+		activeEdges,
+		isEditable,
+		isPlayground,
+		edgeTypes,
+		getActiveGraph,
+		handleCanvasInit,
+		addPlaygroundNode,
+		clearPlayground,
+		switchToViewer,
+		switchToPlayground,
+		onNodesChange,
+		onEdgesChange,
+		onConnect,
+	} = useActivityPlayground({
+		visibleNodes,
+		visibleEdges,
+	});
 
-	// ── Incoming messages from extension host ────────────────────────────
+	const {
+		modalState,
+		closeModal,
+		onNodeContextMenu,
+		onEdgeContextMenu,
+		onNodeEditChange,
+		onEdgeEditChange,
+		saveNodeEditDraft,
+		saveEdgeEditDraft,
+	} = useActivityModals({
+		viewMode,
+		playgroundEdges,
+		setPlaygroundNodes,
+		setPlaygroundEdges,
+	});
 
-	const handleCodeData = useCallback(
-		(payload: ActivityGraphPayload) => {
-			void applyIncomingDiagramPayload(payload);
-		},
-		[applyIncomingDiagramPayload],
-	);
-
-	const handleCodeError = useCallback(
-		(message: string) => {
-			const { nodes, edges } = buildErrorGraph(message);
-			setRootError(nodes, edges);
-			clearPendingPreview();
-		},
-		[clearPendingPreview, setRootError],
-	);
-
-	const handleImageRequest = useCallback(async () => {
-		try {
-			const dataUrl = await captureImage();
-			postMessage('diagram/imageData', { dataUrl });
-		} catch (error) {
-			postMessage('diagram/imageData', {
-				dataUrl: null,
-				error: error instanceof Error ? error.message : 'Image capture failed',
-			});
-		}
-	}, [captureImage, postMessage]);
-
-	const handleGraphRequest = useCallback(() => {
-		const { nodes, edges } = getActiveGraph();
-		postMessage('diagram/graphSnapshot', { nodes, edges });
-	}, [getActiveGraph, postMessage]);
+	const { handleImageRequest } = useActivityExport({ postMessage });
 
 	useActivityMessages({
-		onCodeData: handleCodeData,
-		onCodeError: handleCodeError,
-		onImageRequest: handleImageRequest,
-		onGraphRequest: handleGraphRequest,
+		applyIncomingDiagramPayload,
+		setRootError,
+		clearPendingPreview,
+		getActiveGraph,
+		handleImageRequest,
+		postMessage,
+	});
+
+	const { generateSkeleton } = useActivityCodegen({
+		vscode: vscode as unknown as ActivityWebviewMessenger,
+		getActiveGraph,
 	});
 
 	// Ready handshake — post once on mount.
 	useEffect(() => {
 		postMessage('webview/ready');
 	}, [postMessage]);
-
-	// Edge-label context menu (custom event from the BackEdge label).
-	useEffect(() => {
-		function handler(event: Event) {
-			const detail = (event as CustomEvent<{ edgeId?: unknown; label?: unknown }>).detail;
-			if (!detail || typeof detail.edgeId !== 'string') return;
-			if (viewMode !== 'playground') return;
-
-			const edge = playgroundEdges.find((candidate) => String(candidate.id) === detail.edgeId);
-
-			setModalState({
-				type: 'edgeEdit',
-				draft: {
-					edgeId: detail.edgeId,
-					label: typeof detail.label === 'string' ? detail.label : '',
-					edgeType: edge?.type === 'back' ? 'back' : 'default',
-				},
-			});
-		}
-
-		window.addEventListener('activity/edgeLabelContextMenu', handler);
-		return () => window.removeEventListener('activity/edgeLabelContextMenu', handler);
-	}, [playgroundEdges, viewMode]);
 
 	// ── Viewer-side: drilldown ───────────────────────────────────────────
 
@@ -292,124 +121,10 @@ export default function ActivityDiagram() {
 		[markPendingPreview, postMessage, viewMode],
 	);
 
-	// ── Playground-side: editing ─────────────────────────────────────────
-
-	const addPlaygroundNode = useCallback(
-		(type: ActivityNodeType) => {
-			setPlaygroundNodes((nodes) => {
-				const currentNodeIndex = nodes.length + 1;
-				const node = centerNodeInViewport(
-				createActivityNode(type, currentNodeIndex, false),
-					reactFlowRef.current,
-					window.innerWidth,
-					window.innerHeight,
-				);
-				return appendNode(nodes, node);
-			});
-		},
-		[],
-	);
-
-	const clearPlayground = useCallback(() => {
-		setPlaygroundNodes([]);
-		setPlaygroundEdges([]);
-		setModalState(null);
-	}, []);
-
-	const openPlaygroundWithGraph = useCallback(async (nodes: Node[], edges: Edge[]) => {
-
-		setPlaygroundNodes(nodes);
-		setPlaygroundEdges(edges);
-		setModalState(null);
-		setViewMode('playground');
-	}, []);
-
-	const commitPlaygroundToViewer = useCallback(() => {
-		const { nodes, edges } = getActiveGraph();
-
-		setModalState(null);
-
-		if (!nodes.length && !edges.length) {
-			setViewMode('viewer');
-			return;
-		}
-
-		const { currentIndex: navIndex } = useDiagramNavigationStore.getState();
-		const snapshotIndex = navIndex + 2;
-		const sourceFile = `Playground Snapshot ${snapshotIndex}.tsx`;
-
-		void applyIncomingDiagramPayload({
-			nodes,
-			edges,
-			sourceFile,
-		} as ActivityGraphPayload);
-
-		setViewMode('viewer');
-	}, [applyIncomingDiagramPayload, getActiveGraph]);
-
-	const switchToViewer = useCallback(() => {
-		if (viewMode === 'playground') {
-			commitPlaygroundToViewer();
-			return;
-		}
-		setModalState(null);
-		setViewMode('viewer');
-	}, [commitPlaygroundToViewer, viewMode]);
-
-	const switchToPlayground = useCallback(() => {
-		void openPlaygroundWithGraph(playgroundNodes, playgroundEdges);
-	}, [openPlaygroundWithGraph, playgroundEdges, playgroundNodes]);
-
-	// ── Save handlers for the dialogs ────────────────────────────────────
-
-	const saveNodeEditDraft = useCallback(() => {
-		if (!modalState || modalState.type !== 'nodeEdit') return;
-		const { draft } = modalState;
-		const label = toTrimmedNodeLabel(draft.sourceText);
-		setPlaygroundNodes((nodes) => {
-			const next = nodes.map((node) => {
-				if (String(node.id) !== draft.nodeId) return node;
-				const previousData = (node.data as Record<string, unknown> | undefined) ?? {};
-				const constructUpdate = {
-					construct: draft.construct ?? getDefaultConstructForNodeType(draft.nodeType),
-				};
-				return {
-					...node,
-					data: {
-						...previousData,
-						label,
-						sourceText: draft.sourceText,
-						...(draft.deps !== undefined ? { deps: draft.deps } : {}),
-						...constructUpdate,
-					},
-				};
-			});
-			return next;
-		});
-		setModalState(null);
-	}, [modalState]);
-
-	const saveEdgeEditDraft = useCallback(() => {
-		if (!modalState || modalState.type !== 'edgeEdit') return;
-		const { draft } = modalState;
-		setPlaygroundEdges((edges) => {
-			const next = edges.map((edge) =>
-				String(edge.id) === draft.edgeId
-					? {
-						...applyEdgeVisualByType(edge, draft.edgeType),
-						label: draft.label,
-					}
-					: edge,
-			);
-			return next;
-		});
-		setModalState(null);
-	}, [modalState]);
-
 	// ── ReactFlow event handlers ─────────────────────────────────────────
 
 	const onNodeClick = useCallback(
-		(_event: React.MouseEvent, node: Node) => {
+		(_event: MouseEvent, node: Node) => {
 			if (viewMode !== 'viewer') return;
 			if (String(node.type ?? 'action') === 'expandable') {
 				openNodeDiagram(node);
@@ -418,76 +133,24 @@ export default function ActivityDiagram() {
 		[openNodeDiagram, viewMode],
 	);
 
-	const onNodeContextMenu = useCallback(
-		(event: React.MouseEvent, node: Node) => {
-			event.preventDefault();
-			event.stopPropagation();
+	const handleSwitchToViewer = useCallback(() => {
+		closeModal();
+		switchToViewer();
+	}, [closeModal, switchToViewer]);
 
-			if (viewMode === 'viewer') {
-				setModalState({ type: 'preview', node });
-				return;
-			}
-			setModalState({ type: 'nodeEdit', draft: createNodeEditDraft(node) });
-		},
-		[viewMode],
-	);
+	const handleSwitchToPlayground = useCallback(() => {
+		closeModal();
+		switchToPlayground();
+	}, [closeModal, switchToPlayground]);
 
-	const onEdgeContextMenu = useCallback(
-		(event: React.MouseEvent, edge: Edge) => {
-			event.preventDefault();
-			event.stopPropagation();
-			if (viewMode !== 'playground') return;
-
-			setModalState({
-				type: 'edgeEdit',
-				draft: {
-					edgeId: String(edge.id),
-					label: typeof edge.label === 'string' ? edge.label : '',
-					edgeType: edge.type === 'back' ? 'back' : 'default',
-				},
-			});
-		},
-		[viewMode],
-	);
-
-	const onNodesChange = useCallback(
-		(changes: NodeChange<Node>[]) => {
-			if (viewMode !== 'playground') return;
-			setPlaygroundNodes((nodes) => applyNodeChangesToNodes(nodes, changes));
-		},
-		[viewMode],
-	);
-
-	const onEdgesChange = useCallback(
-		(changes: EdgeChange<Edge>[]) => {
-			if (viewMode !== 'playground') return;
-			setPlaygroundEdges((edges) => applyEdgeChangesToEdges(edges, changes));
-		},
-		[viewMode],
-	);
-
-	const onConnect = useCallback(
-		(params: Connection) => {
-			if (viewMode !== 'playground') return;
-			setPlaygroundEdges((edges) => connectEdges(edges, params));
-		},
-		[viewMode],
-	);
-
-	// ── Generate skeleton ────────────────────────────────────────────────
-
-	const generateSkeleton = useCallback(() => {
-		const { nodes, edges } = getActiveGraph();
-		generateCodeFromDiagram(vscode, nodes, edges);
-	}, [getActiveGraph]);
+	const handleClearPlayground = useCallback(() => {
+		closeModal();
+		clearPlayground();
+	}, [clearPlayground, closeModal]);
 
 	// ── Render ───────────────────────────────────────────────────────────
 
 	const focusTrigger = `${viewMode}:${viewMode === 'viewer' ? visibleRevision : 'mode'}`;
-
-	const handleCanvasInit = useCallback((instance: ReactFlowInstance<Node, Edge>) => {
-		reactFlowRef.current = instance;
-	}, []);
 
 	return (
 		<div className="flex h-full w-full flex-col">
@@ -496,10 +159,10 @@ export default function ActivityDiagram() {
 				currentTitle={currentTitle}
 				canGoBack={canGoBack}
 				onBack={goBack}
-				onSwitchToViewer={switchToViewer}
-				onSwitchToPlayground={switchToPlayground}
+				onSwitchToViewer={handleSwitchToViewer}
+				onSwitchToPlayground={handleSwitchToPlayground}
 				onAddNode={addPlaygroundNode}
-				onClearPlayground={clearPlayground}
+				onClearPlayground={handleClearPlayground}
 				onGenerateSkeleton={generateSkeleton}
 			/>
 
@@ -507,10 +170,10 @@ export default function ActivityDiagram() {
 			<DiagramModals
 				modalState={modalState}
 				viewMode={viewMode}
-				onClose={() => setModalState(null)}
-				onNodeEditChange={(draft) => setModalState({ type: 'nodeEdit', draft })}
+				onClose={closeModal}
+				onNodeEditChange={onNodeEditChange}
 				onNodeEditSave={saveNodeEditDraft}
-				onEdgeEditChange={(draft) => setModalState({ type: 'edgeEdit', draft })}
+				onEdgeEditChange={onEdgeEditChange}
 				onEdgeEditSave={saveEdgeEditDraft}
 			/>
 
@@ -520,7 +183,7 @@ export default function ActivityDiagram() {
 				isEditable={isEditable}
 				isPlayground={isPlayground}
 				edgeTypes={edgeTypes}
-				nodeTypes={VIEWER_NODE_TYPES}
+				nodeTypes={nodeTypes}
 				focusTrigger={focusTrigger}
 				onInit={handleCanvasInit}
 				onNodeClick={onNodeClick}

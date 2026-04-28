@@ -30,9 +30,7 @@ export function SourcePreviewPanel({ node, sourceText, onClose }: Props) {
 					<div className="truncate text-sm font-semibold text-[var(--vscode-editor-foreground)]">
 						Node Source
 					</div>
-					<div className="truncate text-xs text-[var(--vscode-descriptionForeground)]">
-						{label}
-					</div>
+					
 				</div>
 
 				<div className="flex shrink-0 items-center gap-2">

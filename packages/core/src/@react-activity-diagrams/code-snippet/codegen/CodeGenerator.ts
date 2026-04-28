@@ -521,38 +521,6 @@ private findSwitchJoin(caseTargets: string[]): string | undefined {
 	return candidates[0];
 }
 
-private hasDirectFallthroughToCase(
-	from: string,
-	nextCaseTarget: string,
-	stopBoundary?: string,
-): boolean {
-	const seen = new Set<string>();
-	const stack = [from];
-
-	while (stack.length > 0) {
-		const id = stack.pop()!;
-		if (seen.has(id)) continue;
-		seen.add(id);
-
-		if (id === nextCaseTarget) return true;
-		if (stopBoundary && id === stopBoundary) continue;
-
-		const node = this.nodeById.get(id);
-		if (!node || node.type === "end") continue;
-
-		if (id !== from) {
-			if (node.type === "merge") continue;
-			if (this.isTerminatorNode(node)) continue;
-		}
-
-		for (const edge of this.outgoingForwardEdges(id)) {
-			stack.push(String(edge.target));
-		}
-	}
-
-	return false;
-}
-
 private isTerminatorNode(node: Node): boolean {
 	const construct = getConstruct(node);
 

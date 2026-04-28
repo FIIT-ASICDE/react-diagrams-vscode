@@ -1,44 +1,19 @@
 import type { EdgeProps } from '@xyflow/react';
-import { BaseEdge, EdgeLabelRenderer, Position } from '@xyflow/react';
-
-type Point = { x: number; y: number };
+import { BaseEdge, Position } from '@xyflow/react';
+import { EdgeLabel } from './edges/EdgeLabel';
+import {
+	distance,
+	hasBakedPoints,
+	offsetByPosition,
+	pointBackFromEnd,
+	pointsToPath,
+	type Point,
+} from './edges/edge-utils';
 
 const LABEL_OFFSET_FROM_END = 34;
 const STUB = 28;
 const POINTS_FRESHNESS_TOLERANCE = 10;
 const MIN_SEGMENT = 6;
-
-function hasBakedPoints(data: unknown): data is { points: Point[] } {
-	if (!data || typeof data !== 'object') return false;
-
-	const pts = (data as { points?: unknown }).points;
-
-	return (
-		Array.isArray(pts) &&
-		pts.length >= 2 &&
-		pts.every(
-			(p) =>
-				p &&
-				typeof (p as Point).x === 'number' &&
-				typeof (p as Point).y === 'number',
-		)
-	);
-}
-
-function offsetByPosition(point: Point, position: Position, offset: number): Point {
-	switch (position) {
-		case Position.Top:
-			return { x: point.x, y: point.y - offset };
-		case Position.Bottom:
-			return { x: point.x, y: point.y + offset };
-		case Position.Left:
-			return { x: point.x - offset, y: point.y };
-		case Position.Right:
-			return { x: point.x + offset, y: point.y };
-		default:
-			return point;
-	}
-}
 
 function selfRoute(args: {
 	sourceX: number;
@@ -209,43 +184,6 @@ function snapBackEdgeEndpoints(
 	return cleanPoints(patched);
 }
 
-function pointsToPath(points: Point[]): string {
-	if (points.length === 0) return '';
-
-	return points
-		.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
-		.join(' ');
-}
-
-function distance(a: Point, b: Point): number {
-	return Math.hypot(b.x - a.x, b.y - a.y);
-}
-
-function pointBackFromEnd(points: Point[], offset: number): Point {
-	if (points.length < 2) return points[0] ?? { x: 0, y: 0 };
-
-	let remaining = offset;
-
-	for (let i = points.length - 1; i > 0; i -= 1) {
-		const end = points[i];
-		const start = points[i - 1];
-		const len = distance(start, end);
-
-		if (len >= remaining) {
-			const t = (len - remaining) / len;
-
-			return {
-				x: start.x + (end.x - start.x) * t,
-				y: start.y + (end.y - start.y) * t,
-			};
-		}
-
-		remaining -= len;
-	}
-
-	return points[0];
-}
-
 export default function DynamicPathEdge(props: EdgeProps) {
 	const {
 		id,
@@ -305,40 +243,7 @@ export default function DynamicPathEdge(props: EdgeProps) {
 				}}
 			/>
 
-			{label && (
-				<EdgeLabelRenderer>
-					<div
-						style={{
-							position: 'absolute',
-							transform: `translate(-50%, -50%) translate(${labelPos.x}px, ${labelPos.y}px)`,
-							background: '#111827',
-							padding: '2px 6px',
-							fontSize: 11,
-							borderRadius: 4,
-							color: 'white',
-							whiteSpace: 'nowrap',
-							pointerEvents: 'all',
-							boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
-						}}
-						className="nodrag nopan"
-						onContextMenu={(event) => {
-							event.preventDefault();
-							event.stopPropagation();
-
-							window.dispatchEvent(
-								new CustomEvent('activity/edgeLabelContextMenu', {
-									detail: {
-										edgeId: String(id),
-										label: typeof label === 'string' ? label : '',
-									},
-								}),
-							);
-						}}
-					>
-						{typeof label === 'string' ? label : null}
-					</div>
-				</EdgeLabelRenderer>
-			)}
+			<EdgeLabel id={id} label={label} x={labelPos.x} y={labelPos.y} variant="playground" />
 		</>
 	);
 }

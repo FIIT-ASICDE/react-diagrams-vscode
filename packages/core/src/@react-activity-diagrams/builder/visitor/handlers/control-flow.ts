@@ -9,7 +9,7 @@ import {
   WhileStatement,
 } from 'ts-morph';
 import type { BuildResult } from '../types';
-import { compactLabel, countDecisionsInBranch, getFallthroughEdgeLabel } from '../utils';
+import { compactLabel, getFallthroughEdgeLabel } from '../utils';
 import type { ControlContext, LoopContext, StatementVisitorHost } from './host-context';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -486,12 +486,11 @@ function visitStandardLoop(
   loopBranch: import('ts-morph').Node,
   bodyLabel = 'yes',
 ): BuildResult {
-  const innerDecisionCount = countDecisionsInBranch(loopBranch);
   const body = host.visitBranch(loopBranch);
 
   if (body.entry) {
     host.writer.addEdge(loopId, body.entry, bodyLabel, false);
-    host.connectLoopBackEdges(body.exits, loopId, innerDecisionCount);
+    host.connectLoopBackEdges(body.exits, loopId);
   } else {
     host.writer.addEdge(loopId, loopId, bodyLabel, true);
   }

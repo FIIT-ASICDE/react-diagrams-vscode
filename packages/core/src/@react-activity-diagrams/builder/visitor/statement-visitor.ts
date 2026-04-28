@@ -341,18 +341,11 @@ export class StatementVisitor implements StatementVisitorHost {
 		return this.writer.addFlowNode('loop', label, { sourceText });
 	}
 
-	connectLoopBackEdges(exits: string[], loopId: string, _innerDecisionCount: number): void {
+	connectLoopBackEdges(exits: string[], loopId: string): void {
 		const uniqueExits = [...new Set(exits)].filter((exit) => exit && exit !== loopId);
 		for (const exit of uniqueExits) {
 			const label = getFallthroughEdgeLabel(exit) ?? '';
 			this.writer.addEdge(exit, loopId, label, true);
 		}
-	}
-
-	analyzeStatementsSemantics(statements: Statement[]): BuildResult {
-		const scratchNodes: import('@xyflow/react').Node[] = [];
-		const scratchEdges: import('@xyflow/react').Edge[] = [];
-		const scratchVisitor = new StatementVisitor(new GraphWriter(scratchNodes, scratchEdges));
-		return scratchVisitor.visitStatements(statements);
 	}
 }

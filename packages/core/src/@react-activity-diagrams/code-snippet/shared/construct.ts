@@ -86,3 +86,48 @@ export const LOOP_CONSTRUCTS = [
  * The list of constructs the user can pick when editing an expandable.
  */
 export const EXPANDABLE_CONSTRUCTS = ['function', 'hook'] as const;
+
+/**
+ * The list of action constructs that terminate local flow.
+ */
+export const TERMINATOR_CONSTRUCTS = ['return', 'throw', 'break', 'continue'] as const;
+
+const DECISION_CONSTRUCT_SET = new Set<string>(DECISION_CONSTRUCTS);
+const LOOP_CONSTRUCT_SET = new Set<string>(LOOP_CONSTRUCTS);
+const TERMINATOR_CONSTRUCT_SET = new Set<string>(TERMINATOR_CONSTRUCTS);
+
+export function isDecisionConstruct(construct: string): construct is (typeof DECISION_CONSTRUCTS)[number] {
+	return DECISION_CONSTRUCT_SET.has(construct);
+}
+
+export function isLoopConstruct(construct: string): construct is (typeof LOOP_CONSTRUCTS)[number] {
+	return LOOP_CONSTRUCT_SET.has(construct);
+}
+
+export function isTerminatorConstruct(
+	construct: string,
+): construct is (typeof TERMINATOR_CONSTRUCTS)[number] {
+	return TERMINATOR_CONSTRUCT_SET.has(construct);
+}
+
+/**
+ * Shared default construct mapping for editable node types.
+ *
+ * Fallback is configurable so existing callsites can preserve behavior for
+ * non-semantic node kinds (action/start/end/merge).
+ */
+export function getDefaultConstructForNodeType(
+	nodeType: string,
+	fallbackForOther: Construct | 'action' = 'unknown',
+): Construct | 'action' {
+	switch (nodeType) {
+		case 'decision':
+			return 'if';
+		case 'loop':
+			return 'while';
+		case 'expandable':
+			return 'function';
+		default:
+			return fallbackForOther;
+	}
+}

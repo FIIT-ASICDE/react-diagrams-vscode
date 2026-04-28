@@ -34,6 +34,43 @@ export function getConfig(): ParticipantConfig {
   };
 }
 
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === "boolean";
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+export function sanitizeConfig(input: unknown): ParticipantConfig {
+  const candidate = (input && typeof input === "object") ? input as Record<string, unknown> : {};
+
+  return {
+    code: isBoolean(candidate.code) ? candidate.code : DEFAULT_CONFIG.code,
+    diagramJson: isBoolean(candidate.diagramJson) ? candidate.diagramJson : DEFAULT_CONFIG.diagramJson,
+    diagramImage: isBoolean(candidate.diagramImage) ? candidate.diagramImage : DEFAULT_CONFIG.diagramImage,
+    allowToolCall: isBoolean(candidate.allowToolCall) ? candidate.allowToolCall : DEFAULT_CONFIG.allowToolCall,
+    maxToolIterations: isNumber(candidate.maxToolIterations) ? candidate.maxToolIterations : DEFAULT_CONFIG.maxToolIterations,
+    diagramImageTimeoutMs: isNumber(candidate.diagramImageTimeoutMs) ? candidate.diagramImageTimeoutMs : DEFAULT_CONFIG.diagramImageTimeoutMs,
+    diagramRelevanceCheck: isBoolean(candidate.diagramRelevanceCheck) ? candidate.diagramRelevanceCheck : DEFAULT_CONFIG.diagramRelevanceCheck,
+  };
+}
+
+export async function updateConfig(input: unknown): Promise<ParticipantConfig> {
+  const next = sanitizeConfig(input);
+  const cfg = vscode.workspace.getConfiguration("reactDiagrams.chat");
+
+  await cfg.update("code", next.code, vscode.ConfigurationTarget.Workspace);
+  await cfg.update("diagramJson", next.diagramJson, vscode.ConfigurationTarget.Workspace);
+  await cfg.update("diagramImage", next.diagramImage, vscode.ConfigurationTarget.Workspace);
+  await cfg.update("allowToolCall", next.allowToolCall, vscode.ConfigurationTarget.Workspace);
+  await cfg.update("maxToolIterations", next.maxToolIterations, vscode.ConfigurationTarget.Workspace);
+  await cfg.update("diagramImageTimeoutMs", next.diagramImageTimeoutMs, vscode.ConfigurationTarget.Workspace);
+  await cfg.update("diagramRelevanceCheck", next.diagramRelevanceCheck, vscode.ConfigurationTarget.Workspace);
+
+  return next;
+}
+
 // constants nechaj
 export const MODEL_TYPE = "copilot";
 export const DIAGRAM_CHAT_PARTICIPANT_ID = "vs-code-ext.diagram";

@@ -3,6 +3,7 @@ import { getNonce } from "../app@utils/crypto";
 import { getUri } from "../app@utils/urls";
 import { basename, extname } from "path";
 import { componentStateCache, getRootPath } from "../app@utils/cache";
+import { getConfig, updateConfig } from "../chat/config";
 
 export class ComponentStatePanel {
 	public static readonly NAME = "Component State";
@@ -210,6 +211,16 @@ export class ComponentStatePanel {
 			case "refresh":
 				void this.refresh(this.initialDocument);
 				this.initialDocument = undefined;
+				return;
+
+			case "settings/get":
+				this.postMessage("settings/config", getConfig());
+				return;
+
+			case "settings/update":
+				void updateConfig(message?.data)
+					.then((next) => this.postMessage("settings/config", next))
+					.catch((error) => console.error("Failed to update chat settings:", error));
 				return;
 
 		}

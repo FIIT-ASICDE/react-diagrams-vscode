@@ -1,4 +1,5 @@
 import type { Edge, Node } from '@xyflow/react';
+import { isLoopConstruct, isTerminatorConstruct } from '../shared/construct';
 
 type AnyNodeData = {
 	label?: unknown;
@@ -37,22 +38,6 @@ type EdgeGroups = {
 	backIncoming: Map<string, Edge[]>;
 	backOutgoing: Map<string, Edge[]>;
 };
-
-const TERMINATOR_CONSTRUCTS = new Set<string>([
-	'return',
-	'throw',
-	'break',
-	'continue',
-]);
-
-const LOOP_CONSTRUCTS = new Set<string>([
-	'while',
-	'do-while',
-	'for',
-	'for-of',
-	'for-in',
-	'foreach',
-]);
 
 const DECISION_BRANCH_LABELS = new Set<string>([
 	'yes',
@@ -143,7 +128,7 @@ function isDecisionLikeNode(node: Node): boolean {
 
 function isLoopNode(node: Node): boolean {
 	const construct = getConstruct(node);
-	return node.type === 'loop' || LOOP_CONSTRUCTS.has(construct);
+	return node.type === 'loop' || isLoopConstruct(construct);
 }
 
 function isSwitchNode(node: Node): boolean {
@@ -161,7 +146,7 @@ function isIfNode(node: Node): boolean {
 
 function isTerminatorNode(node: Node): boolean {
 	const construct = getConstruct(node);
-	if (TERMINATOR_CONSTRUCTS.has(construct)) return true;
+	if (isTerminatorConstruct(construct)) return true;
 
 	const sourceText = getStr(getData(node).sourceText).trim();
 	const label = getStr(getData(node).label).trim();

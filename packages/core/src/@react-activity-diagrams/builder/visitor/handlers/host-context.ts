@@ -39,9 +39,8 @@ export interface StatementVisitorHost {
   resolveExitSources(sources: string[]): string[];
   createDecisionNode(label: string, sourceText: string): string;
   createLoopNode(label: string, sourceText: string): string;
-  connectLoopBackEdges(exits: string[], loopId: string, innerDecisionCount: number): void;
+  connectLoopBackEdges(exits: string[], loopId: string): void;
   visitBranch(node: MorphNode): BuildResult;
-  analyzeStatementsSemantics(statements: Statement[]): BuildResult;
   visitStatementsInline(statements: Statement[]): BuildResult;
 
   // ── Break / continue context API ────────────────────────────────────
