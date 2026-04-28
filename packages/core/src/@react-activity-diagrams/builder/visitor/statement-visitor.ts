@@ -52,22 +52,26 @@ export class StatementVisitor implements StatementVisitorHost {
 
 	// ── Merge / exit helpers ───────────────────────────────────────────
 
-	private createMergeForSources(sources: string[]): string | undefined {
+	private createMergeForSources(
+		sources: string[],
+		sourceLabels?: Record<string, string>,
+	): string | undefined {
 		const uniqueSources = [...new Set(sources)].filter(Boolean);
 		if (uniqueSources.length < 2) return undefined;
 
 		const mergeId = this.writer.addFlowNode('merge', '');
 		for (const source of uniqueSources) {
-			this.writer.addEdge(source, mergeId);
+			const label = sourceLabels?.[source] ?? getFallthroughEdgeLabel(source);
+			this.writer.addEdge(source, mergeId, label);
 		}
 		return mergeId;
 	}
 
-	resolveExitSources(sources: string[]): string[] {
+	resolveExitSources(sources: string[], sourceLabels?: Record<string, string>): string[] {
 		const uniqueSources = [...new Set(sources)].filter(Boolean);
 		if (uniqueSources.length <= 1) return uniqueSources;
 
-		const mergeId = this.createMergeForSources(uniqueSources);
+		const mergeId = this.createMergeForSources(uniqueSources, sourceLabels);
 		return mergeId ? [mergeId] : uniqueSources;
 	}
 
@@ -83,6 +87,7 @@ export class StatementVisitor implements StatementVisitorHost {
 			breakTarget: loopId,
 			label,
 			pendingBreaks: [],
+			pendingContinues: [],
 		};
 		this.contextStack.push(ctx);
 		return ctx;
@@ -139,7 +144,9 @@ export class StatementVisitor implements StatementVisitorHost {
 	 */
 	visitStatements(statements: Statement[]): BuildResult {
 		let entry: string | undefined;
+		let entryEdgeLabel: string | undefined;
 		let pendingExits: string[] = [];
+		let pendingExitLabels: Record<string, string> | undefined;
 		const returnExits: string[] = [];
 		const throwExits: string[] = [];
 
@@ -151,20 +158,36 @@ export class StatementVisitor implements StatementVisitorHost {
 			const result = this.visitStatement(statements[index]);
 			if (!result.entry) continue;
 
-			if (!entry) entry = result.entry;
+			if (!entry) {
+				entry = result.entry;
+				entryEdgeLabel = result.entryEdgeLabel;
+			}
 
 			for (const exit of pendingExits) {
-				this.writer.addEdge(exit, result.entry, getFallthroughEdgeLabel(exit));
+				const exitData = (this.writer as unknown as { nodes?: { id: string; data?: Record<string, unknown> }[] }).nodes?.find((n) => n.id === exit)?.data;
+				const label = pendingExitLabels?.[exit]
+					?? result.entryEdgeLabel
+					?? (exitData?.role === 'try-exit-boundary' ? 'exit try' : getFallthroughEdgeLabel(exit));
+				this.writer.addEdge(exit, result.entry, label);
 			}
 
 			pendingExits = result.exits;
+			pendingExitLabels = result.exitLabels;
 			returnExits.push(...result.returnExits);
 			throwExits.push(...result.throwExits);
 		}
 
+		const finalExitLabels = pendingExitLabels
+			? Object.fromEntries(
+				Object.entries(pendingExitLabels).filter(([exitId]) => pendingExits.includes(exitId)),
+			)
+			: undefined;
+
 		return {
 			entry,
+			entryEdgeLabel,
 			exits: entry ? [...new Set(pendingExits)] : [],
+			exitLabels: finalExitLabels && Object.keys(finalExitLabels).length > 0 ? finalExitLabels : undefined,
 			returnExits: [...new Set(returnExits)],
 			throwExits: [...new Set(throwExits)],
 		};
@@ -313,7 +336,7 @@ export class StatementVisitor implements StatementVisitorHost {
 			return { entry: id, exits: [id], returnExits: [], throwExits: [] };
 		}
 
-		this.writer.addEdge(id, ctx.continueTarget, '', true);
+		ctx.pendingContinues.push(id);
 		return { entry: id, exits: [], returnExits: [], throwExits: [] };
 	}
 

@@ -23,10 +23,9 @@ export type Construct =
 	/** `switch` statement. Edges carry comma-separated case labels. */
 	| 'switch'
 	/**
-	 * `try` / `catch`. The decision's "no-label" branch is the try body,
-	 * the `exception`-labeled branch is the catch body. Note: try is a
-	 * decision in our graph (two branches) even though syntactically it
-	 * isn't an `if`.
+	 * DEPRECATED: `try` / `catch` as a decision node construct.
+	 * New diagrams use edge-labeled try: the incoming edge to the try body
+	 * is labeled 'try'. Kept for backward compatibility only.
 	 */
 	| 'try'
 
@@ -61,14 +60,20 @@ export type Construct =
 	| 'throw'
 	| 'break'
 	| 'continue'
+	/** Placeholder metadata node for deferred try/catch return through finally. */
+	| 'pending-return'
 	/** Fallback when a node type has no known semantic construct mapping yet. */
 	| 'unknown';
 
 /**
  * The list of constructs the user can pick when editing a decision in the
  * playground. Loops and expandables have their own dropdowns elsewhere.
+ *
+ * NOTE: 'try' is no longer offered here. New diagrams use edge-labeled try
+ * (incoming edge to try body labeled 'try'), not a try decision node.
+ * Use edge labels ('try', 'exception', 'finally') instead.
  */
-export const DECISION_CONSTRUCTS = ['if', 'switch', 'try'] as const;
+export const DECISION_CONSTRUCTS = ['if', 'switch'] as const;
 
 /**
  * The list of constructs the user can pick when editing a loop.

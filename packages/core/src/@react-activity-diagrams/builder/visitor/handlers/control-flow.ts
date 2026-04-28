@@ -22,12 +22,69 @@ function setNodeData(host: StatementVisitorHost, nodeId: string, extra: Record<s
   node.data = { ...(node.data ?? {}), ...extra };
 }
 
+function getNodeData(host: StatementVisitorHost, nodeId: string): Record<string, unknown> | undefined {
+  const node = (host.writer as unknown as { nodes?: import('@xyflow/react').Node[] }).nodes?.find?.(
+    (candidate) => candidate.id === nodeId,
+  );
+  return node?.data as Record<string, unknown> | undefined;
+}
+
+function markReturnAsPending(host: StatementVisitorHost, returnNodeId: string): string {
+  const data = getNodeData(host, returnNodeId) ?? {};
+  const sourceText = typeof data.sourceText === 'string'
+    ? data.sourceText
+    : typeof data.label === 'string'
+      ? data.label
+      : 'return;';
+
+  setNodeData(host, returnNodeId, {
+    construct: 'pending-return',
+    pendingReturnSourceText: sourceText,
+    sourceText: '',
+    label: 'pending return',
+  });
+
+  return sourceText;
+}
+
+function createDeferredReturnNode(host: StatementVisitorHost, returnSourceText: string): string {
+  const cleanSource = returnSourceText && returnSourceText.trim() ? returnSourceText : 'return;';
+  return host.writer.addFlowNode('action', compactLabel(cleanSource), {
+    sourceText: cleanSource,
+    construct: 'return',
+  });
+}
+
+function createTryExitBoundary(host: StatementVisitorHost, tryOwnerId: string, exits: string[]): string[] {
+  const uniqueExits = [...new Set(exits)].filter(Boolean);
+  if (uniqueExits.length === 0) return [];
+
+  // Single exit — no merge needed, just tag the exit node directly
+  if (uniqueExits.length === 1) {
+    setNodeData(host, uniqueExits[0], { tryOwner: tryOwnerId, role: 'try-exit-boundary' });
+    return uniqueExits;
+  }
+
+  const boundaryId = host.writer.addFlowNode('merge', '');
+  setNodeData(host, boundaryId, { tryOwner: tryOwnerId, role: 'try-exit-boundary' });
+
+  for (const exit of uniqueExits) {
+    host.writer.addEdge(exit, boundaryId, 'exit try');
+  }
+
+  return [boundaryId];
+}
+
 /**
  * After a loop body has been visited, wire up the break / continue
  * actions registered on its context. Returns break exits to be combined
  * with the natural loop exit by the caller.
  */
 function wirePendingBreaksAndContinues(host: StatementVisitorHost, ctx: LoopContext): string[] {
+  const uniqueContinues = [...new Set(ctx.pendingContinues)].filter(Boolean);
+  for (const continueId of uniqueContinues) {
+    host.writer.addEdge(continueId, ctx.continueTarget, '', true);
+  }
   return ctx.pendingBreaks;
 }
 
@@ -62,7 +119,7 @@ function mergeLoopExitsWithBreaks(
 
   // Wire loop exit to merge
   for (const loopExit of loopExits) {
-    host.writer.addEdge(loopExit, mergeId);
+     host.writer.addEdge(loopExit, mergeId, getFallthroughEdgeLabel(loopExit));
   }
 
   // Wire all break exits to merge
@@ -71,6 +128,30 @@ function mergeLoopExitsWithBreaks(
   }
 
   return [mergeId];
+}
+
+function resolveExitSourcesWithLabels(
+  host: StatementVisitorHost,
+  sources: string[],
+  sourceLabels?: Record<string, string>,
+): { exits: string[]; exitLabels?: Record<string, string> } {
+  const uniqueSources = [...new Set(sources)].filter(Boolean);
+  const resolvedExits = host.resolveExitSources(uniqueSources, sourceLabels);
+
+  if (resolvedExits.length <= 1 && uniqueSources.length <= 1) {
+    const survivingLabels = sourceLabels
+      ? Object.fromEntries(
+        Object.entries(sourceLabels).filter(([sourceId]) => uniqueSources.includes(sourceId)),
+      )
+      : undefined;
+
+    return {
+      exits: resolvedExits,
+      exitLabels: survivingLabels && Object.keys(survivingLabels).length > 0 ? survivingLabels : undefined,
+    };
+  }
+
+  return { exits: resolvedExits };
 }
 
 // ── Visitors ───────────────────────────────────────────────────────────────
@@ -85,6 +166,7 @@ export function visitIf(host: StatementVisitorHost, stmt: IfStatement): BuildRes
   const thenResult = host.visitBranch(stmt.getThenStatement());
   const elseResult = elseStmt ? host.visitBranch(elseStmt) : undefined;
   const mergeSources: string[] = [];
+  const exitLabels: Record<string, string> = {};
   const returnExits: string[] = [];
   const throwExits: string[] = [];
 
@@ -105,14 +187,19 @@ export function visitIf(host: StatementVisitorHost, stmt: IfStatement): BuildRes
       throwExits.push(...elseResult.throwExits);
     } else {
       mergeSources.push(decisionId);
+      exitLabels[decisionId] = 'no';
     }
   } else {
     mergeSources.push(decisionId);
+    exitLabels[decisionId] = 'no';
   }
+
+  const resolved = resolveExitSourcesWithLabels(host, mergeSources, exitLabels);
 
   return {
     entry: decisionId,
-    exits: host.resolveExitSources(mergeSources),
+    exits: resolved.exits,
+    exitLabels: resolved.exitLabels,
     returnExits: [...new Set(returnExits)],
     throwExits: [...new Set(throwExits)],
   };
@@ -239,7 +326,7 @@ function snapshotPending(host: StatementVisitorHost): ContextSnapshot {
   for (const ctx of host.getContextStack()) {
     snap.set(ctx, {
       breaks: new Set(ctx.pendingBreaks),
-      continues: new Set<string>(),
+      continues: new Set(ctx.kind === 'loop' ? ctx.pendingContinues : []),
     });
   }
   return snap;
@@ -264,8 +351,11 @@ function diffPending(host: StatementVisitorHost, before: ContextSnapshot): Redir
     }
 
     if (ctx.kind === 'loop') {
-      // Continue edges are wired immediately in StatementVisitor.visitContinue.
-      // We intentionally do not track them as pending redirect entries.
+      for (const id of ctx.pendingContinues) {
+        if (!beforeForCtx.continues.has(id)) {
+          entries.push({ nodeId: id, ctx, kind: 'continue' });
+        }
+      }
     }
   }
 
@@ -276,6 +366,12 @@ function removeFromContext(ctx: ControlContext, kind: 'break' | 'continue', node
   if (kind === 'break') {
     const i = ctx.pendingBreaks.indexOf(nodeId);
     if (i !== -1) ctx.pendingBreaks.splice(i, 1);
+    return;
+  }
+
+  if (ctx.kind === 'loop') {
+    const i = ctx.pendingContinues.indexOf(nodeId);
+    if (i !== -1) ctx.pendingContinues.splice(i, 1);
   }
 }
 
@@ -299,7 +395,7 @@ function spliceFinallyCopy(
   host: StatementVisitorHost,
   finallyBlock: MorphNode,
   sources: string[],
-): { exits: string[]; returnExits: string[]; throwExits: string[] } {
+): { exits: string[]; exitLabels?: Record<string, string>; returnExits: string[]; throwExits: string[] } {
   if (sources.length === 0) {
     return { exits: [], returnExits: [], throwExits: [] };
   }
@@ -311,17 +407,26 @@ function spliceFinallyCopy(
   }
 
   if (sources.length === 1) {
-    host.writer.addEdge(sources[0], copy.entry, 'finally', false);
+    const label = getFallthroughEdgeLabel(sources[0]) ?? 'finally';
+    host.writer.addEdge(sources[0], copy.entry, label, false);
   } else {
     const mergeId = host.writer.addFlowNode('merge', '');
     for (const src of sources) {
-      host.writer.addEdge(src, mergeId);
+      host.writer.addEdge(src, mergeId, getFallthroughEdgeLabel(src));
     }
     host.writer.addEdge(mergeId, copy.entry, 'finally', false);
   }
 
+  const resolvedExits = host.resolveExitSources(copy.exits);
+  const resolvedExitLabels = copy.exitLabels
+    ? Object.fromEntries(
+      Object.entries(copy.exitLabels).filter(([exitId]) => resolvedExits.includes(exitId)),
+    )
+    : undefined;
+
   return {
-    exits: host.resolveExitSources(copy.exits),
+    exits: resolvedExits,
+    exitLabels: resolvedExitLabels && Object.keys(resolvedExitLabels).length > 0 ? resolvedExitLabels : undefined,
     returnExits: [...copy.returnExits],
     throwExits: [...copy.throwExits],
   };
@@ -359,9 +464,6 @@ function spliceFinallyCopy(
  * (per JS spec) and replace whatever the upstream intent was.
  */
 export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildResult {
-  const tryStartId = host.createDecisionNode('try', 'try');
-  setNodeData(host, tryStartId, { construct: 'try' });
-
   const finallyBlock = stmt.getFinallyBlock();
 
   // Snapshot pending break/continue BEFORE visiting try / catch so we
@@ -371,32 +473,26 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
   // ── Visit try body ────────────────────────────────────────────────────
 
   const tryResult = host.visitBranch(stmt.getTryBlock());
-
-  if (tryResult.entry) {
-    host.writer.addEdge(tryStartId, tryResult.entry, '', false);
-  }
+  const tryEntryId = tryResult.entry;
 
   const trySuccessExits = tryResult.entry
     ? host.resolveExitSources(tryResult.exits)
-    : [tryStartId];
+    : [];
 
   // ── Visit catch body ──────────────────────────────────────────────────
 
   const catchClause = stmt.getCatchClause();
-  const catchResult = catchClause
-    ? host.visitBranch(catchClause.getBlock())
+  const shouldMaterializeCatch = Boolean(catchClause && tryResult.throwExits.length > 0);
+  const catchResult = shouldMaterializeCatch
+    ? host.visitBranch(catchClause!.getBlock())
     : undefined;
 
   const catchSuccessExits: string[] = [];
 
-  if (catchClause && catchResult?.entry) {
-    // Two ways into catch:
-    //   1. The decision's `exception` branch (runtime exception during
-    //      try-body that the AST didn't make explicit).
-    //   2. Explicit `throw` statements in try-body — they redirect here.
-    host.writer.addEdge(tryStartId, catchResult.entry, 'exception', false);
+  if (shouldMaterializeCatch && catchResult?.entry) {
+    // Route exception flow into catch only from node-originated throw sources.
     for (const throwId of tryResult.throwExits) {
-      host.writer.addEdge(throwId, catchResult.entry);
+      host.writer.addEdge(throwId, catchResult.entry, 'exception', false);
     }
     catchSuccessExits.push(...host.resolveExitSources(catchResult.exits));
   }
@@ -429,16 +525,19 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
   //   - try-body throws WITHOUT a catch escape directly to finally
   //   - catch-body throws (re-throw, or new throw) escape to finally
   const throwSources = [
-    ...(catchClause ? [] : tryResult.throwExits),
+    ...(shouldMaterializeCatch ? [] : tryResult.throwExits),
     ...(catchResult?.throwExits ?? []),
   ];
 
   // ── No finally → wire each kind direct to its target ──────────────────
 
   if (!finallyBlock) {
+    const normalExits = host.resolveExitSources(normalSources);
+    const tryOwnerId = tryEntryId ?? catchResult?.entry;
     return {
-      entry: tryStartId,
-      exits: host.resolveExitSources(normalSources),
+      entry: tryEntryId,
+      entryEdgeLabel: tryEntryId ? 'try' : undefined,
+      exits: tryOwnerId ? createTryExitBoundary(host, tryOwnerId, normalExits) : normalExits,
       returnExits: [...new Set(returnSources)],
       throwExits: [...new Set(throwSources)],
     };
@@ -447,28 +546,53 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
   // ── Finally present: visit a fresh copy per kind that has sources ─────
 
   const aggregateExits: string[] = [];
+  const aggregateExitLabels: Record<string, string> = {};
   const aggregateReturnExits: string[] = [];
   const aggregateThrowExits: string[] = [];
+  let fallbackEntryId: string | undefined;
 
   // NORMAL kind: try/catch success paths. After finally they continue
   // into the surrounding flow.
   if (normalSources.length > 0) {
     const sliced = spliceFinallyCopy(host, finallyBlock, normalSources);
     aggregateExits.push(...sliced.exits);
+    if (sliced.exitLabels) {
+      Object.assign(aggregateExitLabels, sliced.exitLabels);
+    }
     aggregateReturnExits.push(...sliced.returnExits);
     aggregateThrowExits.push(...sliced.throwExits);
+  } else if (!tryEntryId && returnSources.length === 0 && throwSources.length === 0) {
+    // Empty try with finally still executes finally on normal entry.
+    const directFinally = host.visitBranch(finallyBlock);
+    if (directFinally.entry) {
+      fallbackEntryId = directFinally.entry;
+      aggregateExits.push(...host.resolveExitSources(directFinally.exits));
+      aggregateReturnExits.push(...directFinally.returnExits);
+      aggregateThrowExits.push(...directFinally.throwExits);
+    }
   }
 
   // RETURN kind: function-end paths. After finally they go to End.
   // (If finally body itself returns / throws, those override — sliced
   // returnExits / throwExits cover that.)
   if (returnSources.length > 0) {
-    const sliced = spliceFinallyCopy(host, finallyBlock, returnSources);
-    // Even the "normal" exits of this finally copy are end-paths,
-    // because the upstream intent was return.
-    aggregateReturnExits.push(...sliced.exits);
-    aggregateReturnExits.push(...sliced.returnExits);
-    aggregateThrowExits.push(...sliced.throwExits);
+    for (const returnNodeId of [...new Set(returnSources)]) {
+      const returnSourceText = markReturnAsPending(host, returnNodeId);
+      const sliced = spliceFinallyCopy(host, finallyBlock, [returnNodeId]);
+
+      // Materialize the original return only AFTER finally normal exits.
+      if (sliced.exits.length > 0) {
+        const deferredReturnNodeId = createDeferredReturnNode(host, returnSourceText);
+        for (const exit of sliced.exits) {
+          host.writer.addEdge(exit, deferredReturnNodeId, sliced.exitLabels?.[exit] ?? getFallthroughEdgeLabel(exit));
+        }
+        aggregateReturnExits.push(deferredReturnNodeId);
+      }
+
+      // Abrupt completions from finally override the pending return.
+      aggregateReturnExits.push(...sliced.returnExits);
+      aggregateThrowExits.push(...sliced.throwExits);
+    }
   }
 
   // THROW kind: uncaught exceptions on the way out. After finally they
@@ -516,9 +640,18 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
     aggregateThrowExits.push(...sliced.throwExits);
   }
 
+  const resolvedAggregateExits = host.resolveExitSources(aggregateExits);
+  const resolvedAggregateExitLabels = Object.fromEntries(
+    Object.entries(aggregateExitLabels).filter(([exitId]) => resolvedAggregateExits.includes(exitId)),
+  );
+  const statementEntry = tryEntryId ?? fallbackEntryId;
+  const tryOwnerId = statementEntry ?? catchResult?.entry;
+
   return {
-    entry: tryStartId,
-    exits: aggregateExits,
+    entry: statementEntry,
+    entryEdgeLabel: statementEntry ? 'try' : undefined,
+    exits: tryOwnerId ? createTryExitBoundary(host, tryOwnerId, resolvedAggregateExits) : resolvedAggregateExits,
+    exitLabels: Object.keys(resolvedAggregateExitLabels).length > 0 ? resolvedAggregateExitLabels : undefined,
     returnExits: [...new Set(aggregateReturnExits)],
     throwExits: [...new Set(aggregateThrowExits)],
   };

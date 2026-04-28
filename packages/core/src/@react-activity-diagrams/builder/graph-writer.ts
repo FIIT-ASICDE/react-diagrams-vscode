@@ -25,23 +25,45 @@ export class GraphWriter {
     return id;
   }
 
-addEdge(source: string, target: string, label?: string, isBackEdge = false): void {
-  this.edges.push({
-    id: `edge-${this.nextEdgeId++}`,
-    source,
-    target,
-    animated: isBackEdge ? true : false,
-    label,
-    type: isBackEdge ? 'back' : 'default',
-    style: {
-      stroke: 'rgb(0, 0, 0)',
-      strokeWidth: 1,
-      ...(isBackEdge && { strokeDasharray: '6 4', stroke: 'rgb(200, 0, 0)' }),
-    },
-    markerEnd: {
-      type: 'arrowclosed',
-      color: '#000000',
-    },
-  });
-}
+  private inferImplicitEdgeLabel(source: string): string | undefined {
+    const sourceNode = this.nodes.find((node) => String(node.id) === String(source));
+    if (!sourceNode) return undefined;
+
+    if (sourceNode.type === 'loop') {
+      return 'no';
+    }
+
+    if (sourceNode.type !== 'decision') {
+      return undefined;
+    }
+
+    const construct = (sourceNode.data as FlowNodeData | undefined)?.construct;
+    if (construct === 'switch') {
+      return undefined;
+    }
+
+    return 'no';
+  }
+
+  addEdge(source: string, target: string, label?: string, isBackEdge = false): void {
+    const resolvedLabel = label ?? this.inferImplicitEdgeLabel(source);
+
+    this.edges.push({
+      id: `edge-${this.nextEdgeId++}`,
+      source,
+      target,
+      animated: isBackEdge ? true : false,
+      label: resolvedLabel,
+      type: isBackEdge ? 'back' : 'default',
+      style: {
+        stroke: 'rgb(0, 0, 0)',
+        strokeWidth: 1,
+        ...(isBackEdge && { strokeDasharray: '6 4', stroke: 'rgb(200, 0, 0)' }),
+      },
+      markerEnd: {
+        type: 'arrowclosed',
+        color: '#000000',
+      },
+    });
+  }
 }

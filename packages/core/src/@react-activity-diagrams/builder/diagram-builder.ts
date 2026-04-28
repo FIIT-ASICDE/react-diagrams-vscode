@@ -56,7 +56,7 @@ export class DiagramBuilder {
       return { nodes: this.nodes, edges: this.edges };
     }
 
-    writer.addEdge(startId, main.entry);
+    writer.addEdge(startId, main.entry, main.entryEdgeLabel);
 
     // ── Success-side End: normal exits + return exits ─────────────────
 

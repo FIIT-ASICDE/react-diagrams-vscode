@@ -21,6 +21,7 @@ export type LoopContext = {
   breakTarget: string;
   label?: string;
   pendingBreaks: string[];
+  pendingContinues: string[];
 };
 
 export type SwitchContext = {
@@ -36,7 +37,7 @@ export type ControlContext = LoopContext | SwitchContext;
 
 export interface StatementVisitorHost {
   writer: GraphWriter;
-  resolveExitSources(sources: string[]): string[];
+  resolveExitSources(sources: string[], sourceLabels?: Record<string, string>): string[];
   createDecisionNode(label: string, sourceText: string): string;
   createLoopNode(label: string, sourceText: string): string;
   connectLoopBackEdges(exits: string[], loopId: string): void;

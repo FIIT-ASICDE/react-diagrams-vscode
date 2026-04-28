@@ -29,7 +29,9 @@
  */
 export type BuildResult = {
   entry?: string;
+  entryEdgeLabel?: string;
   exits: string[];
+  exitLabels?: Record<string, string>;
   returnExits: string[];
   throwExits: string[];
 };

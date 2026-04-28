@@ -50,8 +50,10 @@ const EDGE_LABEL_OPTIONS = [
   'yes',
   'no',
   'each',
+  'try',
   'exception',
   'finally',
+	'exit try',
   'default',
   'case',
 ] as const;

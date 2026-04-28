@@ -107,6 +107,9 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
     if (body?.entry) {
       host.writer.addEdge(loopId, body.entry, 'each', false);
       host.connectLoopBackEdges(body.exits, loopId);
+      for (const continueId of [...new Set(ctx.pendingContinues)].filter(Boolean)) {
+        host.writer.addEdge(continueId, loopId, '', true);
+      }
 
       return {
         entry: loopId,
@@ -117,6 +120,9 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
     }
 
     host.writer.addEdge(loopId, loopId, 'each', true);
+    for (const continueId of [...new Set(ctx.pendingContinues)].filter(Boolean)) {
+      host.writer.addEdge(continueId, loopId, '', true);
+    }
     return {
       entry: loopId,
       exits: [loopId, ...ctx.pendingBreaks],

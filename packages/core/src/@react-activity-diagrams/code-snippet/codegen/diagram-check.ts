@@ -136,7 +136,18 @@ function isSwitchNode(node: Node): boolean {
 }
 
 function isTryNode(node: Node): boolean {
+	// Legacy compatibility: new diagrams encode try structurally on edges.
+	// Old saved diagrams may still carry construct:'try' on a decision node.
 	return getConstruct(node) === 'try';
+}
+
+function hasIncomingTryEdge(nodeId: string, groups: EdgeGroups): boolean {
+	// New model: try entry is represented as an incoming edge labeled 'try'.
+	// This indicates the node is the first statement in a try body.
+	const incoming = list(groups.forwardIncoming, nodeId);
+	return incoming.some(
+		(edge) => normalizeLabel(edge.label).toLowerCase() === 'try'
+	);
 }
 
 function isIfNode(node: Node): boolean {
@@ -736,7 +747,7 @@ function validateTryNode(
 		addIssue(
 			issues,
 			'error',
-			'Try node must have at least one incoming edge.',
+			'[Legacy] Try node must have at least one incoming edge.',
 			{ nodeId: id },
 		);
 	}
@@ -759,7 +770,7 @@ function validateTryNode(
 		addIssue(
 			issues,
 			'error',
-			`Try node must have exactly one try-body edge, found ${bodyEdges.length}.`,
+			`[Legacy] Try node must have exactly one try-body edge, found ${bodyEdges.length}.`,
 			{ nodeId: id },
 		);
 	}
@@ -768,7 +779,7 @@ function validateTryNode(
 		addIssue(
 			issues,
 			'error',
-			`Try node must have at most one exception/catch edge, found ${exceptionEdges.length}.`,
+			`[Legacy] Try node must have at most one exception/catch edge, found ${exceptionEdges.length}.`,
 			{ nodeId: id },
 		);
 	}
@@ -777,7 +788,7 @@ function validateTryNode(
 		addIssue(
 			issues,
 			'error',
-			`Try node must have at most one finally edge, found ${finallyEdges.length}.`,
+			`[Legacy] Try node must have at most one finally edge, found ${finallyEdges.length}.`,
 			{ nodeId: id },
 		);
 	}
@@ -793,10 +804,30 @@ function validateTryNode(
 			addIssue(
 				issues,
 				'warning',
-				`Try node has unusual outgoing edge label "${String(edge.label ?? '')}". Expected try/body, exception/catch/error, or finally.`,
+				`[Legacy] Try node has unusual outgoing edge label "${String(edge.label ?? '')}". Expected try/body, exception/catch/error, or finally.`,
 				{ nodeId: id, edgeId: String(edge.id) },
 			);
 		}
+	}
+}
+
+function validateEdgeLabeledTryEntry(
+	node: Node,
+	groups: EdgeGroups,
+	issues: DiagramStructureIssue[],
+): void {
+	const id = String(node.id);
+	const tryIncoming = list(groups.forwardIncoming, id).filter(
+		(edge) => normalizeLabel(edge.label).toLowerCase() === 'try'
+	);
+
+	if (tryIncoming.length !== 1) {
+		addIssue(
+			issues,
+			'warning',
+			`Expected exactly one incoming 'try' edge for try body entry, found ${tryIncoming.length}.`,
+			{ nodeId: id },
+		);
 	}
 }
 
@@ -901,6 +932,11 @@ export function validateDiagramStructure(
 
 		if (isTryNode(node)) {
 			validateTryNode(node, groups, issues);
+			continue;
+		}
+
+		if (hasIncomingTryEdge(id, groups)) {
+			validateEdgeLabeledTryEntry(node, groups, issues);
 			continue;
 		}
 

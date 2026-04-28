@@ -5,12 +5,14 @@ import { formatFunctionHeader, looksAsync } from "../graph/node-utils";
 import { findLabeledEdge, getOutgoingEdges } from "../graph/traversal";
 import type { Construct } from "../shared/construct";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
+// G��G��G�� Types G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 type AnyNodeData = {
 	label?: unknown;
 	sourceText?: unknown;
 	construct?: unknown;
+	tryOwner?: unknown;
+	role?: unknown;
 	loopLabel?: unknown;
 	loopKind?: unknown;
 	forHeader?: unknown;
@@ -23,10 +25,10 @@ type AnyNodeData = {
 /**
  * What a construct's emit ended with:
  *
- *   fall      — control falls out the bottom; sequence continues with `next`.
- *   return    — `return` or `throw` happened; sequence STOPS.
- *   break     — `break` happened. Surrounding loop / switch absorbs.
- *   continue  — `continue` happened. Surrounding loop absorbs.
+ *   fall      G�� control falls out the bottom; sequence continues with `next`.
+ *   return    G�� `return` or `throw` happened; sequence STOPS.
+ *   break     G�� `break` happened. Surrounding loop / switch absorbs.
+ *   continue  G�� `continue` happened. Surrounding loop absorbs.
  */
 type Outcome =
 	| { kind: "fall" }
@@ -49,8 +51,9 @@ const EXCEPTION_LABELS = new Set(["exception", "catch", "error"]);
 
 const isExceptionEdge = (label: unknown): boolean => EXCEPTION_LABELS.has(normalize(label));
 const isBackEdge = (edge: Edge): boolean => edge.type === "back";
+const isTryExitEdge = (edge: Edge): boolean => normalize(edge.label) === "exit try";
 
-// ─── Generator ─────────────────────────────────────────────────────────────
+// G��G��G�� Generator G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 /**
  * Skeleton-quality JS / TS generator from an activity-diagram-style
@@ -63,14 +66,14 @@ const isBackEdge = (edge: Edge): boolean => edge.type === "back";
  *     as a sequence; non-fall outcomes (return / break / continue)
  *     bubble up.
  *
- *   - `try` is just `try { ... } catch (err) { ... }` — driven by the
- *     `'exception'` edge alone. Finally is NOT explicitly emitted as a
- *     `finally { ... }` block. `'finally'` edges are treated as ordinary
- *     fall-through, so finally-body statements appear inline.
+ *   - `try` is emitted as `try { ... } catch (err) { ... } finally { ... }`
+ *     when a finally-region can be resolved from the graph. For partial
+ *     graphs where a finally entry is ambiguous, generation degrades to
+ *     plain try/catch skeleton without forcing an incorrect finally block.
  *
  *   - Break / continue are scoped: emitted only when there's a valid
  *     surrounding loop (for `continue`) or loop / switch (for `break`).
- *     Outside any such context they're silently dropped — JS would
+ *     Outside any such context they're silently dropped G�� JS would
  *     reject them as syntax errors. This keeps the skeleton output
  *     syntactically valid even when the source graph is partial.
  */
@@ -87,9 +90,10 @@ export class CodeGenerator {
 	 * to target.
 	 */
 	private readonly activeLoops = new Set<string>();
+	private readonly activeTryEntries = new Set<string>();
 
 	/**
-	 * Counter of "break-absorbing" contexts on the emission stack —
+	 * Counter of "break-absorbing" contexts on the emission stack G��
 	 * incremented when entering a loop OR a switch, decremented on exit.
 	 *
 	 * `break;` is valid only when this counter > 0. We use a counter
@@ -140,7 +144,7 @@ export class CodeGenerator {
 		);
 	}
 
-	// ── Scope helpers ─────────────────────────────────────────────────────
+	// G��G�� Scope helpers G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 	private isInLoop(): boolean {
 		return this.activeLoops.size > 0;
@@ -150,7 +154,7 @@ export class CodeGenerator {
 		return this.breakDepth > 0;
 	}
 
-	// ── Sequence emission ─────────────────────────────────────────────────
+	// G��G�� Sequence emission G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 	/**
 	 * Emit nodes from `startId` until:
@@ -167,15 +171,19 @@ export class CodeGenerator {
 	 * outer sequence keeps going. The terminator's text was already
 	 * written into `code` by `emitTerminator`, but at this point the
 	 * sequence wouldn't otherwise propagate it as a structural
-	 * statement — see `emitTerminator` for the gate that prevents
+	 * statement G�� see `emitTerminator` for the gate that prevents
 	 * those texts from being emitted in the first place.
 	 */
-	private emitSequence(startId: string, level: number, stopAt: string | undefined): Outcome {
+	private emitSequence(
+		startId: string,
+		level: number,
+		stopAt: string | ReadonlySet<string> | undefined,
+	): Outcome {
 		const localSeen = new Set<string>();
 		let cursor: string | undefined = startId;
 
 		while (cursor !== undefined) {
-			if (stopAt !== undefined && cursor === stopAt) return FALL;
+			if (this.isStopCursor(stopAt, cursor)) return FALL;
 			if (this.activeLoops.has(cursor)) return FALL;
 
 			const node = this.nodeById.get(cursor);
@@ -224,11 +232,24 @@ export class CodeGenerator {
 		return FALL;
 	}
 
-	// ── Node dispatch ─────────────────────────────────────────────────────
+	private isStopCursor(
+		stopAt: string | ReadonlySet<string> | undefined,
+		cursor: string,
+	): boolean {
+		if (stopAt === undefined) return false;
+		if (typeof stopAt === "string") return cursor === stopAt;
+		return stopAt.has(cursor);
+	}
+
+	// G��G�� Node dispatch G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 	private emitNode(node: Node, level: number): { outcome: Outcome; next: string | undefined } {
 		const id = String(node.id);
 		const construct = getConstruct(node);
+
+		if (!this.activeTryEntries.has(id) && this.hasIncomingTryEdge(id)) {
+			return this.emitTryFromEntry(id, level);
+		}
 
 		if (construct) {
 			switch (construct) {
@@ -245,6 +266,8 @@ export class CodeGenerator {
 				case "function":
 				case "hook":
 					this.emitInlineSnippet(node, level);
+					return { outcome: FALL, next: this.fallthroughSuccessor(id) };
+				case "pending-return":
 					return { outcome: FALL, next: this.fallthroughSuccessor(id) };
 				case "return":
 				case "throw":
@@ -274,7 +297,7 @@ export class CodeGenerator {
 		}
 	}
 
-	// ── Action / inline / terminator ──────────────────────────────────────
+	// G��G�� Action / inline / terminator G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 	private emitAction(node: Node, level: number): { outcome: Outcome; next: string | undefined } {
 		const text = this.actionText(node);
@@ -327,7 +350,7 @@ export class CodeGenerator {
 				// Unlabeled break must be inside a loop or switch.
 				// Labeled break is always emitted (the labelled construct
 				// is the responsibility of the surrounding emitter to
-				// match — if it doesn't, the JS will be invalid, but
+				// match G�� if it doesn't, the JS will be invalid, but
 				// that's a graph-correctness issue beyond our skeleton).
 				if (!label && !this.canBreak()) {
 					return { outcome: FALL, next: this.fallthroughSuccessor(String(node.id)) };
@@ -372,7 +395,7 @@ export class CodeGenerator {
 		return undefined;
 	}
 
-	// ── If ────────────────────────────────────────────────────────────────
+	// G��G�� If G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 	private emitIf(node: Node, level: number): { outcome: Outcome; next: string | undefined } {
 	const id = String(node.id);
@@ -494,7 +517,7 @@ private collectReachableDistances(startId: string, limit: number): Map<string, n
 	return distances;
 }
 
-	// ── Switch ────────────────────────────────────────────────────────────
+	// G��G�� Switch G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 private findSwitchJoin(caseTargets: string[]): string | undefined {
 	if (caseTargets.length < 2) return undefined;
 
@@ -589,8 +612,8 @@ private emitSwitch(node: Node, level: number): { outcome: Outcome; next: string 
 	const caseTargets = caseEdges.map((e) => String(e.target));
 
 	// Switch exit / post-switch target.
-	// Ak parser dal explicitný fall-through edge, použi ten.
-	// Inak skús nájsť spoločný join všetkých case vetiev.
+	// Ak parser dal explicitn++ fall-through edge, pou++i ten.
+	// Inak sk+�s n+�js+� spolo-�n++ join v+�etk++ch case vetiev.
 	const afterSwitch =
 		fallEdge ? String(fallEdge.target) : this.findSwitchJoin(caseTargets);
 
@@ -613,15 +636,15 @@ private emitSwitch(node: Node, level: number): { outcome: Outcome; next: string 
 
 			let outcome = this.emitSequence(target, level + 2, afterSwitch);
 
-			// Switch absorbuje obyčajný break.
+			// Switch absorbuje oby-�ajn++ break.
 			if (outcome.kind === "break" && !outcome.label) {
 				outcome = FALL;
 			}
 
 			// Skeleton rule:
-			// Každý case berieme ako samostatnú vetvu.
-			// Nepokúšame sa zachovať JS fallthrough.
-			// Ak case normálne dobehne, pridáme break.
+			// Ka++d++ case berieme ako samostatn+� vetvu.
+			// Nepok+�+�ame sa zachova+� JS fallthrough.
+			// Ak case norm+�lne dobehne, prid+�me break.
 			const caseBodyLevel = level + 2;
 
 			if (!isDefaultCase && !this.lastMeaningfulLineTerminatesAtLevel(caseBodyLevel)) {
@@ -671,7 +694,7 @@ private emitSwitch(node: Node, level: number): { outcome: Outcome; next: string 
 		});
 	}
 
-	// ── Loop ──────────────────────────────────────────────────────────────
+	// G��G�� Loop G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 	private emitLoop(
 		node: Node,
@@ -769,74 +792,251 @@ private emitSwitch(node: Node, level: number): { outcome: Outcome; next: string 
 		}
 	}
 
-	// ── Try / catch ───────────────────────────────────────────────────────
+	// G��G�� Try / catch G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
-	private findTryAfterTarget(tryId: string): string | undefined {
-	const outgoing = getOutgoingEdges(this.edges, tryId).filter((e) => !isBackEdge(e));
+	private findTryAfterTarget(
+		tryId: string,
+		tryTarget?: string,
+		catchTarget?: string,
+		finallyTarget?: string,
+	): string | undefined {
+		const boundaryFromTryExit = this.findExitTryTargetByLabeledEdges(
+			tryId,
+			[tryTarget, catchTarget, finallyTarget],
+		);
+		if (boundaryFromTryExit) return boundaryFromTryExit;
 
-	const tryBodyEdge = outgoing.find(
-		(e) => !isExceptionEdge(e.label) && normalize(e.label) !== "finally",
-	);
+		if (tryTarget && catchTarget) {
+			return this.findBranchJoin(tryTarget, catchTarget);
+		}
 
-	const catchEdge = outgoing.find((e) => isExceptionEdge(e.label));
+		if (tryTarget) {
+			return this.findLinearAfterTry(tryTarget);
+		}
 
-	const tryTarget = tryBodyEdge ? String(tryBodyEdge.target) : undefined;
-	const catchTarget = catchEdge ? String(catchEdge.target) : undefined;
-
-	if (tryTarget && catchTarget) {
-		return this.findBranchJoin(tryTarget, catchTarget);
+		return undefined;
 	}
 
-	if (tryTarget) {
-		return this.findLinearAfterTry(tryTarget);
+	private hasIncomingTryEdge(nodeId: string): boolean {
+		return this.edges.some(
+			(edge) => !isBackEdge(edge)
+				&& String(edge.target) === nodeId
+				&& normalize(edge.label) === "try",
+		);
 	}
 
-	return undefined;
-}
+	private findTryAfterTargetFromEntry(
+		tryEntryId: string,
+		catchTarget?: string,
+		finallyTarget?: string,
+	): string | undefined {
+		const boundaryFromTryExit = this.findExitTryTargetByLabeledEdges(
+			tryEntryId,
+			[tryEntryId, catchTarget, finallyTarget],
+		);
+		if (boundaryFromTryExit) return boundaryFromTryExit;
 
-private findLinearAfterTry(startId: string): string | undefined {
-	const reachable = this.collectReachableDistances(startId, 120);
+		if (catchTarget) {
+			return this.findBranchJoin(tryEntryId, catchTarget);
+		}
 
-	const mergeCandidates = [...reachable.keys()].filter(
-		(id) => this.nodeById.get(id)?.type === "merge",
-	);
+		return this.findLinearAfterTry(tryEntryId);
+	}
 
-	if (mergeCandidates.length === 0) return undefined;
+	private findCatchTargetFromTryEntry(tryEntryId: string): string | undefined {
+		const reachable = this.collectReachableDistances(tryEntryId, 120);
+		let lastTarget: string | undefined;
 
-	mergeCandidates.sort((a, b) => {
-		return (reachable.get(a) ?? 9999) - (reachable.get(b) ?? 9999);
-	});
+		for (const edge of this.edges) {
+			if (!isExceptionEdge(edge.label)) continue;
+			const sourceId = String(edge.source);
+			if (!reachable.has(sourceId)) continue;
+			lastTarget = String(edge.target);
+		}
 
-	return mergeCandidates[0];
-}
+		return lastTarget;
+	}
+
+	private findExitTryTargetByLabeledEdges(
+		tryId: string,
+		starts: Array<string | undefined>,
+	): string | undefined {
+		const distances = new Map<string, number>();
+
+		for (const start of starts) {
+			if (!start) continue;
+			const reachable = this.collectReachableDistances(start, 120);
+			for (const [nodeId, distance] of reachable.entries()) {
+				const current = distances.get(nodeId);
+				if (current === undefined || distance < current) {
+					distances.set(nodeId, distance);
+				}
+			}
+		}
+
+		let lastTarget: string | undefined;
+		for (const edge of this.edges) {
+			if (!isTryExitEdge(edge)) continue;
+			const sourceId = String(edge.source);
+			if (!distances.has(sourceId)) continue;
+
+			const targetId = String(edge.target);
+			const targetNode = this.nodeById.get(targetId);
+			const owner = targetNode ? String(getData(targetNode).tryOwner ?? "") : "";
+			if (owner && owner !== tryId) continue;
+
+			lastTarget = targetId;
+		}
+		if (lastTarget) return lastTarget;
+
+		let lastBoundaryNode: string | undefined;
+		for (const nodeId of distances.keys()) {
+			const node = this.nodeById.get(nodeId);
+			if (!node) continue;
+			const nodeData = getData(node);
+			if (nodeData.role !== "try-exit-boundary") continue;
+			const owner = String(nodeData.tryOwner ?? "");
+			if (owner && owner !== tryId) continue;
+			lastBoundaryNode = nodeId;
+		}
+
+		return lastBoundaryNode;
+	}
+
+	private findTryExitBoundaryFromEdges(
+		tryId: string,
+		tryTarget?: string,
+		catchTarget?: string,
+	): string | undefined {
+		const distances = new Map<string, number>();
+
+		const addDistances = (startId?: string): void => {
+			if (!startId) return;
+			const reachable = this.collectReachableDistances(startId, 120);
+			for (const [nodeId, distance] of reachable.entries()) {
+				const current = distances.get(nodeId);
+				if (current === undefined || distance < current) {
+					distances.set(nodeId, distance);
+				}
+			}
+		};
+
+		addDistances(tryTarget);
+		addDistances(catchTarget);
+
+		const candidateTargets = new Map<string, number>();
+
+		for (const edge of this.edges) {
+			if (!isTryExitEdge(edge)) continue;
+
+			const sourceId = String(edge.source);
+			if (!distances.has(sourceId)) continue;
+
+			const targetId = String(edge.target);
+			const targetNode = this.nodeById.get(targetId);
+			const owner = targetNode ? String(getData(targetNode).tryOwner ?? "") : "";
+			if (owner !== tryId) continue;
+
+			const distance = (distances.get(sourceId) ?? 9999) + 1;
+			const current = candidateTargets.get(targetId);
+			if (current === undefined || distance < current) {
+				candidateTargets.set(targetId, distance);
+			}
+		}
+
+		for (const [nodeId, distance] of distances.entries()) {
+			const node = this.nodeById.get(nodeId);
+			if (!node) continue;
+			const nodeData = getData(node);
+			if (nodeData.role !== "try-exit-boundary") continue;
+			if (String(nodeData.tryOwner ?? "") !== tryId) continue;
+			const current = candidateTargets.get(nodeId);
+			if (current === undefined || distance < current) {
+				candidateTargets.set(nodeId, distance);
+			}
+		}
+
+		if (candidateTargets.size === 0) return undefined;
+
+		return [...candidateTargets.entries()]
+			.sort((a, b) => a[1] - b[1])[0][0];
+	}
+
+	private findLinearAfterTry(startId: string): string | undefined {
+		const reachable = this.collectReachableDistances(startId, 120);
+
+		const mergeCandidates = [...reachable.keys()].filter(
+			(id) => this.nodeById.get(id)?.type === "merge",
+		);
+
+		if (mergeCandidates.length === 0) return undefined;
+
+		mergeCandidates.sort((a, b) => {
+			return (reachable.get(a) ?? 9999) - (reachable.get(b) ?? 9999);
+		});
+
+		return mergeCandidates[0];
+	}
 
 	private emitTry(node: Node, level: number): { outcome: Outcome; next: string | undefined } {
 		const id = String(node.id);
 
 		const allOutgoing = getOutgoingEdges(this.edges, id).filter((e) => !isBackEdge(e));
-		const catchEdge = allOutgoing.find((e) => isExceptionEdge(e.label));
+		const catchEdge = [...allOutgoing].reverse().find((e) => isExceptionEdge(e.label));
+		const finallyEdge = [...allOutgoing].reverse().find((e) => normalize(e.label) === "finally");
 		const tryBodyEdge = allOutgoing.find(
 			(e) => !isExceptionEdge(e.label) && normalize(e.label) !== "finally",
 		);
 
 		const tryBodyTarget = tryBodyEdge ? String(tryBodyEdge.target) : undefined;
 		const catchTarget = catchEdge ? String(catchEdge.target) : undefined;
+		const explicitFinallyTarget = finallyEdge ? String(finallyEdge.target) : undefined;
+		const finallyCandidates = this.collectFinallyCandidatesByLabels(
+			id,
+			[tryBodyTarget, catchTarget],
+			undefined,
+		);
 
 		this.code += `${indent(level)}try {\n`;
-		const afterTry = this.findTryAfterTarget(id);
+		const finallyTarget = explicitFinallyTarget ?? finallyCandidates.selected;
+		const allFinallyTargets = [...finallyCandidates.allTargets];
+		if (explicitFinallyTarget && !allFinallyTargets.includes(explicitFinallyTarget)) {
+			allFinallyTargets.push(explicitFinallyTarget);
+		}
+		const afterTry = this.findTryAfterTarget(id, tryBodyTarget, catchTarget, finallyTarget);
+		const afterFinally = this.resolveAfterFinallyTarget(finallyTarget, afterTry);
+		const branchStop: string | ReadonlySet<string> | undefined =
+			allFinallyTargets.length > 0 ? new Set(allFinallyTargets) : afterTry;
 
 		const tryOutcome = tryBodyTarget
-			? this.emitSequence(tryBodyTarget, level + 1, afterTry)
+			? this.emitSequence(tryBodyTarget, level + 1, branchStop)
 			: FALL;
 		this.code += `${indent(level)}}`;
 
 		let catchOutcome: Outcome = FALL;
+		const emitFallbackCatch = !catchTarget && !finallyTarget;
 		if (catchTarget) {
 			this.code += ` catch (e) {\n`;
-			catchOutcome = this.emitSequence(catchTarget, level + 1, afterTry);
+			catchOutcome = this.emitSequence(catchTarget, level + 1, branchStop);
+			this.code += `${indent(level)}}`;
+		} else if (emitFallbackCatch) {
+			this.code += ` catch (e) {\n`;
+			this.code += `${indent(level + 1)}throw e;\n`;
+			this.code += `${indent(level)}}`;
+			catchOutcome = RETURN;
+		}
+
+		let finallyOutcome: Outcome = FALL;
+		if (finallyTarget) {
+			this.code += ` finally {\n`;
+			finallyOutcome = this.emitSequence(finallyTarget, level + 1, afterFinally);
 			this.code += `${indent(level)}}`;
 		}
 		this.code += `\n`;
+
+		if (finallyOutcome.kind !== "fall") {
+			return { outcome: finallyOutcome, next: undefined };
+		}
 
 		const hasCatch = catchTarget !== undefined;
 		const tryDiverged = tryOutcome.kind !== "fall";
@@ -849,10 +1049,220 @@ private findLinearAfterTry(startId: string): string | undefined {
 			};
 		}
 
-		return { outcome: FALL, next: this.findTryAfterTarget(id) };
+		return { outcome: FALL, next: afterFinally };
 	}
 
-	// ── Successor helpers ─────────────────────────────────────────────────
+	private emitTryFromEntry(tryEntryId: string, level: number): { outcome: Outcome; next: string | undefined } {
+		const catchTarget = this.findCatchTargetFromTryEntry(tryEntryId);
+		const finallyCandidates = this.collectFinallyCandidatesByLabels(
+			tryEntryId,
+			[tryEntryId, catchTarget],
+			undefined,
+		);
+
+		this.code += `${indent(level)}try {\n`;
+		const finallyTarget = finallyCandidates.selected;
+		const afterTry = this.findTryAfterTargetFromEntry(tryEntryId, catchTarget, finallyTarget);
+		const afterFinally = this.resolveAfterFinallyTarget(finallyTarget, afterTry);
+		const branchStop: string | ReadonlySet<string> | undefined =
+			finallyCandidates.allTargets.length > 0
+				? new Set(finallyCandidates.allTargets)
+				: afterTry;
+
+		let tryOutcome: Outcome = FALL;
+		this.activeTryEntries.add(tryEntryId);
+		try {
+			tryOutcome = this.emitSequence(tryEntryId, level + 1, branchStop);
+		} finally {
+			this.activeTryEntries.delete(tryEntryId);
+		}
+		this.code += `${indent(level)}}`;
+
+		let catchOutcome: Outcome = FALL;
+		const emitFallbackCatch = !catchTarget && !finallyTarget;
+		if (catchTarget) {
+			this.code += ` catch (e) {\n`;
+			catchOutcome = this.emitSequence(catchTarget, level + 1, branchStop);
+			this.code += `${indent(level)}}`;
+		} else if (emitFallbackCatch) {
+			this.code += ` catch (e) {\n`;
+			this.code += `${indent(level + 1)}throw e;\n`;
+			this.code += `${indent(level)}}`;
+			catchOutcome = RETURN;
+		}
+
+		let finallyOutcome: Outcome = FALL;
+		if (finallyTarget) {
+			this.code += ` finally {\n`;
+			finallyOutcome = this.emitSequence(finallyTarget, level + 1, afterFinally);
+			this.code += `${indent(level)}}`;
+		}
+		this.code += `\n`;
+
+		if (finallyOutcome.kind !== "fall") {
+			return { outcome: finallyOutcome, next: undefined };
+		}
+
+		const hasCatch = catchTarget !== undefined;
+		const tryDiverged = tryOutcome.kind !== "fall";
+		const catchDiverged = !hasCatch || catchOutcome.kind !== "fall";
+
+		if (tryDiverged && catchDiverged) {
+			return {
+				outcome: hasCatch ? chooseDominant(tryOutcome, catchOutcome) : tryOutcome,
+				next: undefined,
+			};
+		}
+
+		return { outcome: FALL, next: afterFinally };
+	}
+
+	private findFinallyEntryForLegacyTry(
+		tryId: string,
+		tryTarget: string | undefined,
+		catchTarget: string | undefined,
+		afterTry: string | undefined,
+		explicitFinallyTarget: string | undefined,
+	): string | undefined {
+		if (explicitFinallyTarget) {
+			return explicitFinallyTarget;
+		}
+
+		if (tryTarget && catchTarget) {
+			const join = this.findBranchJoin(tryTarget, catchTarget);
+			if (join && join !== afterTry) return join;
+		}
+
+		const starts: string[] = [];
+		if (tryTarget) starts.push(tryTarget);
+		if (catchTarget) starts.push(catchTarget);
+		return this.findFinallyEntryByLabeledEdges(tryId, starts, afterTry);
+	}
+
+	private findFinallyEntryFromTryEntry(
+		tryEntryId: string,
+		catchTarget: string | undefined,
+	): string | undefined {
+		const starts = catchTarget ? [tryEntryId, catchTarget] : [tryEntryId];
+		return this.findFinallyEntryByLabeledEdges(tryEntryId, starts, undefined);
+	}
+
+	private findFinallyEntryByLabeledEdges(
+		tryOwnerId: string,
+		starts: string[],
+		afterTry: string | undefined,
+	): string | undefined {
+		if (starts.length === 0) return undefined;
+
+		const distances = new Map<string, number>();
+		for (const start of starts) {
+			const reachable = this.collectReachableDistances(start, 120);
+			for (const [nodeId, distance] of reachable.entries()) {
+				const current = distances.get(nodeId);
+				if (current === undefined || distance < current) distances.set(nodeId, distance);
+			}
+		}
+
+		let lastTarget: string | undefined;
+		for (const edge of this.edges) {
+			if (isBackEdge(edge)) continue;
+			if (normalize(edge.label) !== "finally") continue;
+
+			const sourceId = String(edge.source);
+			if (!distances.has(sourceId)) continue;
+
+			const targetId = String(edge.target);
+			if (afterTry && targetId === afterTry && this.isSyntheticTryBoundaryNode(targetId)) continue;
+
+			const targetNode = this.nodeById.get(targetId);
+			if (targetNode) {
+				const owner = String(getData(targetNode).tryOwner ?? "");
+				if (owner && owner !== tryOwnerId) continue;
+			}
+
+			lastTarget = targetId;
+		}
+
+		return lastTarget;
+	}
+
+	private collectFinallyCandidatesByLabels(
+		tryOwnerId: string,
+		starts: Array<string | undefined>,
+		afterTry: string | undefined,
+	): { allTargets: string[]; selected: string | undefined } {
+		const distances = new Map<string, number>();
+		for (const start of starts) {
+			if (!start) continue;
+			const reachable = this.collectReachableDistances(start, 120);
+			for (const [nodeId, distance] of reachable.entries()) {
+				const current = distances.get(nodeId);
+				if (current === undefined || distance < current) distances.set(nodeId, distance);
+			}
+		}
+
+		const allTargets: string[] = [];
+		let lastAny: string | undefined;
+		let lastPreferred: string | undefined;
+
+		for (const edge of this.edges) {
+			if (isBackEdge(edge)) continue;
+			if (normalize(edge.label) !== "finally") continue;
+
+			const sourceId = String(edge.source);
+			if (!distances.has(sourceId)) continue;
+
+			const targetId = String(edge.target);
+			if (afterTry && targetId === afterTry && this.isSyntheticTryBoundaryNode(targetId)) continue;
+
+			const targetNode = this.nodeById.get(targetId);
+			if (targetNode) {
+				const owner = String(getData(targetNode).tryOwner ?? "");
+				if (owner && owner !== tryOwnerId) continue;
+			}
+
+			allTargets.push(targetId);
+			lastAny = targetId;
+
+			const sourceNode = this.nodeById.get(sourceId);
+			const sourceConstruct = sourceNode ? getConstruct(sourceNode) : undefined;
+			if (sourceConstruct !== "pending-return") {
+				lastPreferred = targetId;
+			}
+		}
+
+		return {
+			allTargets,
+			selected: lastPreferred ?? lastAny,
+		};
+	}
+
+	private isSyntheticTryBoundaryNode(nodeId: string): boolean {
+		const node = this.nodeById.get(nodeId);
+		if (!node) return false;
+		const data = getData(node);
+		if (data.role !== "try-exit-boundary") return false;
+
+		const sourceText = getStr(data.sourceText).trim();
+		const label = getStr(data.label).trim();
+		return !sourceText && !label;
+	}
+
+	private resolveAfterFinallyTarget(
+		finallyTarget: string | undefined,
+		afterTry: string | undefined,
+	): string | undefined {
+		if (!finallyTarget) return afterTry;
+
+		if (!afterTry || afterTry === finallyTarget) {
+			const successor = this.fallthroughSuccessor(finallyTarget);
+			if (successor && successor !== finallyTarget) return successor;
+		}
+
+		return afterTry;
+	}
+
+	// G��G�� Successor helpers G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 	private outgoingForwardEdges(id: string): Edge[] {
 		return getOutgoingEdges(this.edges, id).filter(
@@ -883,7 +1293,7 @@ private findLinearAfterTry(startId: string): string | undefined {
 		return findLabeledEdge(outgoing, preferredLabels);
 	}
 
-	// ── Snippet writing ───────────────────────────────────────────────────
+	// G��G�� Snippet writing G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 	private writeSnippet(snippet: string, level: number): void {
 		const lines = snippet.split(/\r?\n/);
