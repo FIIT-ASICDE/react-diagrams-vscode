@@ -31,6 +31,48 @@ function wirePendingBreaksAndContinues(host: StatementVisitorHost, ctx: LoopCont
   return ctx.pendingBreaks;
 }
 
+/**
+ * Merge loop exits and break exits with an explicit merge node if needed.
+ * 
+ * When a loop has both normal exit(s) and break exit(s), they must converge
+ * into an explicit merge node before reaching the post-loop continuation.
+ * This ensures proper activity diagram structure instead of implicit merges.
+ * 
+ * @param loopExits - Normal loop exits (typically [loopId])
+ * @param breakExits - Break statement exits
+ * @returns Final exits (either [mergeId] or just loopExits if no breaks)
+ */
+function mergeLoopExitsWithBreaks(
+  host: StatementVisitorHost,
+  loopExits: string[],
+  breakExits: string[],
+): string[] {
+  // No breaks — just return normal loop exits as-is
+  if (breakExits.length === 0) {
+    return loopExits;
+  }
+
+  // Has breaks but no normal loop exit — just return break exits
+  if (loopExits.length === 0) {
+    return breakExits;
+  }
+
+  // Both normal loop exits and break exits exist — create explicit merge
+  const mergeId = host.writer.addFlowNode('merge', '');
+
+  // Wire loop exit to merge
+  for (const loopExit of loopExits) {
+    host.writer.addEdge(loopExit, mergeId);
+  }
+
+  // Wire all break exits to merge
+  for (const breakExit of breakExits) {
+    host.writer.addEdge(breakExit, mergeId);
+  }
+
+  return [mergeId];
+}
+
 // ── Visitors ───────────────────────────────────────────────────────────────
 
 export function visitIf(host: StatementVisitorHost, stmt: IfStatement): BuildResult {
@@ -85,9 +127,10 @@ export function visitWhile(host: StatementVisitorHost, stmt: WhileStatement): Bu
   try {
     const result = visitStandardLoop(host, loopId, stmt.getStatement(), 'yes');
     const breakExits = wirePendingBreaksAndContinues(host, ctx);
+    const mergedExits = mergeLoopExitsWithBreaks(host, result.exits, breakExits);
     return {
       entry: result.entry,
-      exits: [...result.exits, ...breakExits],
+      exits: mergedExits,
       returnExits: result.returnExits,
       throwExits: result.throwExits,
     };
@@ -112,10 +155,11 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
       host.writer.addEdge(loopId, loopId, 'yes', false);
 
       const breakExits = wirePendingBreaksAndContinues(host, ctx);
+    const mergedExits = mergeLoopExitsWithBreaks(host, [loopId], breakExits);
 
       return {
         entry: loopId,
-        exits: [loopId, ...breakExits],
+        exits: mergedExits,
         returnExits: [],
         throwExits: [],
       };
@@ -134,10 +178,11 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
     }
 
     const breakExits = wirePendingBreaksAndContinues(host, ctx);
+    const mergedExits = mergeLoopExitsWithBreaks(host, [loopId], breakExits);
 
     return {
       entry: loopId,
-      exits: [loopId, ...breakExits],
+      exits: mergedExits,
       returnExits: [...new Set(body.returnExits)],
       throwExits: [...new Set(body.throwExits)],
     };
@@ -165,9 +210,10 @@ export function visitFor(host: StatementVisitorHost, stmt: ForStatement): BuildR
   try {
     const result = visitStandardLoop(host, loopId, stmt.getStatement(), 'yes');
     const breakExits = wirePendingBreaksAndContinues(host, ctx);
+    const mergedExits = mergeLoopExitsWithBreaks(host, result.exits, breakExits);
     return {
       entry: result.entry,
-      exits: [...result.exits, ...breakExits],
+      exits: mergedExits,
       returnExits: result.returnExits,
       throwExits: result.throwExits,
     };
@@ -521,9 +567,10 @@ function visitIteratorLoop(
   try {
     const result = visitStandardLoop(host, loopId, stmt.getStatement(), 'each');
     const breakExits = wirePendingBreaksAndContinues(host, ctx);
+    const mergedExits = mergeLoopExitsWithBreaks(host, result.exits, breakExits);
     return {
       entry: result.entry,
-      exits: [...result.exits, ...breakExits],
+      exits: mergedExits,
       returnExits: result.returnExits,
       throwExits: result.throwExits,
     };

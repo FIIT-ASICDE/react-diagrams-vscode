@@ -34,6 +34,64 @@ export function pointsToPath(points: Point[]): string {
 		.join(' ');
 }
 
+/**
+ * Same routing as `pointsToPath` (visits the same points in order),
+ * but with each interior bend softened by a quadratic-Bezier arc.
+ * Matches the visual style of the state-diagram `RoutableEdge`:
+ * orthogonal lanes with deliberate-looking rounded corners.
+ *
+ * Each bend at point[i] becomes:
+ *   - a line from point[i-1] toward point[i], stopping `r` short
+ *   - a Q-curve through point[i] continuing `r` along the next segment
+ *
+ * `r` is capped at half the length of either adjacent segment so
+ * tight corners don't generate overlapping arcs.
+ *
+ * Pass `cornerRadius = 0` to fall back to hard corners.
+ */
+export function pointsToRoundedPath(points: Point[], cornerRadius = 8): string {
+	if (points.length === 0) return '';
+	if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+	if (cornerRadius <= 0) return pointsToPath(points);
+
+	let d = `M ${points[0].x} ${points[0].y}`;
+
+	for (let i = 1; i < points.length - 1; i += 1) {
+		const prev = points[i - 1];
+		const curr = points[i];
+		const next = points[i + 1];
+
+		const inDx = curr.x - prev.x;
+		const inDy = curr.y - prev.y;
+		const inLen = Math.hypot(inDx, inDy);
+
+		const outDx = next.x - curr.x;
+		const outDy = next.y - curr.y;
+		const outLen = Math.hypot(outDx, outDy);
+
+		const r = Math.min(cornerRadius, inLen / 2, outLen / 2);
+
+		// Below this threshold the arc is barely visible AND tends to
+		// look noisy — fall back to a hard line.
+		if (r < 1.5) {
+			d += ` L ${curr.x} ${curr.y}`;
+			continue;
+		}
+
+		const inX = curr.x - (inDx / inLen) * r;
+		const inY = curr.y - (inDy / inLen) * r;
+		const outX = curr.x + (outDx / outLen) * r;
+		const outY = curr.y + (outDy / outLen) * r;
+
+		d += ` L ${inX} ${inY} Q ${curr.x} ${curr.y} ${outX} ${outY}`;
+	}
+
+	const last = points[points.length - 1];
+	d += ` L ${last.x} ${last.y}`;
+
+	return d;
+}
+
 export function distance(a: Point, b: Point): number {
 	return Math.hypot(b.x - a.x, b.y - a.y);
 }

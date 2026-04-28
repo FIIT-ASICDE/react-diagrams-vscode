@@ -1,9 +1,10 @@
 import type { EdgeProps } from '@xyflow/react';
 import { BaseEdge } from '@xyflow/react';
 import { EdgeLabel } from './edges/EdgeLabel';
-import { hasElkPoints, pointBackFromEnd, pointsToPath, type Point } from './edges/edge-utils';
+import { hasElkPoints, pointBackFromEnd, pointsToRoundedPath, type Point } from './edges/edge-utils';
 
 const LABEL_OFFSET_FROM_END = 44;
+const CORNER_RADIUS = 8;
 
 function fallbackPoints(props: EdgeProps): Point[] {
 	const { sourceX, sourceY, targetX, targetY } = props;
@@ -21,7 +22,7 @@ export default function ElkPathEdge(props: EdgeProps) {
 	const { id, style, label, data, markerEnd } = props;
 
 	const points = hasElkPoints(data) ? data.points : fallbackPoints(props);
-	const path = pointsToPath(points);
+	const path = pointsToRoundedPath(points, CORNER_RADIUS);
 	const labelPos = pointBackFromEnd(points, LABEL_OFFSET_FROM_END);
 
 	return (

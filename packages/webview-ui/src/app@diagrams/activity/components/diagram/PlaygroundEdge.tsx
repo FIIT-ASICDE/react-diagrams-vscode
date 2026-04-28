@@ -6,7 +6,7 @@ import {
 	hasBakedPoints,
 	offsetByPosition,
 	pointBackFromEnd,
-	pointsToPath,
+	pointsToRoundedPath,
 	type Point,
 } from './edges/edge-utils';
 
@@ -14,6 +14,7 @@ const LABEL_OFFSET_FROM_END = 34;
 const STUB = 28;
 const POINTS_FRESHNESS_TOLERANCE = 10;
 const MIN_SEGMENT = 6;
+const CORNER_RADIUS = 8;
 
 function selfRoute(args: {
 	sourceX: number;
@@ -228,7 +229,7 @@ export default function DynamicPathEdge(props: EdgeProps) {
 		});
 	}
 
-	const path = pointsToPath(points);
+	const path = pointsToRoundedPath(points, CORNER_RADIUS);
 	const labelPos = pointBackFromEnd(points, LABEL_OFFSET_FROM_END);
 
 	return (

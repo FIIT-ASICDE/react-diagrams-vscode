@@ -47,6 +47,13 @@ export async function applyActivityElkLayout(
 			'elk.spacing.edgeNode': '40',
 			'elk.spacing.edgeEdge': '10',
 			'elk.padding': '[top=20,left=20,bottom=20,right=20]',
+			// POLYLINE matches the state-diagram routing. Compared to
+			// ORTHOGONAL, it allows mid-segment diagonals which makes
+			// flowcharts with many decisions feel less mechanical and
+			// keeps lanes shorter (less wraparound on busy graphs).
+			// Bend-point geometry is still mostly orthogonal — the
+			// rounded-corner renderer (`pointsToRoundedPath`) softens
+			// any remaining sharp angles.
 			'elk.edgeRouting': 'ORTHOGONAL',
 			'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
 			'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
