@@ -663,7 +663,7 @@ function validateIfNode(
 ): void {
 	const id = String(node.id);
 	const incoming = count(groups.incoming, id);
-	const outgoing = list(groups.forwardOutgoing, id);
+	const outgoing = list(groups.outgoing, id);
 
 	if (incoming < 1) {
 		addIssue(

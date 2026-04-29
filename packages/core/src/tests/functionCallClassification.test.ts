@@ -230,6 +230,8 @@ test('DiagramBuilder treats forEach-style callbacks as loop cycles', async () =>
 		forEachChild(values, (child) => {
 			logValue(child);
 		});
+
+		afterAll();
 	`;
 
 	const project = new Project({ compilerOptions: { allowJs: true } });
@@ -240,11 +242,20 @@ test('DiagramBuilder treats forEach-style callbacks as loop cycles', async () =>
 		.filter((node) => node.type === 'loop')
 		.map((node) => String((node.data as { label?: unknown } | undefined)?.label ?? ''));
 	const cycleEdges = graph.edges.filter((edge) => edge.type === 'back');
-	const loopEntryEdges = graph.edges.filter((edge) => String(edge.label ?? '') === 'each');
+	const loopEntryEdges = graph.edges.filter((edge) => String(edge.label ?? '') === 'next');
+	const afterAllNode = graph.nodes.find((node) =>
+		String((node.data as { sourceText?: unknown } | undefined)?.sourceText ?? '').includes('afterAll()'),
+	);
+	const loopExitEdges = graph.edges.filter((edge) =>
+		String(edge.label ?? '') === 'done'
+			&& String(edge.target) === String(afterAllNode?.id ?? ''),
+	);
 
 	assert.ok(decisionLabels.some((label) => /forEach/i.test(label)));
 	assert.ok(decisionLabels.some((label) => /forEachChild/i.test(label)));
 	assert.ok(loopEntryEdges.length >= 3);
+	assert.ok(afterAllNode);
+	assert.ok(loopExitEdges.length >= 1);
 	assert.ok(cycleEdges.length >= 3);
 });
 

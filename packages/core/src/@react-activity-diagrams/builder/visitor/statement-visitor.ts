@@ -143,55 +143,71 @@ export class StatementVisitor implements StatementVisitorHost {
 	 * become the next statement's incoming edges.
 	 */
 	visitStatements(statements: Statement[]): BuildResult {
-		let entry: string | undefined;
-		let entryEdgeLabel: string | undefined;
-		let pendingExits: string[] = [];
-		let pendingExitLabels: Record<string, string> | undefined;
-		const returnExits: string[] = [];
-		const throwExits: string[] = [];
+	let entry: string | undefined;
+	let entryEdgeLabel: string | undefined;
+	let pendingExits: string[] = [];
+	let pendingExitLabels: Record<string, string> | undefined;
+	const returnExits: string[] = [];
+	const throwExits: string[] = [];
+	let hasRenderedStatement = false;
 
-		for (let index = 0; index < statements.length; index += 1) {
-			if (statements[index].getKind() === SyntaxKind.ImportDeclaration) {
-				continue;
-			}
-
-			const result = this.visitStatement(statements[index]);
-			if (!result.entry) continue;
-
-			if (!entry) {
-				entry = result.entry;
-				entryEdgeLabel = result.entryEdgeLabel;
-			}
-
-			for (const exit of pendingExits) {
-				const exitData = this.writer.getNodeData(exit);
-				const label = pendingExitLabels?.[exit]
-					?? result.entryEdgeLabel
-					?? (exitData?.role === 'try-exit-boundary' ? 'exit try' : getFallthroughEdgeLabel(this, exit));
-				this.writer.addEdge(exit, result.entry, label);
-			}
-
-			pendingExits = result.exits;
-			pendingExitLabels = result.exitLabels;
-			returnExits.push(...result.returnExits);
-			throwExits.push(...result.throwExits);
+	for (let index = 0; index < statements.length; index += 1) {
+		if (statements[index].getKind() === SyntaxKind.ImportDeclaration) {
+			continue;
 		}
 
-		const finalExitLabels = pendingExitLabels
-			? Object.fromEntries(
-				Object.entries(pendingExitLabels).filter(([exitId]) => pendingExits.includes(exitId)),
-			)
-			: undefined;
+		// If the previous rendered statement has no normal fallthrough exits,
+		// everything after it in this statement sequence is unreachable.
+		// Do not visit/render the next statement at all.
+		if (hasRenderedStatement && pendingExits.length === 0) {
+			break;
+		}
 
-		return {
-			entry,
-			entryEdgeLabel,
-			exits: entry ? [...new Set(pendingExits)] : [],
-			exitLabels: finalExitLabels && Object.keys(finalExitLabels).length > 0 ? finalExitLabels : undefined,
-			returnExits: [...new Set(returnExits)],
-			throwExits: [...new Set(throwExits)],
-		};
+		const result = this.visitStatement(statements[index]);
+
+		// Return/throw exits are additive even if this statement has no
+		// normal fallthrough.
+		returnExits.push(...result.returnExits);
+		throwExits.push(...result.throwExits);
+
+		if (!result.entry) {
+			continue;
+		}
+
+		if (!entry) {
+			entry = result.entry;
+			entryEdgeLabel = result.entryEdgeLabel;
+		}
+
+		for (const exit of pendingExits) {
+			const exitData = this.writer.getNodeData(exit);
+			const label = pendingExitLabels?.[exit]
+				?? result.entryEdgeLabel
+				?? (exitData?.role === 'try-exit-boundary' ? 'exit try' : getFallthroughEdgeLabel(this, exit));
+
+			this.writer.addEdge(exit, result.entry, label);
+		}
+
+		pendingExits = result.exits;
+		pendingExitLabels = result.exitLabels;
+		hasRenderedStatement = true;
 	}
+
+	const finalExitLabels = pendingExitLabels
+		? Object.fromEntries(
+			Object.entries(pendingExitLabels).filter(([exitId]) => pendingExits.includes(exitId)),
+		)
+		: undefined;
+
+	return {
+		entry,
+		entryEdgeLabel,
+		exits: entry ? [...new Set(pendingExits)] : [],
+		exitLabels: finalExitLabels && Object.keys(finalExitLabels).length > 0 ? finalExitLabels : undefined,
+		returnExits: [...new Set(returnExits)],
+		throwExits: [...new Set(throwExits)],
+	};
+}
 
 	visitStatementsInline(statements: Statement[]): BuildResult {
 		return this.visitStatements(statements);

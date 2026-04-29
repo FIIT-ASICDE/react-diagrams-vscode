@@ -83,13 +83,26 @@ export class GraphWriter {
 
 
   addEdge(source: string, target: string, label?: string, isBackEdge = false): void {
+    let normalizedLabel = label;
+    const sourceNode = this.findNodeById(source);
+    const sourceData = sourceNode?.data as Record<string, unknown> | undefined;
+    const sourceConstruct = typeof sourceData?.construct === 'string' ? sourceData.construct : '';
+
+    if (
+      sourceNode?.type === 'decision' &&
+      sourceConstruct !== 'switch' &&
+      (typeof normalizedLabel !== 'string' || normalizedLabel.trim() === '')
+    ) {
+      normalizedLabel = 'no';
+    }
+
     this.edges.push({
       id: `edge-${this.nextEdgeId++}`,
       source,
       target,
       // Let React Flow pick default handles. ELK will route to/from node boundaries.
       animated: isBackEdge ? true : undefined,
-      label,
+      label: normalizedLabel,
       type: isBackEdge ? 'back' : 'default',
       style: isBackEdge
         ? { strokeDasharray: '6 4', stroke: '#024105' }

@@ -97,11 +97,11 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
     const body = callbackBranch ? host.visitBranch(callbackBranch) : undefined;
 
     if (body?.entry) {
-      host.writer.addEdge(loopId, body.entry, 'each', false);
+      host.writer.addEdge(loopId, body.entry, 'next', false);
       host.connectLoopBackEdges(body.exits, loopId);
     } else {
 
-      host.writer.addEdge(loopId, loopId, 'each', true);
+      host.writer.addEdge(loopId, loopId, 'next', true);
     }
 
     // Continue statements inside the body loop back to the loop node.
@@ -114,6 +114,9 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
     return {
       entry: loopId,
       exits: [loopId, ...ctx.pendingBreaks],
+      exitLabels: {
+        [loopId]: 'done',
+      },
       returnExits: body?.returnExits ?? [],
       throwExits: body?.throwExits ?? [],
     };

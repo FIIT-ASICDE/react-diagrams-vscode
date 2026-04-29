@@ -27,6 +27,30 @@ type GraphSnapshot = {
 	edges: Edge[];
 };
 
+function cloneGraphSnapshot(snapshot: GraphSnapshot): GraphSnapshot {
+	return {
+		nodes: snapshot.nodes.map((node) => ({
+			...node,
+			position: { ...node.position },
+			data: node.data ? { ...(node.data as Record<string, unknown>) } : node.data,
+			style: node.style ? { ...node.style } : node.style,
+		})),
+		edges: snapshot.edges.map((edge) => ({
+			...edge,
+			data: edge.data ? { ...(edge.data as Record<string, unknown>) } : edge.data,
+			style: edge.style ? { ...edge.style } : edge.style,
+			markerEnd:
+				edge.markerEnd && typeof edge.markerEnd === 'object'
+					? { ...edge.markerEnd }
+					: edge.markerEnd,
+			markerStart:
+				edge.markerStart && typeof edge.markerStart === 'object'
+					? { ...edge.markerStart }
+					: edge.markerStart,
+		})),
+	};
+}
+
 type Params = {
 	visibleNodes: Node[];
 	visibleEdges: Edge[];
@@ -122,8 +146,17 @@ export function useActivityPlayground({
 	}, [commitPlaygroundToViewer, viewMode]);
 
 	const switchToPlayground = useCallback(() => {
+		if (viewMode === 'viewer') {
+			const snapshot = cloneGraphSnapshot({
+				nodes: visibleNodes,
+				edges: visibleEdges,
+			});
+			setPlaygroundNodes(snapshot.nodes);
+			setPlaygroundEdges(snapshot.edges);
+		}
+
 		setViewMode('playground');
-	}, []);
+	}, [viewMode, visibleEdges, visibleNodes]);
 
 	const onNodesChange = useCallback(
 		(changes: NodeChange<Node>[]) => {

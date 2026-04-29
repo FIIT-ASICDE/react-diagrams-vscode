@@ -47,15 +47,16 @@ export type EdgeEditDraft = {
 // Labels produced by the diagram builder or recognized by code generation.
 const EDGE_LABEL_OPTIONS = [
 	'',
-  'yes',
-  'no',
-  'each',
-  'try',
-  'exception',
-  'finally',
+	'yes',
+	'no',
+	'each',
+	'try',
+	'exception',
+	'finally',
 	'exit try',
-  'default',
-  'case',
+	'exit switch',
+	'default',
+	'case',
 ] as const;
 
 const EDGE_TYPE_OPTIONS = [

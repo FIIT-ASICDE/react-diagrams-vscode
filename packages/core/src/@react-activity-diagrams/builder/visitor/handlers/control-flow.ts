@@ -113,6 +113,24 @@ function wirePendingBreaksAndContinues(
 	return ctx.pendingBreaks;
 }
 
+
+function preserveExitLabelsForPendingBreaks(
+	host: StatementVisitorHost,
+	exits: string[],
+	exitLabels?: Record<string, string>,
+): string[] {
+	return exits.map((exit) => {
+		const label = exitLabels?.[exit] ?? getFallthroughEdgeLabel(host, exit);
+
+		if (!label) {
+			return exit;
+		}
+
+		const mergeId = host.writer.addFlowNode('merge', '');
+		host.writer.addEdge(exit, mergeId, label);
+		return mergeId;
+	});
+}
 /**
  * Merge loop exits and break exits with an explicit merge node if needed.
  *
@@ -123,28 +141,36 @@ function mergeLoopExitsWithBreaks(
 	host: StatementVisitorHost,
 	loopExits: string[],
 	breakExits: string[],
-): string[] {
+	loopExitLabels?: Record<string, string>,
+): { exits: string[]; exitLabels?: Record<string, string> } {
 	const uniqueLoopExits = uniqueIds(loopExits);
 
 	if (breakExits.length === 0) {
-		return uniqueLoopExits;
+		return {
+			exits: uniqueLoopExits,
+			exitLabels: nonEmptyLabels(loopExitLabels),
+		};
 	}
 
 	if (uniqueLoopExits.length === 0) {
-		return breakExits;
+		return { exits: breakExits };
 	}
 
 	const mergeId = host.writer.addFlowNode('merge', '');
 
 	for (const loopExit of uniqueLoopExits) {
-		host.writer.addEdge(loopExit, mergeId, getFallthroughEdgeLabel(host, loopExit));
+		host.writer.addEdge(
+			loopExit,
+			mergeId,
+			loopExitLabels?.[loopExit] ?? getFallthroughEdgeLabel(host, loopExit),
+		);
 	}
 
 	for (const breakExit of breakExits) {
 		host.writer.addEdge(breakExit, mergeId, getFallthroughEdgeLabel(host, breakExit));
 	}
 
-	return [mergeId];
+	return { exits: [mergeId] };
 }
 
 function resolveExitSourcesWithLabels(
@@ -262,17 +288,17 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
 		}
 
 		const breakExits = wirePendingBreaksAndContinues(host, ctx);
-		const mergedExits = mergeLoopExitsWithBreaks(host, [loopId], breakExits);
+		const mergedExits = mergeLoopExitsWithBreaks(host, [loopId], breakExits, {
+			[loopId]: 'no',
+		});
 
 		return {
 			entry: body.entry ?? loopId,
-			exits: mergedExits,
+			exits: mergedExits.exits,
 
 			// Important: this tells the next statement / parent loop that
 			// leaving the do-while condition is the "no" branch.
-			exitLabels: {
-				[loopId]: 'no',
-			},
+			exitLabels: mergedExits.exitLabels,
 
 			returnExits: unique(body.returnExits),
 			throwExits: unique(body.throwExits),
@@ -601,27 +627,38 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
 		}
 	}
 
-	for (const [loopCtx, sources] of continueGroups) {
-		const sliced = spliceFinallyCopy(host, finallyBlock, sources);
+  for (const [loopCtx, sources] of continueGroups) {
+    const sliced = spliceFinallyCopy(host, finallyBlock, sources);
 
-		for (const exit of sliced.exits) {
-			host.writer.addEdge(exit, loopCtx.continueTarget, '', true);
-		}
+    for (const exit of sliced.exits) {
+      const label =
+        sliced.exitLabels?.[exit] ??
+        getFallthroughEdgeLabel(host, exit) ??
+        '';
 
-		aggregateReturnExits.push(...sliced.returnExits);
-		aggregateThrowExits.push(...sliced.throwExits);
-	}
+      host.writer.addEdge(exit, loopCtx.continueTarget, label, true);
+    }
 
-	for (const [breakCtx, sources] of breakGroups) {
-		const sliced = spliceFinallyCopy(host, finallyBlock, sources);
+    aggregateReturnExits.push(...sliced.returnExits);
+    aggregateThrowExits.push(...sliced.throwExits);
+  }
 
-		for (const exit of sliced.exits) {
-			breakCtx.pendingBreaks.push(exit);
-		}
+  for (const [breakCtx, sources] of breakGroups) {
+    const sliced = spliceFinallyCopy(host, finallyBlock, sources);
 
-		aggregateReturnExits.push(...sliced.returnExits);
-		aggregateThrowExits.push(...sliced.throwExits);
-	}
+    const breakExits = preserveExitLabelsForPendingBreaks(
+      host,
+      sliced.exits,
+      sliced.exitLabels,
+    );
+
+    for (const exit of breakExits) {
+      breakCtx.pendingBreaks.push(exit);
+    }
+
+    aggregateReturnExits.push(...sliced.returnExits);
+    aggregateThrowExits.push(...sliced.throwExits);
+  }
 
 	const resolvedAggregateExits = host.resolveExitSources(aggregateExits);
 	const resolvedAggregateExitLabels = Object.fromEntries(
@@ -657,12 +694,17 @@ function visitLoopWithContext(
 	try {
 		const result = visitBody();
 		const breakExits = wirePendingBreaksAndContinues(host, ctx);
-		const mergedExits = mergeLoopExitsWithBreaks(host, result.exits, breakExits);
+		const mergedExits = mergeLoopExitsWithBreaks(
+			host,
+			result.exits,
+			breakExits,
+			result.exitLabels,
+		);
 
 		return {
 			entry: result.entry,
-			exits: mergedExits,
-			exitLabels: result.exitLabels,
+			exits: mergedExits.exits,
+			exitLabels: mergedExits.exitLabels,
 			returnExits: result.returnExits,
 			throwExits: result.throwExits,
 		};
@@ -676,6 +718,7 @@ function visitStandardLoop(
 	loopId: string,
 	loopBranch: MorphNode,
 	bodyLabel = 'yes',
+	exitLabel?: string,
 ): BuildResult {
 	const body = host.visitBranch(loopBranch);
 
@@ -689,6 +732,7 @@ function visitStandardLoop(
 	return {
 		entry: loopId,
 		exits: [loopId],
+		exitLabels: exitLabel ? { [loopId]: exitLabel } : undefined,
 		returnExits: unique(body.returnExits),
 		throwExits: unique(body.throwExits),
 	};
@@ -710,6 +754,6 @@ function visitIteratorLoop(
 	});
 
 	return visitLoopWithContext(host, loopId, () =>
-		visitStandardLoop(host, loopId, stmt.getStatement(), 'each'),
+		visitStandardLoop(host, loopId, stmt.getStatement(), 'next', 'done'),
 	);
 }
