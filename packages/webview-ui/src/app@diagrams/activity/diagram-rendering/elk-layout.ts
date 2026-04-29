@@ -1,6 +1,6 @@
 import ELK, { type ElkExtendedEdge, type ElkNode } from 'elkjs/lib/elk.bundled.js';
 import { Position, type Edge, type Node } from '@xyflow/react';
-
+import {DECISION_HEIGHT} from '../styles/design-tokens';
 type LayoutDirection = 'DOWN' | 'RIGHT';
 
 type LayoutResult = {
@@ -15,7 +15,11 @@ function isBackEdge(edge: Edge): boolean {
 }
 
 function estimateNodeSize(_node: Node): { width: number; height: number } {
-	return { width: 200, height: 56 };
+
+	if (_node.type === 'decision' || _node.type === 'loop') {
+		return { width: 200, height: DECISION_HEIGHT };
+	}
+	return { width: 200, height: 45 };
 }
 
 const elk = new ELK();
@@ -42,10 +46,10 @@ export async function applyActivityElkLayout(
 		layoutOptions: {
 			'elk.algorithm': 'layered',
 			'elk.direction': isHorizontal ? 'RIGHT' : 'DOWN',
-			'elk.layered.spacing.nodeNodeBetweenLayers': '90',
-			'elk.spacing.nodeNode': '50',
-			'elk.spacing.edgeNode': '40',
-			'elk.spacing.edgeEdge': '10',
+			'elk.layered.spacing.nodeNodeBetweenLayers': '100',
+			'elk.spacing.nodeNode': '80',
+			'elk.spacing.edgeNode': '60',
+			'elk.spacing.edgeEdge': '20',
 			'elk.padding': '[top=20,left=20,bottom=20,right=20]',
 			// POLYLINE matches the state-diagram routing. Compared to
 			// ORTHOGONAL, it allows mid-segment diagonals which makes

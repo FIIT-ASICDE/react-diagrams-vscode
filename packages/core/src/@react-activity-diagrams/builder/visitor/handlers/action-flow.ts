@@ -13,14 +13,7 @@ import { getCallbackBranch, isForEachLikeCall } from '../metadata';
 import type { BuildResult, HookMeta } from '../types';
 import { compactLabel } from '../utils';
 import type { StatementVisitorHost } from './host-context';
-
-function setNodeData(host: StatementVisitorHost, nodeId: string, extra: Record<string, unknown>): void {
-  const node = (host.writer as unknown as { nodes?: import('@xyflow/react').Node[] }).nodes?.find?.(
-    (candidate) => candidate.id === nodeId,
-  );
-  if (!node) return;
-  node.data = { ...(node.data ?? {}), ...extra };
-}
+import { setNodeData } from './node-data-utils';
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 
@@ -92,7 +85,7 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
     meta.iterable,
   );
 
-  setNodeData(host, loopId, {
+  setNodeData(host.writer, loopId, {
     construct: 'foreach',
     forEachIterable: meta.iterable,
     forEachCallee: meta.callee,
@@ -107,27 +100,23 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
     if (body?.entry) {
       host.writer.addEdge(loopId, body.entry, 'each', false);
       host.connectLoopBackEdges(body.exits, loopId);
-      for (const continueId of [...new Set(ctx.pendingContinues)].filter(Boolean)) {
-        host.writer.addEdge(continueId, loopId, '', true);
-      }
+    } else {
 
-      return {
-        entry: loopId,
-        exits: [loopId, ...ctx.pendingBreaks],
-        returnExits: body.returnExits,
-        throwExits: body.throwExits,
-      };
+      host.writer.addEdge(loopId, loopId, 'each', true);
     }
 
-    host.writer.addEdge(loopId, loopId, 'each', true);
+    // Continue statements inside the body loop back to the loop node.
+    // (When body.entry is missing there can be no continues — but the
+    // loop is harmless either way: the unique-set is empty.)
     for (const continueId of [...new Set(ctx.pendingContinues)].filter(Boolean)) {
       host.writer.addEdge(continueId, loopId, '', true);
     }
+
     return {
       entry: loopId,
       exits: [loopId, ...ctx.pendingBreaks],
-      returnExits: [],
-      throwExits: [],
+      returnExits: body?.returnExits ?? [],
+      throwExits: body?.throwExits ?? [],
     };
   } finally {
     host.popContext();
@@ -137,19 +126,12 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
 // ── Plain action / return / throw ─────────────────────────────────────────
 
 export function visitAction(host: StatementVisitorHost, label: string, sourceText?: string): BuildResult {
-  // Plain actions don't carry a construct. CodeGen falls back to its
-  // text-based "is this a return / throw / etc." check for them, so
-  // legacy diagrams stay correct.
   const id = host.writer.addFlowNode('action', compactLabel(label), {
     sourceText,
   });
   return { entry: id, exits: [id], returnExits: [], throwExits: [] };
 }
 
-/**
- * `return` exits via returnExits — eventually routed to the function's
- * End node. NOT throwExits.
- */
 export function visitReturn(host: StatementVisitorHost, stmt: ReturnStatement): BuildResult {
   const expressionText = stmt.getExpression()?.getText();
   const label = expressionText ? `return ${expressionText}` : 'return';
@@ -161,15 +143,6 @@ export function visitReturn(host: StatementVisitorHost, stmt: ReturnStatement): 
   return { entry: id, exits: [], returnExits: [id], throwExits: [] };
 }
 
-/**
- * `throw` exits via throwExits — eventually routed to the function's
- * ErrorEnd node (UNLESS caught by an enclosing try / catch on the way
- * out, in which case visitTry redirects this entry to the catch entry).
- *
- * Crucially throwExits MUST NOT be merged with returnExits or normal
- * exits — exception flow has different downstream semantics from
- * success flow.
- */
 export function visitThrow(host: StatementVisitorHost, stmt: ThrowStatement): BuildResult {
   const expressionText = stmt.getExpression()?.getText();
   const label = expressionText ? `throw ${expressionText}` : 'throw';

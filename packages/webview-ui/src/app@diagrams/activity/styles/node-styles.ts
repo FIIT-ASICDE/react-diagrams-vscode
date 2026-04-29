@@ -1,4 +1,4 @@
-import { tokens, NODE_WRAPPER_WIDTH, SMALL_SHAPE_WRAPPER_HEIGHT } from './design-tokens';
+import { tokens, NODE_WRAPPER_WIDTH, SMALL_SHAPE_WRAPPER_HEIGHT, DECISION_HEIGHT, ACTION_HEIGHT } from './design-tokens';
 
 export const nodeStyles = {
 	shell: {
@@ -7,13 +7,14 @@ export const nodeStyles = {
 		display: 'flex',
 		alignItems: 'center',
 		justifyContent: 'center',
+		textAlign: 'center' as const,
 		boxSizing: 'border-box' as const,
 		fontFamily: tokens.font,
 	},
 
 	action: {
 		width: NODE_WRAPPER_WIDTH,
-		minHeight: 44,
+		height: ACTION_HEIGHT,
 		padding: '10px 16px',
 		background: tokens.semanticNeutralTint,
 		border: `1.5px solid ${tokens.semanticNeutralBorder}`,
@@ -34,7 +35,7 @@ export const nodeStyles = {
 
 	expandable: {
 		width: NODE_WRAPPER_WIDTH,
-		minHeight: 44,
+		height: ACTION_HEIGHT,
 		padding: '10px 16px',
 		background: tokens.expandableTint,
 		border: `1.5px solid ${tokens.expandableBorder}`,
@@ -67,7 +68,7 @@ export const nodeStyles = {
 
 	decisionWrap: {
 		width: NODE_WRAPPER_WIDTH,
-		height: 90,
+		height: DECISION_HEIGHT,
 		display: 'flex',
 		alignItems: 'center',
 		justifyContent: 'center',
@@ -117,16 +118,16 @@ export const nodeStyles = {
 	},
 
 	initialDot: {
-		width: 28,
-		height: 28,
+		width: 40,
+		height: 40,
 		background: tokens.ink,
 		borderRadius: '50%',
 		boxShadow: tokens.shadowStrong,
 	},
 
 	finalRing: {
-		width: 32,
-		height: 32,
+		width: 40,
+		height: 40,
 		background: tokens.paper,
 		borderRadius: '50%',
 		border: `2.5px solid ${tokens.ink}`,
@@ -137,8 +138,8 @@ export const nodeStyles = {
 	},
 
 	finalDot: {
-		width: 18,
-		height: 18,
+		width: 25,
+		height: 25,
 		background: tokens.ink,
 		borderRadius: '50%',
 	},

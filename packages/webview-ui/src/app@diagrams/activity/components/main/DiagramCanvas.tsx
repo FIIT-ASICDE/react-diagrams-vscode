@@ -98,7 +98,7 @@ export function DiagramCanvas({
 			<Background
 				gap={25}
 				size={2}
-				color={isPlayground ? 'rgba(0, 0, 0, 0.68)' : 'rgb(233, 233, 233)'}
+				color='rgba(0, 0, 0, 0.39)'
 			/>
 		</ReactFlow>
 		</>

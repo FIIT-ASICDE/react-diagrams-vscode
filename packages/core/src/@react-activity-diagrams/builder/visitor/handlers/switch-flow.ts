@@ -2,24 +2,17 @@ import { Node as MorphNode, Statement, SwitchStatement, SyntaxKind } from 'ts-mo
 import { compactLabel, getFallthroughEdgeLabel } from '../utils';
 import type { BuildResult } from '../types';
 import type { StatementVisitorHost } from './host-context';
+import { setNodeData } from './node-data-utils';
 
 interface SwitchCaseGroup {
   labels: string[];
   clauseStatements: Statement[];
 }
 
-function setNodeData(host: StatementVisitorHost, nodeId: string, extra: Record<string, unknown>): void {
-  const node = (host.writer as unknown as { nodes?: import('@xyflow/react').Node[] }).nodes?.find?.(
-    (candidate) => candidate.id === nodeId,
-  );
-  if (!node) return;
-  node.data = { ...(node.data ?? {}), ...extra };
-}
-
 export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): BuildResult {
   const expressionText = stmt.getExpression().getText();
   const decisionId = host.createDecisionNode(compactLabel(expressionText), expressionText);
-  setNodeData(host, decisionId, { construct: 'switch' });
+  setNodeData(host.writer, decisionId, { construct: 'switch' });
   const mergeId = host.writer.addFlowNode('merge', '');
   const ctx = host.pushSwitchContext(mergeId);
 
@@ -162,4 +155,3 @@ function findNextGroupEntry(groups: { entry?: string }[], fromIndex: number): st
   }
   return undefined;
 }
-
