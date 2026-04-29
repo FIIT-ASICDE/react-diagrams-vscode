@@ -85,6 +85,20 @@ const SWITCH_POST_LABELS = new Set<string>([
 	'exit',
 ]);
 
+const DO_WHILE_REPEAT_LABELS = new Set<string>([
+	'yes',
+	'true',
+	'body',
+	'next',
+]);
+
+const DO_WHILE_EXIT_LABELS = new Set<string>([
+	'no',
+	'false',
+	'done',
+	'exit',
+]);
+
 function getData(node: Node): AnyNodeData {
 	return (node.data as AnyNodeData | undefined) ?? {};
 }
@@ -131,6 +145,11 @@ function isLoopNode(node: Node): boolean {
 	return node.type === 'loop' || isLoopConstruct(construct);
 }
 
+function isDoWhileNode(node: Node): boolean {
+	const construct = getConstruct(node) || getStr(getData(node).loopKind);
+	return construct === 'do-while';
+}
+
 function isSwitchNode(node: Node): boolean {
 	return getConstruct(node) === 'switch';
 }
@@ -142,12 +161,8 @@ function isTryNode(node: Node): boolean {
 }
 
 function hasIncomingTryEdge(nodeId: string, groups: EdgeGroups): boolean {
-	// New model: try entry is represented as an incoming edge labeled 'try'.
-	// This indicates the node is the first statement in a try body.
 	const incoming = list(groups.forwardIncoming, nodeId);
-	return incoming.some(
-		(edge) => normalizeLabel(edge.label).toLowerCase() === 'try'
-	);
+	return incoming.some((edge) => normalizeLabel(edge.label) === 'try');
 }
 
 function isIfNode(node: Node): boolean {
@@ -513,6 +528,106 @@ function validateActionNode(
 	}
 }
 
+function validateDoWhileNode(
+	node: Node,
+	groups: EdgeGroups,
+	issues: DiagramStructureIssue[],
+): void {
+	const id = String(node.id);
+
+	// Correct do-while shape:
+	//
+	// body entry -> ...body exits... -> condition node
+	// condition --yes/back--> body entry
+	// condition --no/forward--> post-loop continuation
+
+	const incoming = count(groups.incoming, id);
+	const forwardIncoming = count(groups.forwardIncoming, id);
+	const backIncoming = count(groups.backIncoming, id);
+
+	const forwardOutgoing = list(groups.forwardOutgoing, id);
+	const backOutgoing = list(groups.backOutgoing, id);
+
+	if (incoming < 1) {
+		addIssue(
+			issues,
+			'error',
+			'do-while condition node must have at least one incoming edge from the body.',
+			{ nodeId: id },
+		);
+	}
+
+	if (forwardIncoming < 1) {
+		addIssue(
+			issues,
+			'warning',
+			'do-while condition node should have at least one forward incoming edge from the body fallthrough.',
+			{ nodeId: id },
+		);
+	}
+
+	const repeatEdges = backOutgoing.filter((edge) =>
+		DO_WHILE_REPEAT_LABELS.has(normalizeLabel(edge.label)),
+	);
+
+	const exitEdges = forwardOutgoing.filter((edge) =>
+		DO_WHILE_EXIT_LABELS.has(normalizeLabel(edge.label)),
+	);
+
+	if (repeatEdges.length !== 1) {
+		addIssue(
+			issues,
+			'error',
+			`do-while condition node must have exactly one back repeat edge labelled yes/true/body/next to the body entry, found ${repeatEdges.length}.`,
+			{ nodeId: id },
+		);
+	}
+
+	if (exitEdges.length !== 1) {
+		addIssue(
+			issues,
+			'error',
+			`do-while condition node must have exactly one forward exit edge labelled no/false/done/exit, found ${exitEdges.length}.`,
+			{ nodeId: id },
+		);
+	}
+
+	for (const edge of backOutgoing) {
+		const label = normalizeLabel(edge.label);
+
+		if (!DO_WHILE_REPEAT_LABELS.has(label)) {
+			addIssue(
+				issues,
+				'warning',
+				`do-while condition has unusual back edge label "${String(edge.label ?? '')}". Expected yes/true/body/next.`,
+				{ nodeId: id, edgeId: String(edge.id) },
+			);
+		}
+	}
+
+	for (const edge of forwardOutgoing) {
+		const label = normalizeLabel(edge.label);
+
+		if (!DO_WHILE_EXIT_LABELS.has(label)) {
+			addIssue(
+				issues,
+				'warning',
+				`do-while condition has unusual forward edge label "${String(edge.label ?? '')}". Expected no/false/done/exit.`,
+				{ nodeId: id, edgeId: String(edge.id) },
+			);
+		}
+	}
+
+	if (backIncoming > 0) {
+		addIssue(
+			issues,
+			'warning',
+			'do-while condition node has incoming back edges. Continue edges may target the condition, but normal body fallthrough should be a forward incoming edge.',
+			{ nodeId: id },
+		);
+	}
+}
+
 function validateMergeNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -603,6 +718,11 @@ function validateLoopNode(
 ): void {
 	const id = String(node.id);
 	const construct = getConstruct(node) || getStr(getData(node).loopKind) || 'while';
+
+	if (construct === 'do-while') {
+		validateDoWhileNode(node, groups, issues);
+		return;
+	}
 
 	const incoming = count(groups.incoming, id);
 	const outgoing = list(groups.forwardOutgoing, id);
@@ -937,7 +1057,6 @@ export function validateDiagramStructure(
 
 		if (hasIncomingTryEdge(id, groups)) {
 			validateEdgeLabeledTryEntry(node, groups, issues);
-			continue;
 		}
 
 		if (isLoopNode(node)) {

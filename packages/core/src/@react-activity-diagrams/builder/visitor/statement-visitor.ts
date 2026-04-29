@@ -61,7 +61,7 @@ export class StatementVisitor implements StatementVisitorHost {
 
 		const mergeId = this.writer.addFlowNode('merge', '');
 		for (const source of uniqueSources) {
-			const label = sourceLabels?.[source] ?? getFallthroughEdgeLabel(source);
+			const label = sourceLabels?.[source] ?? getFallthroughEdgeLabel(this, source);
 			this.writer.addEdge(source, mergeId, label);
 		}
 		return mergeId;
@@ -164,10 +164,10 @@ export class StatementVisitor implements StatementVisitorHost {
 			}
 
 			for (const exit of pendingExits) {
-				const exitData = (this.writer as unknown as { nodes?: { id: string; data?: Record<string, unknown> }[] }).nodes?.find((n) => n.id === exit)?.data;
+				const exitData = this.writer.getNodeData(exit);
 				const label = pendingExitLabels?.[exit]
 					?? result.entryEdgeLabel
-					?? (exitData?.role === 'try-exit-boundary' ? 'exit try' : getFallthroughEdgeLabel(exit));
+					?? (exitData?.role === 'try-exit-boundary' ? 'exit try' : getFallthroughEdgeLabel(this, exit));
 				this.writer.addEdge(exit, result.entry, label);
 			}
 
@@ -289,10 +289,8 @@ export class StatementVisitor implements StatementVisitorHost {
 	}
 
 	private tagLoopLabelIfPossible(nodeId: string, labelName: string): void {
-		const writerWithNodes = this.writer as unknown as { nodes?: import('@xyflow/react').Node[] };
-		const node = writerWithNodes.nodes?.find((n) => n.id === nodeId);
-		if (!node || node.type !== 'loop') return;
-		node.data = { ...(node.data ?? {}), loopLabel: labelName };
+		if (this.writer.getNodeType(nodeId) !== 'loop') return;
+		this.writer.updateNodeData(nodeId, { loopLabel: labelName });
 	}
 
 	// ── Break / continue ───────────────────────────────────────────────
@@ -367,7 +365,7 @@ export class StatementVisitor implements StatementVisitorHost {
 	connectLoopBackEdges(exits: string[], loopId: string): void {
 		const uniqueExits = [...new Set(exits)].filter((exit) => exit && exit !== loopId);
 		for (const exit of uniqueExits) {
-			const label = getFallthroughEdgeLabel(exit) ?? '';
+			const label = getFallthroughEdgeLabel(this, exit) ?? '';
 			this.writer.addEdge(exit, loopId, label, true);
 		}
 	}

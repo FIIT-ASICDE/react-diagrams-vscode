@@ -13,7 +13,6 @@ import { getCallbackBranch, isForEachLikeCall } from '../metadata';
 import type { BuildResult, HookMeta } from '../types';
 import { compactLabel } from '../utils';
 import type { StatementVisitorHost } from './host-context';
-import { setNodeData } from './node-data-utils';
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 
@@ -85,7 +84,7 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
     meta.iterable,
   );
 
-  setNodeData(host.writer, loopId, {
+  host.writer.updateNodeData(loopId, {
     construct: 'foreach',
     forEachIterable: meta.iterable,
     forEachCallee: meta.callee,

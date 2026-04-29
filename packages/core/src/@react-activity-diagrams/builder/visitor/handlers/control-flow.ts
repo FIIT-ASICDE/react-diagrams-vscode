@@ -1,12 +1,12 @@
 import {
-  DoStatement,
-  ForInStatement,
-  ForOfStatement,
-  ForStatement,
-  IfStatement,
-  Node as MorphNode,
-  TryStatement,
-  WhileStatement,
+	DoStatement,
+	ForInStatement,
+	ForOfStatement,
+	ForStatement,
+	IfStatement,
+	type Node as MorphNode,
+	TryStatement,
+	WhileStatement,
 } from 'ts-morph';
 import type { BuildResult } from '../types';
 import { compactLabel, getFallthroughEdgeLabel } from '../utils';
@@ -14,65 +14,87 @@ import type { ControlContext, LoopContext, StatementVisitorHost } from './host-c
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function setNodeData(host: StatementVisitorHost, nodeId: string, extra: Record<string, unknown>): void {
-  const node = (host.writer as unknown as { nodes?: import('@xyflow/react').Node[] }).nodes?.find?.(
-    (candidate) => candidate.id === nodeId,
-  );
-  if (!node) return;
-  node.data = { ...(node.data ?? {}), ...extra };
+function unique<T>(items: T[]): T[] {
+	return [...new Set(items)];
 }
 
-function getNodeData(host: StatementVisitorHost, nodeId: string): Record<string, unknown> | undefined {
-  const node = (host.writer as unknown as { nodes?: import('@xyflow/react').Node[] }).nodes?.find?.(
-    (candidate) => candidate.id === nodeId,
-  );
-  return node?.data as Record<string, unknown> | undefined;
+function uniqueIds(ids: string[]): string[] {
+	return unique(ids).filter(Boolean);
+}
+
+function nonEmptyLabels(
+	labels?: Record<string, string>,
+): Record<string, string> | undefined {
+	return labels && Object.keys(labels).length > 0 ? labels : undefined;
+}
+
+function mergeExitLabels(
+	target: Record<string, string>,
+	labels?: Record<string, string>,
+): void {
+	if (!labels) return;
+	Object.assign(target, labels);
 }
 
 function markReturnAsPending(host: StatementVisitorHost, returnNodeId: string): string {
-  const data = getNodeData(host, returnNodeId) ?? {};
-  const sourceText = typeof data.sourceText === 'string'
-    ? data.sourceText
-    : typeof data.label === 'string'
-      ? data.label
-      : 'return;';
+	const data = host.writer.getNodeData(returnNodeId) ?? {};
+	const sourceText =
+		typeof data.sourceText === 'string'
+			? data.sourceText
+			: typeof data.label === 'string'
+				? data.label
+				: 'return;';
 
-  setNodeData(host, returnNodeId, {
-    construct: 'pending-return',
-    pendingReturnSourceText: sourceText,
-    sourceText: '',
-    label: 'pending return',
-  });
+	host.writer.updateNodeData(returnNodeId, {
+		construct: 'pending-return',
+		pendingReturnSourceText: sourceText,
+		sourceText: '',
+		label: 'pending return',
+	});
 
-  return sourceText;
+	return sourceText;
 }
 
-function createDeferredReturnNode(host: StatementVisitorHost, returnSourceText: string): string {
-  const cleanSource = returnSourceText && returnSourceText.trim() ? returnSourceText : 'return;';
-  return host.writer.addFlowNode('action', compactLabel(cleanSource), {
-    sourceText: cleanSource,
-    construct: 'return',
-  });
+function createDeferredReturnNode(
+	host: StatementVisitorHost,
+	returnSourceText: string,
+): string {
+	const cleanSource = returnSourceText.trim() ? returnSourceText : 'return;';
+
+	return host.writer.addFlowNode('action', compactLabel(cleanSource), {
+		sourceText: cleanSource,
+		construct: 'return',
+	});
 }
 
-function createTryExitBoundary(host: StatementVisitorHost, tryOwnerId: string, exits: string[]): string[] {
-  const uniqueExits = [...new Set(exits)].filter(Boolean);
-  if (uniqueExits.length === 0) return [];
+function createTryExitBoundary(
+	host: StatementVisitorHost,
+	tryOwnerId: string,
+	exits: string[],
+): string[] {
+	const uniqueExits = uniqueIds(exits);
+	if (uniqueExits.length === 0) return [];
 
-  // Single exit — no merge needed, just tag the exit node directly
-  if (uniqueExits.length === 1) {
-    setNodeData(host, uniqueExits[0], { tryOwner: tryOwnerId, role: 'try-exit-boundary' });
-    return uniqueExits;
-  }
+	if (uniqueExits.length === 1) {
+		host.writer.updateNodeData(uniqueExits[0], {
+			tryOwner: tryOwnerId,
+			role: 'try-exit-boundary',
+		});
+		return uniqueExits;
+	}
 
-  const boundaryId = host.writer.addFlowNode('merge', '');
-  setNodeData(host, boundaryId, { tryOwner: tryOwnerId, role: 'try-exit-boundary' });
+	const boundaryId = host.writer.addFlowNode('merge', '');
 
-  for (const exit of uniqueExits) {
-    host.writer.addEdge(exit, boundaryId, 'exit try');
-  }
+	host.writer.updateNodeData(boundaryId, {
+		tryOwner: tryOwnerId,
+		role: 'try-exit-boundary',
+	});
 
-  return [boundaryId];
+	for (const exit of uniqueExits) {
+		host.writer.addEdge(exit, boundaryId, 'exit try');
+	}
+
+	return [boundaryId];
 }
 
 /**
@@ -80,299 +102,283 @@ function createTryExitBoundary(host: StatementVisitorHost, tryOwnerId: string, e
  * actions registered on its context. Returns break exits to be combined
  * with the natural loop exit by the caller.
  */
-function wirePendingBreaksAndContinues(host: StatementVisitorHost, ctx: LoopContext): string[] {
-  const uniqueContinues = [...new Set(ctx.pendingContinues)].filter(Boolean);
-  for (const continueId of uniqueContinues) {
-    host.writer.addEdge(continueId, ctx.continueTarget, '', true);
-  }
-  return ctx.pendingBreaks;
+function wirePendingBreaksAndContinues(
+	host: StatementVisitorHost,
+	ctx: LoopContext,
+): string[] {
+	for (const continueId of uniqueIds(ctx.pendingContinues)) {
+		host.writer.addEdge(continueId, ctx.continueTarget, '', true);
+	}
+
+	return ctx.pendingBreaks;
 }
 
 /**
  * Merge loop exits and break exits with an explicit merge node if needed.
- * 
+ *
  * When a loop has both normal exit(s) and break exit(s), they must converge
  * into an explicit merge node before reaching the post-loop continuation.
- * This ensures proper activity diagram structure instead of implicit merges.
- * 
- * @param loopExits - Normal loop exits (typically [loopId])
- * @param breakExits - Break statement exits
- * @returns Final exits (either [mergeId] or just loopExits if no breaks)
  */
 function mergeLoopExitsWithBreaks(
-  host: StatementVisitorHost,
-  loopExits: string[],
-  breakExits: string[],
+	host: StatementVisitorHost,
+	loopExits: string[],
+	breakExits: string[],
 ): string[] {
-  // No breaks — just return normal loop exits as-is
-  if (breakExits.length === 0) {
-    return loopExits;
-  }
+	const uniqueLoopExits = uniqueIds(loopExits);
 
-  // Has breaks but no normal loop exit — just return break exits
-  if (loopExits.length === 0) {
-    return breakExits;
-  }
+	if (breakExits.length === 0) {
+		return uniqueLoopExits;
+	}
 
-  // Both normal loop exits and break exits exist — create explicit merge
-  const mergeId = host.writer.addFlowNode('merge', '');
+	if (uniqueLoopExits.length === 0) {
+		return breakExits;
+	}
 
-  // Wire loop exit to merge
-  for (const loopExit of loopExits) {
-     host.writer.addEdge(loopExit, mergeId, getFallthroughEdgeLabel(loopExit));
-  }
+	const mergeId = host.writer.addFlowNode('merge', '');
 
-  // Wire all break exits to merge
-  for (const breakExit of breakExits) {
-    host.writer.addEdge(breakExit, mergeId);
-  }
+	for (const loopExit of uniqueLoopExits) {
+		host.writer.addEdge(loopExit, mergeId, getFallthroughEdgeLabel(host, loopExit));
+	}
 
-  return [mergeId];
+	for (const breakExit of breakExits) {
+		host.writer.addEdge(breakExit, mergeId, getFallthroughEdgeLabel(host, breakExit));
+	}
+
+	return [mergeId];
 }
 
 function resolveExitSourcesWithLabels(
-  host: StatementVisitorHost,
-  sources: string[],
-  sourceLabels?: Record<string, string>,
+	host: StatementVisitorHost,
+	sources: string[],
+	sourceLabels?: Record<string, string>,
 ): { exits: string[]; exitLabels?: Record<string, string> } {
-  const uniqueSources = [...new Set(sources)].filter(Boolean);
-  const resolvedExits = host.resolveExitSources(uniqueSources, sourceLabels);
+	const uniqueSources = uniqueIds(sources);
+	const resolvedExits = host.resolveExitSources(uniqueSources, sourceLabels);
 
-  if (resolvedExits.length <= 1 && uniqueSources.length <= 1) {
-    const survivingLabels = sourceLabels
-      ? Object.fromEntries(
-        Object.entries(sourceLabels).filter(([sourceId]) => uniqueSources.includes(sourceId)),
-      )
-      : undefined;
+	if (resolvedExits.length > 1 || uniqueSources.length > 1) {
+		return { exits: resolvedExits };
+	}
 
-    return {
-      exits: resolvedExits,
-      exitLabels: survivingLabels && Object.keys(survivingLabels).length > 0 ? survivingLabels : undefined,
-    };
-  }
+	const survivingLabels = sourceLabels
+		? Object.fromEntries(
+				Object.entries(sourceLabels).filter(([sourceId]) =>
+					uniqueSources.includes(sourceId),
+				),
+			)
+		: undefined;
 
-  return { exits: resolvedExits };
+	return {
+		exits: resolvedExits,
+		exitLabels: nonEmptyLabels(survivingLabels),
+	};
 }
 
 // ── Visitors ───────────────────────────────────────────────────────────────
 
 export function visitIf(host: StatementVisitorHost, stmt: IfStatement): BuildResult {
-  const elseStmt = stmt.getElseStatement();
-  const conditionText = stmt.getExpression().getText();
+	const elseStmt = stmt.getElseStatement();
+	const conditionText = stmt.getExpression().getText();
 
-  const decisionId = host.createDecisionNode(compactLabel(conditionText), conditionText);
-  setNodeData(host, decisionId, { construct: 'if' });
+	const decisionId = host.createDecisionNode(compactLabel(conditionText), conditionText);
+	host.writer.updateNodeData(decisionId, { construct: 'if' });
 
-  const thenResult = host.visitBranch(stmt.getThenStatement());
-  const elseResult = elseStmt ? host.visitBranch(elseStmt) : undefined;
-  const mergeSources: string[] = [];
-  const exitLabels: Record<string, string> = {};
-  const returnExits: string[] = [];
-  const throwExits: string[] = [];
+	const thenResult = host.visitBranch(stmt.getThenStatement());
+	const elseResult = elseStmt ? host.visitBranch(elseStmt) : undefined;
 
-  if (thenResult.entry) {
-    host.writer.addEdge(decisionId, thenResult.entry, 'yes', false);
-    mergeSources.push(...thenResult.exits);
-    returnExits.push(...thenResult.returnExits);
-    throwExits.push(...thenResult.throwExits);
-  } else {
-    mergeSources.push(decisionId);
-  }
+	const mergeSources: string[] = [];
+	const exitLabels: Record<string, string> = {};
+	const returnExits: string[] = [];
+	const throwExits: string[] = [];
 
-  if (elseResult) {
-    if (elseResult.entry) {
-      host.writer.addEdge(decisionId, elseResult.entry, 'no', false);
-      mergeSources.push(...elseResult.exits);
-      returnExits.push(...elseResult.returnExits);
-      throwExits.push(...elseResult.throwExits);
-    } else {
-      mergeSources.push(decisionId);
-      exitLabels[decisionId] = 'no';
-    }
-  } else {
-    mergeSources.push(decisionId);
-    exitLabels[decisionId] = 'no';
-  }
+	if (thenResult.entry) {
+		host.writer.addEdge(decisionId, thenResult.entry, 'yes', false);
+		mergeSources.push(...thenResult.exits);
+		returnExits.push(...thenResult.returnExits);
+		throwExits.push(...thenResult.throwExits);
+	} else {
+		mergeSources.push(decisionId);
+	}
 
-  const resolved = resolveExitSourcesWithLabels(host, mergeSources, exitLabels);
+	if (elseResult) {
+		if (elseResult.entry) {
+			host.writer.addEdge(decisionId, elseResult.entry, 'no', false);
+			mergeSources.push(...elseResult.exits);
+			returnExits.push(...elseResult.returnExits);
+			throwExits.push(...elseResult.throwExits);
+		} else {
+			mergeSources.push(decisionId);
+			exitLabels[decisionId] = 'no';
+		}
+	} else {
+		mergeSources.push(decisionId);
+		exitLabels[decisionId] = 'no';
+	}
 
-  return {
-    entry: decisionId,
-    exits: resolved.exits,
-    exitLabels: resolved.exitLabels,
-    returnExits: [...new Set(returnExits)],
-    throwExits: [...new Set(throwExits)],
-  };
+	const resolved = resolveExitSourcesWithLabels(host, mergeSources, exitLabels);
+
+	return {
+		entry: decisionId,
+		exits: resolved.exits,
+		exitLabels: resolved.exitLabels,
+		returnExits: unique(returnExits),
+		throwExits: unique(throwExits),
+	};
 }
 
 export function visitWhile(host: StatementVisitorHost, stmt: WhileStatement): BuildResult {
-  const condText = stmt.getExpression().getText();
-  const loopId = host.createLoopNode(compactLabel(condText), condText);
-  setNodeData(host, loopId, { construct: 'while' });
+	const condText = stmt.getExpression().getText();
+	const loopId = host.createLoopNode(compactLabel(condText), condText);
 
-  const ctx = host.pushLoopContext(loopId);
-  try {
-    const result = visitStandardLoop(host, loopId, stmt.getStatement(), 'yes');
-    const breakExits = wirePendingBreaksAndContinues(host, ctx);
-    const mergedExits = mergeLoopExitsWithBreaks(host, result.exits, breakExits);
-    return {
-      entry: result.entry,
-      exits: mergedExits,
-      returnExits: result.returnExits,
-      throwExits: result.throwExits,
-    };
-  } finally {
-    host.popContext();
-  }
+	host.writer.updateNodeData(loopId, { construct: 'while' });
+
+	return visitLoopWithContext(host, loopId, () =>
+		visitStandardLoop(host, loopId, stmt.getStatement(), 'yes'),
+	);
 }
 
 export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): BuildResult {
-  const condText = stmt.getExpression().getText();
-  const loopId = host.createLoopNode(compactLabel(condText), condText);
-  setNodeData(host, loopId, { construct: 'do-while' });
+	const condText = stmt.getExpression().getText();
+	const loopId = host.createLoopNode(compactLabel(condText), condText);
 
-  const ctx = host.pushLoopContext(loopId);
+	host.writer.updateNodeData(loopId, { construct: 'do-while' });
 
-  try {
-    const loopBranch = stmt.getStatement();
-    const body = host.visitBranch(loopBranch);
+	const ctx = host.pushLoopContext(loopId);
 
-    if (!body.entry) {
-      // Empty body. Keep loop node as construct entry.
-      host.writer.addEdge(loopId, loopId, 'yes', false);
+	try {
+		const body = host.visitBranch(stmt.getStatement());
 
-      const breakExits = wirePendingBreaksAndContinues(host, ctx);
-    const mergedExits = mergeLoopExitsWithBreaks(host, [loopId], breakExits);
+		if (body.entry) {
+			// do-while executes body first.
+			// Body fallthrough reaches the condition node.
+			for (const exit of body.exits) {
+				host.writer.addEdge(exit, loopId, getFallthroughEdgeLabel(host, exit), false);
+			}
 
-      return {
-        entry: loopId,
-        exits: mergedExits,
-        returnExits: [],
-        throwExits: [],
-      };
-    }
+			// condition=true repeats the do-body.
+			host.writer.addEdge(loopId, body.entry, 'yes', true);
+		} else {
+			// Empty body: condition is the only visible loop node.
+			host.writer.addEdge(loopId, loopId, 'yes', true);
+		}
 
-    // IMPORTANT:
-    // For do-while, the construct entry must be loopId, not body.entry.
-    // CodeGen must see the loop node first so it can emit:
-    // do { body } while (condition)
-    host.writer.addEdge(loopId, body.entry, 'yes', false);
+		const breakExits = wirePendingBreaksAndContinues(host, ctx);
+		const mergedExits = mergeLoopExitsWithBreaks(host, [loopId], breakExits);
 
-    // Body natural fall-through goes back to the do-while test.
-    // This is a loop-back edge, so mark it as back=true.
-    for (const exit of body.exits) {
-      host.writer.addEdge(exit, loopId, getFallthroughEdgeLabel(exit), true);
-    }
+		return {
+			entry: body.entry ?? loopId,
+			exits: mergedExits,
 
-    const breakExits = wirePendingBreaksAndContinues(host, ctx);
-    const mergedExits = mergeLoopExitsWithBreaks(host, [loopId], breakExits);
+			// Important: this tells the next statement / parent loop that
+			// leaving the do-while condition is the "no" branch.
+			exitLabels: {
+				[loopId]: 'no',
+			},
 
-    return {
-      entry: loopId,
-      exits: mergedExits,
-      returnExits: [...new Set(body.returnExits)],
-      throwExits: [...new Set(body.throwExits)],
-    };
-  } finally {
-    host.popContext();
-  }
+			returnExits: unique(body.returnExits),
+			throwExits: unique(body.throwExits),
+		};
+	} finally {
+		host.popContext();
+	}
 }
 
 export function visitFor(host: StatementVisitorHost, stmt: ForStatement): BuildResult {
-  const initText = stmt.getInitializer()?.getText() ?? '';
-  const condText = stmt.getCondition()?.getText() ?? '';
-  const incText = stmt.getIncrementor()?.getText() ?? '';
-  const headerText = `${initText}; ${condText}; ${incText}`;
+	const initText = stmt.getInitializer()?.getText() ?? '';
+	const condText = stmt.getCondition()?.getText() ?? '';
+	const incText = stmt.getIncrementor()?.getText() ?? '';
+	const headerText = `${initText}; ${condText}; ${incText}`;
 
-  const loopId = host.createLoopNode(
-    compactLabel(condText || 'for'),
-    condText || 'for',
-  );
-  setNodeData(host, loopId, {
-    construct: 'for',
-    forHeader: headerText,
-  });
+	const loopId = host.createLoopNode(
+		compactLabel(condText || 'for'),
+		condText || 'for',
+	);
 
-  const ctx = host.pushLoopContext(loopId);
-  try {
-    const result = visitStandardLoop(host, loopId, stmt.getStatement(), 'yes');
-    const breakExits = wirePendingBreaksAndContinues(host, ctx);
-    const mergedExits = mergeLoopExitsWithBreaks(host, result.exits, breakExits);
-    return {
-      entry: result.entry,
-      exits: mergedExits,
-      returnExits: result.returnExits,
-      throwExits: result.throwExits,
-    };
-  } finally {
-    host.popContext();
-  }
+	host.writer.updateNodeData(loopId, {
+		construct: 'for',
+		forHeader: headerText,
+	});
+
+	return visitLoopWithContext(host, loopId, () =>
+		visitStandardLoop(host, loopId, stmt.getStatement(), 'yes'),
+	);
 }
 
 export function visitForOf(host: StatementVisitorHost, stmt: ForOfStatement): BuildResult {
-  return visitIteratorLoop(host, stmt, 'for-of');
+	return visitIteratorLoop(host, stmt, 'for-of');
 }
 
 export function visitForIn(host: StatementVisitorHost, stmt: ForInStatement): BuildResult {
-  return visitIteratorLoop(host, stmt, 'for-in');
+	return visitIteratorLoop(host, stmt, 'for-in');
 }
 
 // ── Try / catch / finally ─────────────────────────────────────────────────
 
-type ContextSnapshot = Map<ControlContext, { breaks: Set<string>; continues: Set<string> }>;
+type ContextSnapshot = Map<
+	ControlContext,
+	{ breaks: Set<string>; continues: Set<string> }
+>;
 
 function snapshotPending(host: StatementVisitorHost): ContextSnapshot {
-  const snap: ContextSnapshot = new Map();
-  for (const ctx of host.getContextStack()) {
-    snap.set(ctx, {
-      breaks: new Set(ctx.pendingBreaks),
-      continues: new Set(ctx.kind === 'loop' ? ctx.pendingContinues : []),
-    });
-  }
-  return snap;
+	const snap: ContextSnapshot = new Map();
+
+	for (const ctx of host.getContextStack()) {
+		snap.set(ctx, {
+			breaks: new Set(ctx.pendingBreaks),
+			continues: new Set(ctx.kind === 'loop' ? ctx.pendingContinues : []),
+		});
+	}
+
+	return snap;
 }
 
 type RedirectEntry = {
-  nodeId: string;
-  ctx: ControlContext;
-  kind: 'break' | 'continue';
+	nodeId: string;
+	ctx: ControlContext;
+	kind: 'break' | 'continue';
 };
 
 function diffPending(host: StatementVisitorHost, before: ContextSnapshot): RedirectEntry[] {
-  const entries: RedirectEntry[] = [];
+	const entries: RedirectEntry[] = [];
 
-  for (const ctx of host.getContextStack()) {
-    const beforeForCtx = before.get(ctx) ?? { breaks: new Set<string>(), continues: new Set<string>() };
+	for (const ctx of host.getContextStack()) {
+		const beforeForCtx = before.get(ctx) ?? {
+			breaks: new Set<string>(),
+			continues: new Set<string>(),
+		};
 
-    for (const id of ctx.pendingBreaks) {
-      if (!beforeForCtx.breaks.has(id)) {
-        entries.push({ nodeId: id, ctx, kind: 'break' });
-      }
-    }
+		for (const id of ctx.pendingBreaks) {
+			if (!beforeForCtx.breaks.has(id)) {
+				entries.push({ nodeId: id, ctx, kind: 'break' });
+			}
+		}
 
-    if (ctx.kind === 'loop') {
-      for (const id of ctx.pendingContinues) {
-        if (!beforeForCtx.continues.has(id)) {
-          entries.push({ nodeId: id, ctx, kind: 'continue' });
-        }
-      }
-    }
-  }
+		if (ctx.kind === 'loop') {
+			for (const id of ctx.pendingContinues) {
+				if (!beforeForCtx.continues.has(id)) {
+					entries.push({ nodeId: id, ctx, kind: 'continue' });
+				}
+			}
+		}
+	}
 
-  return entries;
+	return entries;
 }
 
-function removeFromContext(ctx: ControlContext, kind: 'break' | 'continue', nodeId: string): void {
-  if (kind === 'break') {
-    const i = ctx.pendingBreaks.indexOf(nodeId);
-    if (i !== -1) ctx.pendingBreaks.splice(i, 1);
-    return;
-  }
+function removeFromContext(
+	ctx: ControlContext,
+	kind: 'break' | 'continue',
+	nodeId: string,
+): void {
+	if (kind === 'break') {
+		const i = ctx.pendingBreaks.indexOf(nodeId);
+		if (i !== -1) ctx.pendingBreaks.splice(i, 1);
+		return;
+	}
 
-  if (ctx.kind === 'loop') {
-    const i = ctx.pendingContinues.indexOf(nodeId);
-    if (i !== -1) ctx.pendingContinues.splice(i, 1);
-  }
+	if (ctx.kind === 'loop') {
+		const i = ctx.pendingContinues.indexOf(nodeId);
+		if (i !== -1) ctx.pendingContinues.splice(i, 1);
+	}
 }
 
 /**
@@ -381,333 +387,329 @@ function removeFromContext(ctx: ControlContext, kind: 'break' | 'continue', node
  * this helper, so the post-finally destination correctly matches the
  * "intent" of the path.
  *
- * Returns the finally copy's normal exits (caller wires these to the
- * kind-specific target), plus any returnExits / throwExits the finally
- * BODY itself produced. Per JS spec, return / throw inside finally
- * dominates and overrides the upstream intent — so the caller should
- * propagate these as their respective end exits of the whole try
- * construct, replacing whatever the upstream kind would have been.
- *
- * If the finally body is empty, sources are returned as-is — the caller
- * should wire them straight to the target as if there were no finally.
+ * Returns the finally copy's normal exits, plus any returnExits / throwExits
+ * produced by the finally body itself. Per JS semantics, return / throw
+ * inside finally dominates and overrides the upstream intent.
  */
 function spliceFinallyCopy(
-  host: StatementVisitorHost,
-  finallyBlock: MorphNode,
-  sources: string[],
-): { exits: string[]; exitLabels?: Record<string, string>; returnExits: string[]; throwExits: string[] } {
-  if (sources.length === 0) {
-    return { exits: [], returnExits: [], throwExits: [] };
-  }
+	host: StatementVisitorHost,
+	finallyBlock: MorphNode,
+	sources: string[],
+): {
+	exits: string[];
+	exitLabels?: Record<string, string>;
+	returnExits: string[];
+	throwExits: string[];
+} {
+	if (sources.length === 0) {
+		return { exits: [], returnExits: [], throwExits: [] };
+	}
 
-  const copy = host.visitBranch(finallyBlock);
+	const copy = host.visitBranch(finallyBlock);
 
-  if (!copy.entry) {
-    return { exits: sources, returnExits: [], throwExits: [] };
-  }
+	if (!copy.entry) {
+		return { exits: sources, returnExits: [], throwExits: [] };
+	}
 
-  if (sources.length === 1) {
-    const label = getFallthroughEdgeLabel(sources[0]) ?? 'finally';
-    host.writer.addEdge(sources[0], copy.entry, label, false);
-  } else {
-    const mergeId = host.writer.addFlowNode('merge', '');
-    for (const src of sources) {
-      host.writer.addEdge(src, mergeId, getFallthroughEdgeLabel(src));
-    }
-    host.writer.addEdge(mergeId, copy.entry, 'finally', false);
-  }
+	if (sources.length === 1) {
+		const label = getFallthroughEdgeLabel(host, sources[0]) ?? 'finally';
+		host.writer.addEdge(sources[0], copy.entry, label, false);
+	} else {
+		const mergeId = host.writer.addFlowNode('merge', '');
 
-  const resolvedExits = host.resolveExitSources(copy.exits);
-  const resolvedExitLabels = copy.exitLabels
-    ? Object.fromEntries(
-      Object.entries(copy.exitLabels).filter(([exitId]) => resolvedExits.includes(exitId)),
-    )
-    : undefined;
+		for (const src of sources) {
+			host.writer.addEdge(src, mergeId, getFallthroughEdgeLabel(host, src));
+		}
 
-  return {
-    exits: resolvedExits,
-    exitLabels: resolvedExitLabels && Object.keys(resolvedExitLabels).length > 0 ? resolvedExitLabels : undefined,
-    returnExits: [...copy.returnExits],
-    throwExits: [...copy.throwExits],
-  };
+		host.writer.addEdge(mergeId, copy.entry, 'finally', false);
+	}
+
+	const resolvedExits = host.resolveExitSources(copy.exits);
+	const resolvedExitLabels = copy.exitLabels
+		? Object.fromEntries(
+				Object.entries(copy.exitLabels).filter(([exitId]) =>
+					resolvedExits.includes(exitId),
+				),
+			)
+		: undefined;
+
+	return {
+		exits: resolvedExits,
+		exitLabels: nonEmptyLabels(resolvedExitLabels),
+		returnExits: [...copy.returnExits],
+		throwExits: [...copy.throwExits],
+	};
 }
 
 /**
  * `try` / `catch` / `finally` — strict JS semantics.
  *
- * Edges off the try-decision node:
- *   - unlabeled                    → entry of try-body
- *   - labeled `exception`          → entry of catch-body (if any)
+ * Current diagram representation:
+ *   - no explicit try node is created;
+ *   - the try body entry is returned as this BuildResult's `entry`;
+ *   - `entryEdgeLabel: 'try'` marks the edge entering the try body;
+ *   - explicit throw exits from the try body are routed to the catch body
+ *     via an `exception` edge when a catch branch is materialized.
  *
- * Finally is duplicated once per kind of upstream flow, because each
- * kind has a different post-finally destination:
+ * Catch materialization:
+ *   - catch is emitted only when there is an explicit modeled throw path
+ *     from the try body.
  *
- *   NORMAL    → finally → surrounding flow (this construct's exits)
- *   RETURN    → finally → function End (this construct's returnExits)
- *   THROW     → finally → ErrorEnd / outer catch (this construct's
- *                          throwExits)
+ * Finally is duplicated once per kind of upstream flow, because each kind
+ * has a different post-finally destination:
+ *
+ *   NORMAL    → finally → surrounding flow
+ *   RETURN    → finally → function End
+ *   THROW     → finally → ErrorEnd / outer catch
  *   CONTINUE  → finally → back-edge to enclosing loop
- *   BREAK     → finally → enclosing loop / switch's break target
+ *   BREAK     → finally → enclosing loop / switch break target
  *
- * Throw routing inside try/catch:
- *   - throw inside try-body  →  catch entry (if catch exists)
- *                             →  finally THROW kind (if no catch)
- *   - throw inside catch-body→  finally THROW kind
- *
- * No catch: try's throws bypass into finally THROW kind (uncaught,
- * propagating outward).
- *
- * Each kind that actually has source paths gets its own finally copy.
- * Kinds with no sources are skipped — no empty finally branches.
- *
- * If finally BODY itself has return / throw, those endExits dominate
- * (per JS spec) and replace whatever the upstream intent was.
+ * If finally itself returns or throws, that completion dominates and
+ * overrides the upstream intent.
  */
 export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildResult {
-  const finallyBlock = stmt.getFinallyBlock();
+	const finallyBlock = stmt.getFinallyBlock();
+	const beforeTrySnapshot = snapshotPending(host);
 
-  // Snapshot pending break/continue BEFORE visiting try / catch so we
-  // know which ones came from inside.
-  const beforeTrySnapshot = snapshotPending(host);
+	const tryResult = host.visitBranch(stmt.getTryBlock());
+	const tryEntryId = tryResult.entry;
 
-  // ── Visit try body ────────────────────────────────────────────────────
+	const trySuccessExits = tryResult.entry
+		? host.resolveExitSources(tryResult.exits)
+		: [];
 
-  const tryResult = host.visitBranch(stmt.getTryBlock());
-  const tryEntryId = tryResult.entry;
+	const catchClause = stmt.getCatchClause();
+	const shouldMaterializeCatch = Boolean(catchClause && tryResult.throwExits.length > 0);
+	const catchResult = shouldMaterializeCatch
+		? host.visitBranch(catchClause!.getBlock())
+		: undefined;
 
-  const trySuccessExits = tryResult.entry
-    ? host.resolveExitSources(tryResult.exits)
-    : [];
+	const catchSuccessExits: string[] = [];
 
-  // ── Visit catch body ──────────────────────────────────────────────────
+	if (shouldMaterializeCatch && catchResult?.entry) {
+		for (const throwId of tryResult.throwExits) {
+			host.writer.addEdge(throwId, catchResult.entry, 'exception', false);
+		}
 
-  const catchClause = stmt.getCatchClause();
-  const shouldMaterializeCatch = Boolean(catchClause && tryResult.throwExits.length > 0);
-  const catchResult = shouldMaterializeCatch
-    ? host.visitBranch(catchClause!.getBlock())
-    : undefined;
+		catchSuccessExits.push(...host.resolveExitSources(catchResult.exits));
+	}
 
-  const catchSuccessExits: string[] = [];
+	const redirects = finallyBlock ? diffPending(host, beforeTrySnapshot) : [];
 
-  if (shouldMaterializeCatch && catchResult?.entry) {
-    // Route exception flow into catch only from node-originated throw sources.
-    for (const throwId of tryResult.throwExits) {
-      host.writer.addEdge(throwId, catchResult.entry, 'exception', false);
-    }
-    catchSuccessExits.push(...host.resolveExitSources(catchResult.exits));
-  }
+	if (finallyBlock && redirects.length > 0) {
+		for (const redirect of redirects) {
+			removeFromContext(redirect.ctx, redirect.kind, redirect.nodeId);
+		}
+	}
 
-  // ── Capture redirect entries (continue/break inside try-or-catch) ─────
+	const normalSources = unique([...trySuccessExits, ...catchSuccessExits]);
 
-  const redirects = finallyBlock ? diffPending(host, beforeTrySnapshot) : [];
+	const returnSources = [
+		...tryResult.returnExits,
+		...(catchResult?.returnExits ?? []),
+	];
 
-  if (finallyBlock && redirects.length > 0) {
-    for (const r of redirects) {
-      removeFromContext(r.ctx, r.kind, r.nodeId);
-    }
-  }
+	const throwSources = [
+		...(shouldMaterializeCatch ? [] : tryResult.throwExits),
+		...(catchResult?.throwExits ?? []),
+	];
 
-  // ── Bucket sources by KIND ────────────────────────────────────────────
+	if (!finallyBlock) {
+		const normalExits = host.resolveExitSources(normalSources);
+		const tryOwnerId = tryEntryId ?? catchResult?.entry;
 
-  const normalSources = [...new Set([...trySuccessExits, ...catchSuccessExits])];
+		return {
+			entry: tryEntryId,
+			entryEdgeLabel: tryEntryId ? 'try' : undefined,
+			exits: tryOwnerId
+				? createTryExitBoundary(host, tryOwnerId, normalExits)
+				: normalExits,
+			returnExits: unique(returnSources),
+			throwExits: unique(throwSources),
+		};
+	}
 
-  // Returns from try / returns from catch — both want to go to End,
-  // so they merge into a single RETURN bucket here.
-  const returnSources = [
-    ...tryResult.returnExits,
-    ...(catchResult?.returnExits ?? []),
-  ];
+	const aggregateExits: string[] = [];
+	const aggregateExitLabels: Record<string, string> = {};
+	const aggregateReturnExits: string[] = [];
+	const aggregateThrowExits: string[] = [];
+	let fallbackEntryId: string | undefined;
 
-  // Throw sources for finally:
-  //   - try-body throws are caught by an existing catch, so they DON'T
-  //     reach finally as throws (they flow through catch as normal /
-  //     return / re-throw)
-  //   - try-body throws WITHOUT a catch escape directly to finally
-  //   - catch-body throws (re-throw, or new throw) escape to finally
-  const throwSources = [
-    ...(shouldMaterializeCatch ? [] : tryResult.throwExits),
-    ...(catchResult?.throwExits ?? []),
-  ];
+	if (normalSources.length > 0) {
+		const sliced = spliceFinallyCopy(host, finallyBlock, normalSources);
 
-  // ── No finally → wire each kind direct to its target ──────────────────
+		aggregateExits.push(...sliced.exits);
+		mergeExitLabels(aggregateExitLabels, sliced.exitLabels);
+		aggregateReturnExits.push(...sliced.returnExits);
+		aggregateThrowExits.push(...sliced.throwExits);
+	} else if (!tryEntryId && returnSources.length === 0 && throwSources.length === 0) {
+		// Empty try with finally still executes finally on normal entry.
+		const directFinally = host.visitBranch(finallyBlock);
 
-  if (!finallyBlock) {
-    const normalExits = host.resolveExitSources(normalSources);
-    const tryOwnerId = tryEntryId ?? catchResult?.entry;
-    return {
-      entry: tryEntryId,
-      entryEdgeLabel: tryEntryId ? 'try' : undefined,
-      exits: tryOwnerId ? createTryExitBoundary(host, tryOwnerId, normalExits) : normalExits,
-      returnExits: [...new Set(returnSources)],
-      throwExits: [...new Set(throwSources)],
-    };
-  }
+		if (directFinally.entry) {
+			fallbackEntryId = directFinally.entry;
+			aggregateExits.push(...host.resolveExitSources(directFinally.exits));
+			aggregateReturnExits.push(...directFinally.returnExits);
+			aggregateThrowExits.push(...directFinally.throwExits);
+		}
+	}
 
-  // ── Finally present: visit a fresh copy per kind that has sources ─────
+	if (returnSources.length > 0) {
+		for (const returnNodeId of unique(returnSources)) {
+			const returnSourceText = markReturnAsPending(host, returnNodeId);
+			const sliced = spliceFinallyCopy(host, finallyBlock, [returnNodeId]);
 
-  const aggregateExits: string[] = [];
-  const aggregateExitLabels: Record<string, string> = {};
-  const aggregateReturnExits: string[] = [];
-  const aggregateThrowExits: string[] = [];
-  let fallbackEntryId: string | undefined;
+			if (sliced.exits.length > 0) {
+				const deferredReturnNodeId = createDeferredReturnNode(host, returnSourceText);
 
-  // NORMAL kind: try/catch success paths. After finally they continue
-  // into the surrounding flow.
-  if (normalSources.length > 0) {
-    const sliced = spliceFinallyCopy(host, finallyBlock, normalSources);
-    aggregateExits.push(...sliced.exits);
-    if (sliced.exitLabels) {
-      Object.assign(aggregateExitLabels, sliced.exitLabels);
-    }
-    aggregateReturnExits.push(...sliced.returnExits);
-    aggregateThrowExits.push(...sliced.throwExits);
-  } else if (!tryEntryId && returnSources.length === 0 && throwSources.length === 0) {
-    // Empty try with finally still executes finally on normal entry.
-    const directFinally = host.visitBranch(finallyBlock);
-    if (directFinally.entry) {
-      fallbackEntryId = directFinally.entry;
-      aggregateExits.push(...host.resolveExitSources(directFinally.exits));
-      aggregateReturnExits.push(...directFinally.returnExits);
-      aggregateThrowExits.push(...directFinally.throwExits);
-    }
-  }
+				for (const exit of sliced.exits) {
+					host.writer.addEdge(
+						exit,
+						deferredReturnNodeId,
+						sliced.exitLabels?.[exit] ?? getFallthroughEdgeLabel(host, exit),
+					);
+				}
 
-  // RETURN kind: function-end paths. After finally they go to End.
-  // (If finally body itself returns / throws, those override — sliced
-  // returnExits / throwExits cover that.)
-  if (returnSources.length > 0) {
-    for (const returnNodeId of [...new Set(returnSources)]) {
-      const returnSourceText = markReturnAsPending(host, returnNodeId);
-      const sliced = spliceFinallyCopy(host, finallyBlock, [returnNodeId]);
+				aggregateReturnExits.push(deferredReturnNodeId);
+			}
 
-      // Materialize the original return only AFTER finally normal exits.
-      if (sliced.exits.length > 0) {
-        const deferredReturnNodeId = createDeferredReturnNode(host, returnSourceText);
-        for (const exit of sliced.exits) {
-          host.writer.addEdge(exit, deferredReturnNodeId, sliced.exitLabels?.[exit] ?? getFallthroughEdgeLabel(exit));
-        }
-        aggregateReturnExits.push(deferredReturnNodeId);
-      }
+			aggregateReturnExits.push(...sliced.returnExits);
+			aggregateThrowExits.push(...sliced.throwExits);
+		}
+	}
 
-      // Abrupt completions from finally override the pending return.
-      aggregateReturnExits.push(...sliced.returnExits);
-      aggregateThrowExits.push(...sliced.throwExits);
-    }
-  }
+	if (throwSources.length > 0) {
+		const sliced = spliceFinallyCopy(host, finallyBlock, throwSources);
 
-  // THROW kind: uncaught exceptions on the way out. After finally they
-  // remain throws (propagate to outer catch / ErrorEnd).
-  if (throwSources.length > 0) {
-    const sliced = spliceFinallyCopy(host, finallyBlock, throwSources);
-    aggregateThrowExits.push(...sliced.exits);
-    aggregateReturnExits.push(...sliced.returnExits);
-    aggregateThrowExits.push(...sliced.throwExits);
-  }
+		aggregateThrowExits.push(...sliced.exits);
+		aggregateReturnExits.push(...sliced.returnExits);
+		aggregateThrowExits.push(...sliced.throwExits);
+	}
 
-  // CONTINUE / BREAK kinds: redirected through finally to enclosing
-  // loop / switch. Group by target so multiple continues / breaks with
-  // the same destination share one finally copy.
-  const continueGroups = new Map<LoopContext, string[]>();
-  const breakGroups = new Map<ControlContext, string[]>();
+	const continueGroups = new Map<LoopContext, string[]>();
+	const breakGroups = new Map<ControlContext, string[]>();
 
-  for (const r of redirects) {
-    if (r.kind === 'continue' && r.ctx.kind === 'loop') {
-      const list = continueGroups.get(r.ctx) ?? [];
-      list.push(r.nodeId);
-      continueGroups.set(r.ctx, list);
-    } else if (r.kind === 'break') {
-      const list = breakGroups.get(r.ctx) ?? [];
-      list.push(r.nodeId);
-      breakGroups.set(r.ctx, list);
-    }
-  }
+	for (const redirect of redirects) {
+		if (redirect.kind === 'continue' && redirect.ctx.kind === 'loop') {
+			const list = continueGroups.get(redirect.ctx) ?? [];
+			list.push(redirect.nodeId);
+			continueGroups.set(redirect.ctx, list);
+		} else if (redirect.kind === 'break') {
+			const list = breakGroups.get(redirect.ctx) ?? [];
+			list.push(redirect.nodeId);
+			breakGroups.set(redirect.ctx, list);
+		}
+	}
 
-  for (const [loopCtx, sources] of continueGroups) {
-    const sliced = spliceFinallyCopy(host, finallyBlock, sources);
-    for (const exit of sliced.exits) {
-      host.writer.addEdge(exit, loopCtx.continueTarget, '', true);
-    }
-    aggregateReturnExits.push(...sliced.returnExits);
-    aggregateThrowExits.push(...sliced.throwExits);
-  }
+	for (const [loopCtx, sources] of continueGroups) {
+		const sliced = spliceFinallyCopy(host, finallyBlock, sources);
 
-  for (const [breakCtx, sources] of breakGroups) {
-    const sliced = spliceFinallyCopy(host, finallyBlock, sources);
-    for (const exit of sliced.exits) {
-      breakCtx.pendingBreaks.push(exit);
-    }
-    aggregateReturnExits.push(...sliced.returnExits);
-    aggregateThrowExits.push(...sliced.throwExits);
-  }
+		for (const exit of sliced.exits) {
+			host.writer.addEdge(exit, loopCtx.continueTarget, '', true);
+		}
 
-  const resolvedAggregateExits = host.resolveExitSources(aggregateExits);
-  const resolvedAggregateExitLabels = Object.fromEntries(
-    Object.entries(aggregateExitLabels).filter(([exitId]) => resolvedAggregateExits.includes(exitId)),
-  );
-  const statementEntry = tryEntryId ?? fallbackEntryId;
-  const tryOwnerId = statementEntry ?? catchResult?.entry;
+		aggregateReturnExits.push(...sliced.returnExits);
+		aggregateThrowExits.push(...sliced.throwExits);
+	}
 
-  return {
-    entry: statementEntry,
-    entryEdgeLabel: statementEntry ? 'try' : undefined,
-    exits: tryOwnerId ? createTryExitBoundary(host, tryOwnerId, resolvedAggregateExits) : resolvedAggregateExits,
-    exitLabels: Object.keys(resolvedAggregateExitLabels).length > 0 ? resolvedAggregateExitLabels : undefined,
-    returnExits: [...new Set(aggregateReturnExits)],
-    throwExits: [...new Set(aggregateThrowExits)],
-  };
+	for (const [breakCtx, sources] of breakGroups) {
+		const sliced = spliceFinallyCopy(host, finallyBlock, sources);
+
+		for (const exit of sliced.exits) {
+			breakCtx.pendingBreaks.push(exit);
+		}
+
+		aggregateReturnExits.push(...sliced.returnExits);
+		aggregateThrowExits.push(...sliced.throwExits);
+	}
+
+	const resolvedAggregateExits = host.resolveExitSources(aggregateExits);
+	const resolvedAggregateExitLabels = Object.fromEntries(
+		Object.entries(aggregateExitLabels).filter(([exitId]) =>
+			resolvedAggregateExits.includes(exitId),
+		),
+	);
+
+	const statementEntry = tryEntryId ?? fallbackEntryId;
+	const tryOwnerId = statementEntry ?? catchResult?.entry;
+
+	return {
+		entry: statementEntry,
+		entryEdgeLabel: statementEntry ? 'try' : undefined,
+		exits: tryOwnerId
+			? createTryExitBoundary(host, tryOwnerId, resolvedAggregateExits)
+			: resolvedAggregateExits,
+		exitLabels: nonEmptyLabels(resolvedAggregateExitLabels),
+		returnExits: unique(aggregateReturnExits),
+		throwExits: unique(aggregateThrowExits),
+	};
 }
 
 // ── Loop helpers ───────────────────────────────────────────────────────────
 
-function visitStandardLoop(
-  host: StatementVisitorHost,
-  loopId: string,
-  loopBranch: import('ts-morph').Node,
-  bodyLabel = 'yes',
+function visitLoopWithContext(
+	host: StatementVisitorHost,
+	loopId: string,
+	visitBody: () => BuildResult,
 ): BuildResult {
-  const body = host.visitBranch(loopBranch);
+	const ctx = host.pushLoopContext(loopId);
 
-  if (body.entry) {
-    host.writer.addEdge(loopId, body.entry, bodyLabel, false);
-    host.connectLoopBackEdges(body.exits, loopId);
-  } else {
-    host.writer.addEdge(loopId, loopId, bodyLabel, true);
-  }
+	try {
+		const result = visitBody();
+		const breakExits = wirePendingBreaksAndContinues(host, ctx);
+		const mergedExits = mergeLoopExitsWithBreaks(host, result.exits, breakExits);
 
-  return {
-    entry: loopId,
-    exits: [loopId],
-    returnExits: [...new Set(body.returnExits)],
-    throwExits: [...new Set(body.throwExits)],
-  };
+		return {
+			entry: result.entry,
+			exits: mergedExits,
+			exitLabels: result.exitLabels,
+			returnExits: result.returnExits,
+			throwExits: result.throwExits,
+		};
+	} finally {
+		host.popContext();
+	}
+}
+
+function visitStandardLoop(
+	host: StatementVisitorHost,
+	loopId: string,
+	loopBranch: MorphNode,
+	bodyLabel = 'yes',
+): BuildResult {
+	const body = host.visitBranch(loopBranch);
+
+	if (body.entry) {
+		host.writer.addEdge(loopId, body.entry, bodyLabel, false);
+		host.connectLoopBackEdges(body.exits, loopId);
+	} else {
+		host.writer.addEdge(loopId, loopId, bodyLabel, true);
+	}
+
+	return {
+		entry: loopId,
+		exits: [loopId],
+		returnExits: unique(body.returnExits),
+		throwExits: unique(body.throwExits),
+	};
 }
 
 function visitIteratorLoop(
-  host: StatementVisitorHost,
-  stmt: ForOfStatement | ForInStatement,
-  construct: 'for-of' | 'for-in',
+	host: StatementVisitorHost,
+	stmt: ForOfStatement | ForInStatement,
+	construct: 'for-of' | 'for-in',
 ): BuildResult {
-  const iterableText = stmt.getExpression().getText();
-  const bindingText = stmt.getInitializer()?.getText() ?? '';
+	const iterableText = stmt.getExpression().getText();
+	const bindingText = stmt.getInitializer()?.getText() ?? '';
 
-  const loopId = host.createLoopNode(compactLabel(iterableText), iterableText);
-  setNodeData(host, loopId, {
-    construct,
-    forOfBinding: bindingText,
-  });
+	const loopId = host.createLoopNode(compactLabel(iterableText), iterableText);
 
-  const ctx = host.pushLoopContext(loopId);
-  try {
-    const result = visitStandardLoop(host, loopId, stmt.getStatement(), 'each');
-    const breakExits = wirePendingBreaksAndContinues(host, ctx);
-    const mergedExits = mergeLoopExitsWithBreaks(host, result.exits, breakExits);
-    return {
-      entry: result.entry,
-      exits: mergedExits,
-      returnExits: result.returnExits,
-      throwExits: result.throwExits,
-    };
-  } finally {
-    host.popContext();
-  }
+	host.writer.updateNodeData(loopId, {
+		construct,
+		forOfBinding: bindingText,
+	});
+
+	return visitLoopWithContext(host, loopId, () =>
+		visitStandardLoop(host, loopId, stmt.getStatement(), 'each'),
+	);
 }

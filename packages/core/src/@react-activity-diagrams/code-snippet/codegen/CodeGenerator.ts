@@ -36,6 +36,12 @@ type Outcome =
 	| { kind: "break"; label?: string }
 	| { kind: "continue"; label?: string };
 
+type DoWhileRegion = {
+	loopId: string;
+	bodyEntryId: string;
+	conditionText: string;
+	exitId?: string;
+};
 const FALL: Outcome = { kind: "fall" };
 const RETURN: Outcome = { kind: "return" };
 
@@ -91,7 +97,7 @@ export class CodeGenerator {
 	 */
 	private readonly activeLoops = new Set<string>();
 	private readonly activeTryEntries = new Set<string>();
-
+	private readonly activeDoWhileLoops = new Set<string>();
 	/**
 	 * Counter of "break-absorbing" contexts on the emission stack G��
 	 * incremented when entering a loop OR a switch, decremented on exit.
@@ -241,11 +247,110 @@ export class CodeGenerator {
 		return stopAt.has(cursor);
 	}
 
-	// G��G�� Node dispatch G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
+	private doWhileExitTarget(loopId: string): string | undefined {
+	const outgoing = this.outgoingForwardEdges(loopId);
 
+	const noEdge = this.pickEdge(outgoing, ["no", "false", "done", "exit"]);
+	if (noEdge) return String(noEdge.target);
+
+	const yesBackTarget = this.edges.find(
+		(edge) =>
+			String(edge.source) === loopId &&
+			normalize(edge.label) === "yes" &&
+			isBackEdge(edge),
+	)?.target;
+
+	const fallback = outgoing.find(
+		(edge) => String(edge.target) !== String(yesBackTarget),
+	);
+
+	return fallback ? String(fallback.target) : undefined;
+}
+
+	private findDoWhileForBodyEntry(bodyEntryId: string): DoWhileRegion | undefined {
+	for (const node of this.nodes) {
+		if (node.type !== "loop") continue;
+		if (getConstruct(node) !== "do-while") continue;
+
+		const loopId = String(node.id);
+
+		const yesBackEdge = this.edges.find((edge) => {
+			return (
+				String(edge.source) === loopId &&
+				String(edge.target) === bodyEntryId &&
+				normalize(edge.label) === "yes" &&
+				isBackEdge(edge)
+			);
+		});
+
+		if (!yesBackEdge) continue;
+
+		const data = getData(node);
+		const conditionText =
+			getStr(data.sourceText).trim() ||
+			getStr(data.label).trim() ||
+			"true";
+
+		return {
+			loopId,
+			bodyEntryId,
+			conditionText,
+			exitId: this.doWhileExitTarget(loopId),
+		};
+	}
+
+	return undefined;
+}
+
+	private emitDoWhileRegion(
+	region: DoWhileRegion,
+	level: number,
+): { outcome: Outcome; next: string | undefined } {
+	if (this.activeDoWhileLoops.has(region.loopId)) {
+		return { outcome: FALL, next: undefined };
+	}
+
+	this.code += `${indent(level)}do {\n`;
+
+	this.activeDoWhileLoops.add(region.loopId);
+	this.activeLoops.add(region.loopId);
+	this.breakDepth += 1;
+
+	let bodyOutcome: Outcome = FALL;
+
+	try {
+		bodyOutcome = this.emitSequence(region.bodyEntryId, level + 1, region.loopId);
+	} finally {
+		this.breakDepth -= 1;
+		this.activeLoops.delete(region.loopId);
+		this.activeDoWhileLoops.delete(region.loopId);
+	}
+
+	this.code += `${indent(level)}} while (${region.conditionText});\n`;
+
+	const propagated = this.translateLoopBodyOutcome(bodyOutcome, "");
+
+	if (propagated.kind !== "fall") {
+		return { outcome: propagated, next: undefined };
+	}
+
+	return {
+		outcome: FALL,
+		next: region.exitId,
+	};
+}
 	private emitNode(node: Node, level: number): { outcome: Outcome; next: string | undefined } {
 		const id = String(node.id);
 		const construct = getConstruct(node);
+
+		const doWhileRegion = this.findDoWhileForBodyEntry(id);
+		if (
+			doWhileRegion &&
+			!this.activeDoWhileLoops.has(doWhileRegion.loopId) &&
+			!this.activeLoops.has(doWhileRegion.loopId)
+		) {
+			return this.emitDoWhileRegion(doWhileRegion, level);
+		}
 
 		if (!this.activeTryEntries.has(id) && this.hasIncomingTryEdge(id)) {
 			return this.emitTryFromEntry(id, level);
@@ -253,22 +358,36 @@ export class CodeGenerator {
 
 		if (construct) {
 			switch (construct) {
-				case "if": return this.emitIf(node, level);
-				case "switch": return this.emitSwitch(node, level);
-				case "try": return this.emitTry(node, level);
+				case "if":
+					return this.emitIf(node, level);
+
+				case "switch":
+					return this.emitSwitch(node, level);
+
+				case "try":
+					return this.emitTry(node, level);
+
 				case "while":
-				case "do-while":
 				case "for":
 				case "for-of":
 				case "for-in":
 				case "foreach":
 					return this.emitLoop(node, construct, level);
+
+				case "do-while":
+					return {
+						outcome: FALL,
+						next: this.doWhileExitTarget(id) ?? this.fallthroughSuccessor(id),
+					};
+
 				case "function":
 				case "hook":
 					this.emitInlineSnippet(node, level);
 					return { outcome: FALL, next: this.fallthroughSuccessor(id) };
+
 				case "pending-return":
 					return { outcome: FALL, next: this.fallthroughSuccessor(id) };
+
 				case "return":
 				case "throw":
 				case "break":
@@ -282,20 +401,33 @@ export class CodeGenerator {
 			case "initial":
 			case "start":
 				return { outcome: FALL, next: this.fallthroughSuccessor(id) };
+
 			case "expandable":
 				this.emitInlineSnippet(node, level);
 				return { outcome: FALL, next: this.fallthroughSuccessor(id) };
+
 			case "decision":
 				return this.emitIf(node, level);
+
 			case "loop": {
 				const legacyKind = (getStr(getData(node).loopKind) || "while") as Construct;
+
+				if (legacyKind === "do-while") {
+					return {
+						outcome: FALL,
+						next: this.doWhileExitTarget(id) ?? this.fallthroughSuccessor(id),
+					};
+				}
+
 				return this.emitLoop(node, legacyKind, level);
 			}
+
 			case "action":
 			default:
 				return this.emitAction(node, level);
 		}
 	}
+
 
 	// G��G�� Action / inline / terminator G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
@@ -694,7 +826,6 @@ private emitSwitch(node: Node, level: number): { outcome: Outcome; next: string 
 		});
 	}
 
-	// G��G�� Loop G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
 
 	private emitLoop(
 		node: Node,
@@ -702,6 +833,13 @@ private emitSwitch(node: Node, level: number): { outcome: Outcome; next: string 
 		level: number,
 	): { outcome: Outcome; next: string | undefined } {
 		const id = String(node.id);
+
+		if (construct === "do-while") {
+			return {
+				outcome: FALL,
+				next: this.doWhileExitTarget(id) ?? this.fallthroughSuccessor(id),
+			};
+		}
 
 		if (this.activeLoops.has(id)) {
 			return { outcome: FALL, next: undefined };

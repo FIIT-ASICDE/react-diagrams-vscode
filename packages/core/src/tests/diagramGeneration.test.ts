@@ -446,42 +446,57 @@ test('diagramGen while continue goes to loop target before post-loop flow', asyn
 	);
 });
 
-test('diagramGen creates do-while loop structure', async () => {
+test('diagramGen do-while body comes before condition', async () => {
 	const graph = await buildGraphFromBody(`
 		do {
 			i++;
-			if (i > 10) {
-				break;
-			}
 		} while (i < n);
-		return i;
+		after();
 	`);
 
-	const loop = graph.nodes.find(
+	const bodyNode = graph.nodes.find((n: any) =>
+		String(n.data?.sourceText ?? '').includes('i++'),
+	);
+	const loopNode = graph.nodes.find(
 		(n: any) => n.type === 'loop' && n.data?.construct === 'do-while',
 	);
-	assert.ok(loop);
-	assert.equal(loop.data?.sourceText, 'i < n');
+	const afterNode = graph.nodes.find((n: any) =>
+		String(n.data?.sourceText ?? '').includes('after()'),
+	);
 
-	const outgoing = outgoingFrom(graph, loop.id);
-	assert.ok(outgoing.some((e: any) => e.label === 'yes'));
-	assert.ok(outgoing.some((e: any) => e.label === 'no'));
+	assert.ok(bodyNode);
+	assert.ok(loopNode);
+	assert.ok(afterNode);
 
-	const generated = await generateFromFunctionBody(`
-		do {
-			i++;
-			if (i > 10) {
-				break;
-			}
-		} while (i < n);
-		return i;
-	`);
+	assert.ok(
+		graph.edges.some(
+			(e: any) =>
+				String(e.source) === String(bodyNode.id) &&
+				String(e.target) === String(loopNode.id),
+		),
+		'do-while body should flow into condition',
+	);
 
-	assertSyntacticallyValidTypeScript(generated);
-	assert.match(generated, /do\s*\{/);
-	assert.match(generated, /while\s*\(i < n\);/);
-	assert.match(generated, /break;/);
-	assert.match(generated, /return\s+i;/);
+	assert.ok(
+		graph.edges.some(
+			(e: any) =>
+				String(e.source) === String(loopNode.id) &&
+				String(e.target) === String(bodyNode.id) &&
+				String(e.label ?? '') === 'yes' &&
+				e.type === 'back',
+		),
+		'do-while yes branch should loop back to body',
+	);
+
+	assert.ok(
+		graph.edges.some(
+			(e: any) =>
+				String(e.source) === String(loopNode.id) &&
+				String(e.target) === String(afterNode.id) &&
+				String(e.label ?? '') === 'no',
+		),
+		'do-while no branch should continue after loop',
+	);
 });
 
 test('diagramGen do-while break joins normal exit before after', async () => {

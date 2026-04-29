@@ -2,7 +2,6 @@ import { Node as MorphNode, Statement, SwitchStatement, SyntaxKind } from 'ts-mo
 import { compactLabel, getFallthroughEdgeLabel } from '../utils';
 import type { BuildResult } from '../types';
 import type { StatementVisitorHost } from './host-context';
-import { setNodeData } from './node-data-utils';
 
 interface SwitchCaseGroup {
   labels: string[];
@@ -12,7 +11,7 @@ interface SwitchCaseGroup {
 export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): BuildResult {
   const expressionText = stmt.getExpression().getText();
   const decisionId = host.createDecisionNode(compactLabel(expressionText), expressionText);
-  setNodeData(host.writer, decisionId, { construct: 'switch' });
+  host.writer.updateNodeData(decisionId, { construct: 'switch' });
   const mergeId = host.writer.addFlowNode('merge', '');
   const ctx = host.pushSwitchContext(mergeId);
 
@@ -115,7 +114,7 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
         const target = nextEntry ?? mergeId;
 
         for (const exit of group.fallthrough) {
-          host.writer.addEdge(exit, target, getFallthroughEdgeLabel(exit));
+          host.writer.addEdge(exit, target, getFallthroughEdgeLabel(host, exit));
         }
       }
 

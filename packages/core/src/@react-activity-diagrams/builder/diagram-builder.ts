@@ -95,18 +95,19 @@ export class DiagramBuilder {
     if (sources.length === 0) return;
 
     for (const source of sources) {
+      const sourceType = writer.getNodeType(source);
+      const label = sourceType === 'decision' || sourceType === 'loop' ? 'no' : undefined;
       const terminalId = writer.addFlowNode('end', terminalLabel);
       writer.addEdge(
         source,
         terminalId,
-        source.startsWith('decision-') || source.startsWith('loop-') ? 'no' : undefined,
+        label,
         false,
       );
     }
   }
 
   private normalizeGraphStructure(): void {
-    this.removeDuplicateEdges();
     this.removeDanglingEdges();
     this.removeDuplicateEdges();
   }
