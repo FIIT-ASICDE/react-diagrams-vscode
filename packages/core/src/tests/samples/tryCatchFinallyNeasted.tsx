@@ -24,21 +24,21 @@ export default function TryCatchFinallyNested() {
       if (shouldRetry) {
         setState("retrying");
 
-        try {
-          if (Math.random() > 0.5) {
-            throw new Error("Retry failure");
+        do {
+          try {
+            if (Math.random() > 0.5) {
+              throw new Error("Retry failure");
+            }
+  
+            setState("success");
+          } catch {
+            setState("error");
           }
-
-          setState("success");
-        } catch {
-          setState("error");
         }
+        while (state == 'error' && errorCount < 3);
       }
     } finally {
-      do {
-        setState("cleanup");
-      }
-      while (Math.random() > 0.5);
+      setState('cleanup');
     }
   }
 

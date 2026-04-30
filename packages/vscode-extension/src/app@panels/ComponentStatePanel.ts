@@ -72,9 +72,10 @@ export class ComponentStatePanel {
 
 		const [useGuardsWhenPossible, config] = getConfigOption<boolean>('state.diagram', 'useGuardsWhenPossible');
 		const knownStateVariableHooks = config.get<string[]>('knownStateVariableHooks', ["useState"]);
+		const mergeSquashing = config.get<string[]>('mergeSquashingOptimization');
 
 		const { rootPath, targetDocument } = result;
-		return componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible, knownStateVariableHooks }, forceUpdate);
+		return componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible, knownStateVariableHooks, mergeSquashing }, forceUpdate);
 	}
 
 	// public static isShowingDocument(document: TextDocument) {
@@ -94,8 +95,9 @@ export class ComponentStatePanel {
 		try {
 			const [useGuardsWhenPossible, config] = getConfigOption<boolean>('state.diagram', 'useGuardsWhenPossible');
 			const knownStateVariableHooks = config.get<string[]>('knownStateVariableHooks', ["useState"]);
+			const mergeSquashing = config.get<string[]>('mergeSquashingOptimization');
 
-			const model = await componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible, knownStateVariableHooks }, forceUpdate);
+			const model = await componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible, knownStateVariableHooks, mergeSquashing }, forceUpdate);
 
 			if (requestId != this.refreshRequestId) // Ignore if a newer refresh started while this parse was running.
 				return console.debug("Outdated refresh result discarded");

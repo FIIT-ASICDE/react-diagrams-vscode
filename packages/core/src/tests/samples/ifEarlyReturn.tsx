@@ -61,8 +61,9 @@ export default function IfElseWithEarlyReturn() {
 				[arr[i],arr[lowest]] = [arr[lowest], arr[i]];
 		}
 
-		if (arr.length > 5)
-			setState1(arr.length);
+		if (arr.length % 2 == 0)
+			if (arr.length > 5)
+				setState1(arr.length);
 	}
 
 	// ...

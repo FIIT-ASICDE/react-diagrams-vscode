@@ -117,7 +117,7 @@
             "enumDescriptions": [
               "Enable participant to view current source file.",
               "Enable participant to utilize serialized diagram representation.",
-              "Enable participant to view diagram as image."
+              "Enable participant to view diagram as image (Component State Panel has to be opened and visible for this to work)."
             ]
           }
         },
@@ -128,6 +128,34 @@
           "items": {
             "type": "string"
           }
+        },
+        "state.diagram.mergeSquashingOptimization": {
+          "type": "array",
+          "uniqueItems": true,
+          "default": ["merge->decision", "merge->exit"],
+          "items": {
+            "type": "string",
+            "enum": [
+              "merge->merge",
+              "merge->decision",
+              "merge->try",
+              "merge->switch",
+              "merge->loop",
+              "do->x",
+              "merge->exit"
+            ],
+            "enumDescriptions": [
+              "Squash merge nodes chains into a single merge node.",
+              "Emplace merge with the possible decision node.",
+              "Emplace merge with the possible try node.",
+              "Emplace merge with the possible switch node.",
+              "Emplace merge with the possible loop node (do-while excluded).",
+              "Emplace 'do' diamond with the following node.",
+              "Emplace merge with the possible exit node."
+            ]
+          },
+          "description": "Ways for reducing the number of diamonds/merge nodes in the diagram, that carry little semantic meaning and can be omitted for clarity. It works in a way that merge->X, merge transitioning to X, will be simplified to X. (Note: Combining some options with loop may result in unexpected behavior or non fully UML compliant diagrams).",
+          "tags": ["experimental"]
         }
       }
     }

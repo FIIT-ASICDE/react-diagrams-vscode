@@ -19,7 +19,7 @@ const LAYOUT = {
 	},
 	mutator: {
 		gap: 18,
-		pad: 38,
+		pad: 39,
 		minWidth: 200,
 		minHeight: 100,
 	},
@@ -49,7 +49,8 @@ export const ELK_OPTIONS: LayoutOptions = {
 	'elk.portConstraints': 'FIXED_SIDE',
 	'elk.edgeRouting': 'POLYLINE',
 	
-	"elk.spacing.edgeNode": "42",
+	'elk.spacing.edgeEdge': '35',
+	"elk.spacing.edgeNode": "45",
 	'elk.spacing.nodeNode': '54',
 	'elk.padding': elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad, LAYOUT.mutator.pad),
 

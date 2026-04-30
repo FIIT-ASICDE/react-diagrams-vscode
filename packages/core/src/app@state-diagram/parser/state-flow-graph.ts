@@ -103,6 +103,7 @@ export const isRelevant = (node: Node, setterName: string, hasSetterAhead = fals
 export interface OpenEdge { // We dont yet know "to", remember type and from...
 	from: StateGraphNode;
 	kind: StateTransitionKind;
+	to?: StateGraphNode,
 	rawConditionText?: string;
 	label?: string;
 }
@@ -112,8 +113,15 @@ export interface StateVisitContext {
 	continueCollector?: OpenEdge[];
 }
 
+export type MergeSquashType = "merge->merge" | "merge->decision" | "merge->try" | "merge->switch" | "merge->loop" | "do->x" | "merge->exit";
 export interface StateGraphOptions {
+	mergeSquashing?: MergeSquashType[];
 	useGuardsWhenPossible?: boolean;
+}
+
+export const emplaceMergeIfCan = (incoming: OpenEdge[], mergeSquashType: MergeSquashType, options?: StateGraphOptions, currNode?: StateGraphNode) => {
+	currNode ??= incoming[0]?.from;
+	return incoming.length == 1 && options?.mergeSquashing?.includes(mergeSquashType) && incoming[0]?.kind == StateTransitionKind.Normal && currNode?.kind == 'merge' ? currNode : undefined;
 }
 
 export class GraphBuilder {
@@ -135,12 +143,17 @@ export class GraphBuilder {
 		}
 	}
 
-	private connect(to: StateGraphNode, edges: OpenEdge[]) {
-		for (const { from, kind, ...edge } of normalizeOpenEdges(edges, to))
-			this.transitions.push(createTransition(from, to, kind, edge.rawConditionText, edge.label));
+	connect(to: StateGraphNode, edges: OpenEdge[], avoidSelfLoop = false) {
+		for (const edge of normalizeOpenEdges(edges, to)) {
+			if (avoidSelfLoop && edge.from.id == to.id)
+				continue;
+			edge.to = to;
+			this.transitions.push(createTransition(edge.from, to, edge.kind, edge.rawConditionText, edge.label));
+		}
+		return to;
 	}
 
-	private appendFlowNode(kind: ControlFlowNodeKind, node: Node, label?: string, replaceCurrent?: ControlFlowNode) {
+	appendFlowNode(kind: ControlFlowNodeKind, node: Node, label?: string, replaceCurrent?: ControlFlowNode) {
 		const flowNode = createFlowNode(kind, node, this.mutator, label);
 		if (replaceCurrent) {
 			Object.assign(replaceCurrent, { ...flowNode, id: replaceCurrent.id });
@@ -150,7 +163,28 @@ export class GraphBuilder {
 		return flowNode;
 	}
 
-	private collapseWithMerge(node: Node, openEdges: OpenEdge[]) {
+	rerouteFlow(from: StateGraphNode, to: StateGraphNode, rmFrom = false) {
+		for (let i = this.transitions.length - 1; i >= 0; i--) {
+			const transition = this.transitions[i];
+			if (rmFrom && transition.fromNodeId == from.id) {
+				this.transitions.splice(i, 1);
+				continue;
+			}
+
+			if (transition.toNodeId == from.id) {
+				transition.toNodeId = to.id;
+			}
+		}
+
+		if (rmFrom) {
+			const idx = this.nodes.indexOf(from);
+			if (idx != -1)
+				this.nodes.splice(idx, 1);
+		}
+		return to;
+	}
+
+	collapseWithMerge(node: Node, openEdges: OpenEdge[]) {
 		const normalizedOpen = normalizeOpenEdges(openEdges);
 		if (!normalizedOpen.length)
 			return [];
@@ -159,7 +193,17 @@ export class GraphBuilder {
 			return normalizedOpen;
 
 		const mergeNode = this.appendFlowNode('merge', node);
-		this.connect(mergeNode, normalizedOpen);
+		if (this.options?.mergeSquashing?.includes("merge->merge")) {
+			for (const edge of normalizedOpen) {
+				if (edge.from.kind == 'merge') {
+					this.rerouteFlow(edge.from, mergeNode, true);
+					continue;
+				}
+				this.connect(mergeNode, [edge]);
+			}
+		}
+		else
+			this.connect(mergeNode, normalizedOpen);
 		return [{ from: mergeNode, kind: StateTransitionKind.Normal }];
 	}
 
@@ -176,14 +220,14 @@ export class GraphBuilder {
 			current = [{ from: updateNode, kind: StateTransitionKind.Normal }];
 		}
 
-		return this.visitEnd(statement, current, 'return');
+		return this.visitEnd(statement, current);
 	}
 
-	visitEnd(statement: ThrowStatement | ReturnStatement, incoming: OpenEdge[], what: 'return' | 'throw') {
-		const txt = statement.getExpression()?.getText();
+	visitEnd(statement: ThrowStatement | ReturnStatement | Block, incoming: OpenEdge[], what: 'exit' | 'throw' = 'exit') {
+		const txt = Node.isBlock(statement) ? '' : statement.getExpression()?.getText();
 
-		const currNode = incoming.length == 1 ? incoming[0].from : undefined;
-		const exitNode = this.appendFlowNode(what == 'return' ? 'exit' : what, statement, txt ? `${what} ${truncate(txt, 80)}` : ``, currNode?.kind == 'merge' ? currNode : undefined);
+		const currNode = emplaceMergeIfCan(incoming, `merge->exit`, this.options);
+		const exitNode = this.appendFlowNode(what, statement, txt ? `${what} ${truncate(txt, 80)}` : ``, currNode);
 		if (currNode != exitNode)
 			this.connect(exitNode, incoming);
 		return [];
@@ -198,8 +242,8 @@ export class GraphBuilder {
 		const elseBody = statement.getElseStatement();
 		const isElseif = Node.isIfStatement(elseBody);
 
-		const { from, kind } = incoming[0];
-		if (this.options?.useGuardsWhenPossible && !isElseif && incoming.length == 1 && from.nodeType == 'state-update' && kind == StateTransitionKind.Normal) {
+		const { from, kind } = incoming[0] ?? {};
+		if (this.options?.useGuardsWhenPossible && !isElseif && incoming.length == 1 && from?.nodeType == 'state-update' && kind == StateTransitionKind.Normal) {
 
 			const thenIncoming: OpenEdge[] = [{ from, kind: StateTransitionKind.Then, label: `[${truncate(conditionText, 80)}]` }];
 			const thenOpen = this.visit(thenBody, thenIncoming, hasSetterAhead, context);
@@ -210,8 +254,8 @@ export class GraphBuilder {
 			return normalizeOpenEdges([...thenOpen, ...elseOpen]);
 		}
 		
-		const decisionNode = this.appendFlowNode('decision', statement, truncate(conditionText, 80));
-		this.connect(decisionNode, incoming);
+		const decisionNode = this.appendFlowNode('decision', statement, truncate(conditionText, 80), emplaceMergeIfCan(incoming, `merge->decision`, this.options, from));
+		this.connect(decisionNode, incoming, true);
 
 		const thenIncoming: OpenEdge[] = [{ from: decisionNode, kind: StateTransitionKind.Then, /*rawConditionText: conditionText*/ }];
 		const thenOpen = this.visit(thenBody, thenIncoming, hasSetterAhead, context)
@@ -226,8 +270,8 @@ export class GraphBuilder {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
 
-		const decisionNode = this.appendFlowNode('try-decision', statement, 'try');
-		this.connect(decisionNode, incoming);
+		const decisionNode = this.appendFlowNode('try-decision', statement, 'try', emplaceMergeIfCan(incoming, `merge->try`, this.options));
+		this.connect(decisionNode, incoming, true);
 
 		const tryOpen = this.visit(statement.getTryBlock(), [{ from: decisionNode, kind: StateTransitionKind.Normal }], hasSetterAhead, context);
 
@@ -276,8 +320,8 @@ export class GraphBuilder {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
 
-		const decisionNode = this.appendFlowNode('switch-decision', statement, truncate(statement.getExpression().getText(), 80));
-		this.connect(decisionNode, incoming);
+		const decisionNode = this.appendFlowNode('switch-decision', statement, truncate(statement.getExpression().getText(), 80), emplaceMergeIfCan(incoming, `merge->switch`, this.options));
+		this.connect(decisionNode, incoming, true);
 
 		const clauses = statement.getCaseBlock().getClauses();
 		const hasSetterAfterClause: boolean[] = new Array(clauses.length);
@@ -337,8 +381,8 @@ export class GraphBuilder {
 			return incoming;
 
 		const conditionText = Node.isWhileStatement(statement) ? statement.getExpression().getText() : statement.getCondition()?.getText() ?? 'for';
-		const decisionNode = this.appendFlowNode('loop-decision', statement, truncate(conditionText, 80));
-		this.connect(decisionNode, incoming);
+		const decisionNode = this.appendFlowNode('loop-decision', statement, truncate(conditionText, 80), emplaceMergeIfCan(incoming, `merge->loop`, this.options));
+		this.connect(decisionNode, incoming, true);
 
 		const loopBreakEdges: OpenEdge[] = [];
 		const loopContinueEdges: OpenEdge[] = [];
@@ -361,18 +405,14 @@ export class GraphBuilder {
 		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
 			return incoming;
 
-		const bodyEntry = this.appendFlowNode('merge', statement);
+		const bodyEntry = this.appendFlowNode('merge', statement, 'do');
 		this.connect(bodyEntry, incoming);
 
 		const loopBreakEdges: OpenEdge[] = [];
 		const loopContinueEdges: OpenEdge[] = [];
 
-		const bodyOpen = this.visit(
-			statement.getStatement(),
-			[{ from: bodyEntry, kind: StateTransitionKind.Normal }],
-			hasSetterAhead,
-			{ breakCollector: loopBreakEdges, continueCollector: loopContinueEdges },
-		);
+		const loopEntryEdge: OpenEdge[] = [{ from: bodyEntry, kind: StateTransitionKind.Normal }]
+		const bodyOpen = this.visit(statement.getStatement(), loopEntryEdge, hasSetterAhead, { breakCollector: loopBreakEdges, continueCollector: loopContinueEdges });
 
 		const conditionText = statement.getExpression().getText();
 		const decisionNode = this.appendFlowNode('loop-decision', statement, truncate(conditionText, 80));
@@ -380,8 +420,12 @@ export class GraphBuilder {
 		if (toDecision.length)
 			this.connect(decisionNode, toDecision);
 
-		this.connect(bodyEntry, [{ from: decisionNode, kind: StateTransitionKind.Loop }]);
-
+		const loopback = [{ from: decisionNode, kind: StateTransitionKind.Loop }];
+		if (this.options?.mergeSquashing?.includes("do->x") && loopEntryEdge[0].to)
+			this.connect(this.rerouteFlow(bodyEntry, loopEntryEdge[0].to, true), loopback);
+		else
+			this.connect(bodyEntry, loopback);
+			
 		return this.collapseWithMerge(statement, [{ from: decisionNode, kind: StateTransitionKind.Else }, ...loopBreakEdges]);
 	}
 
@@ -453,10 +497,7 @@ export class GraphBuilder {
 			return;
 
 		// const exitNode = this.appendFlowNode('exit', body, 'return');
-		const currNode = finalOpen.length == 1 ? finalOpen[0].from : undefined;
-		const exitNode = this.appendFlowNode('exit', body, undefined, currNode?.kind == 'merge' ? currNode : undefined);
-		if (currNode != exitNode)
-			this.connect(exitNode, finalOpen);
+		this.visitEnd(body, finalOpen);
 	}
 }
 
