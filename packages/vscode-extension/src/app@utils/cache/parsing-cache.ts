@@ -1,14 +1,8 @@
 import { TextDocument, workspace } from "vscode";
-import { normalizeFilePath } from "../index";
+import { getRootPath, normalizeFilePath } from "../index";
 import MIMEType from "whatwg-mimetype";
 
 export type MimeType = MIMEType | string;
-
-export function getRootPath(targetDocument?: TextDocument) {
-	if (!targetDocument)
-		return workspace.workspaceFolders?.[0]?.uri.fsPath;
-	return workspace.getWorkspaceFolder(targetDocument.uri)?.uri.fsPath ?? workspace.workspaceFolders?.[0]?.uri.fsPath;
-}
 
 export type CacheEntry<T = any, D = Promise<T>> = {
 	data: D;
@@ -42,7 +36,7 @@ export class ParsingCache<T = any> {
 		}
 
 		console.time(`Parsing React component {${cacheKey}}`);
-		const data = this.parseAsync(document.uri.fsPath, { ...parserOptions, rootPath: parserOptions.rootPath ?? getRootPath(document) });
+		const data = this.parseAsync(document.uri.fsPath, { ...parserOptions, rootPath: parserOptions?.rootPath ?? getRootPath(document) });
 		console.timeEnd(`Parsing React component {${cacheKey}}`);
 		// console.trace();
 

@@ -1,6 +1,6 @@
 export type CodePos = {
 	line: number;
-	column: number;
+	col: number;
 };
 
 export type FunctionDeclarationKind = 'function' | 'arrow-function' | 'function-expression';

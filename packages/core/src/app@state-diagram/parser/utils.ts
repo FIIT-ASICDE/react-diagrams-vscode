@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import { CodePos } from '../../app@state-diagram-model/types';
 import { SupportedDeclaration  } from './types';
 import { FunctionDeclarationKind } from '../../app@state-diagram-model/types';
+import murmurHash3 from 'imurmurhash';
 
 export function findTsConfig(rootDir: string) {
 	const candidates = [
@@ -40,27 +41,15 @@ export function asSrcFile(pathOrTxt: string, rootDir: Project | string = '.') {
 }
 
 export function getCodePos(node: Node, sourceFile?: SourceFile): CodePos {
-	return (sourceFile ?? node.getSourceFile()).getLineAndColumnAtPos(node.getStart());
+	const {line, column} = (sourceFile ?? node.getSourceFile()).getLineAndColumnAtPos(node.getStart());
+	return { line, col: column };
 }
 
-export const codePosStr = ({line, column}: CodePos) => `${line}:${column}`;
+export const codePosStr = ({line, col}: CodePos) => `${line}:${col}`;
 
-export function createId(what, name: string, pos: CodePos) {
-	return `${what?.toString()}-${name}:${codePosStr(pos)}`;
-	// if (what == null)
-	// 	return 0;
-
-	// const str = `${what.toString()}${name}`
-	// let hash = 0;
-	// for (let i = 0, len = str.length; i < len; i++) {
-	// 	hash = hash + str.charCodeAt(i);
-	// 	hash |= 0;
-	// }
-	// hash = hash + pos.line;
-	// hash |= 0;
-	// hash = hash + pos.column;
-	// hash |= 0;
-	// return hash;
+export function createId(what, name: string, {line, col}: CodePos) {
+	// return `${what?.toString()}-${name}:${codePosStr(pos)}`; // wasteful and almost 2x longer
+	return murmurHash3(what?.toString() || '').hash(name).hash(line.toString()).hash(col.toString()).result().toString();
 }
 
 export function getBindingElementName(node?: Node) {

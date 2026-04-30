@@ -35,7 +35,10 @@ export default function TryCatchFinallyNested() {
         }
       }
     } finally {
-      setState("cleanup");
+      do {
+        setState("cleanup");
+      }
+      while (Math.random() > 0.5);
     }
   }
 

@@ -90,7 +90,7 @@ function getOrCreateMutator(stateVariable: StateVariable, component: SupportedCo
 		return getOrCreateInlineMutator(stateVariable, component);
 	const pos = getCodePos(funcLike);
 	const type = getDeclarationKind(funcLike);
-	const existing = stateVariable.mutators.find((mutator) => mutator.pos.line == pos.line && mutator.pos.column == pos.column && mutator.type == type);
+	const existing = stateVariable.mutators.find((mutator) => mutator.pos.line == pos.line && mutator.pos.col == pos.col && mutator.type == type);
 	if (existing)
 		return existing;
 	
@@ -130,7 +130,7 @@ function addUpdateNodeToMutator(mutator: StateMutatingFunction, update: StateUpd
 	const existing = mutator.nodes.find((node) =>
 		node.nodeType == 'state-update' &&
 		node.pos.line == update.pos.line &&
-		node.pos.column == update.pos.column
+		node.pos.col == update.pos.col
 	);
 	if (!existing)
 		mutator.nodes.push(update);

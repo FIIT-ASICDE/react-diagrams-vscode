@@ -1,14 +1,14 @@
 import * as vscode from "vscode";
 import { ChatContext, ChatResponseStream, CancellationToken, ChatRequest, ProviderResult, ChatResult } from "vscode";
 
-export function isPromptHelp(prompt: string): boolean {
-	const normalized = prompt.trim().toLowerCase();
-	return ["?", "help", "", "what"].includes(normalized);
-}
+// export function isPromptHelp(prompt: string): boolean {
+// 	const normalized = prompt.trim().toLowerCase();
+// 	return normalized.length <= 2 || normalized.split(/\s+/).length < 2;
+// }
 
 export type ContextDataStatus = "available" | "disabled" | "unavailable" | "unobtainable";
 
-export type ContextData<T> =
+export type ContextData<T> = 
 	| { status: "available"; data: T }
 	| { status: Exclude<ContextDataStatus, "available"> };
 
@@ -24,8 +24,6 @@ export function isContextAvailable<T>(value: ContextData<T>): value is { status:
 	return value.status == "available";
 }
 
-export const statusTag = (status: ContextDataStatus): string => `<${status}>`;
-
 export type BaseChatContext = {
 	userPrompt: string;
 	currentFilePath?: string;
@@ -36,37 +34,42 @@ export type BaseChatContext = {
 export abstract class BaseChatParticipant<C extends BaseChatContext> {
 	constructor(
 		public readonly id: string = 'vs-code-ext.diagram',
-		public readonly modelType: string = 'copilot',
+		public readonly modelTypeFallback: string = 'copilot',
 		public readonly responseLanguage: string = 'English',
 	) 
 	{ }
 
 	register(context: vscode.ExtensionContext, icon = "graph-line"): vscode.Disposable {
-		const participant = vscode.chat.createChatParticipant(this.id, async (request, _chatContext, stream, token) => this.handleCreateChatParticipant(request, _chatContext, stream, token));
+		const participant = vscode.chat.createChatParticipant(this.id, async (request, chatContext, stream, token) => this.handleCreateChatParticipant(request, chatContext, stream, token));
 
 		participant.iconPath = new vscode.ThemeIcon(icon);
 		context.subscriptions.push(participant);
 		return participant;
 	}
 
-	async handleCreateChatParticipant(request: ChatRequest, _chatContext: ChatContext, response: ChatResponseStream, token: CancellationToken): Promise<ProviderResult<ChatResult | void>> {
-		const promptWasVague = isPromptHelp(request.prompt);
-		if (promptWasVague) {
-			response.markdown(this.buildCapabilitiesIntro());
-			return;
-		}
+	async handleCreateChatParticipant(request: ChatRequest, chatContext: ChatContext, response: ChatResponseStream, token: CancellationToken): Promise<ProviderResult<ChatResult | void>> {
+		// const promptWasVague = isPromptHelp(request.prompt);
+		// if (promptWasVague) {
+		// 	response.markdown(this.buildCapabilitiesIntro());
+		// 	return;
+		// }
 
-		const snapshot = await this.getChatContext(request.prompt);
+		const ctx = await this.getChatContext(request.prompt.trim());
 
-		response.markdown(this.buildContextHeader(snapshot));
+		response.markdown(this.buildContextHeader(ctx));
 
-		const model = await this.selectModelByType(this.modelType);
+		let model = request.model;
 		if (!model) {
-			response.markdown(`No chat model is available for MODEL_TYPE='${this.modelType}'. Ensure Copilot Chat is enabled and the configured model is accessible.`);
-			return;
+			model = await this.getModel();
+			if (!model) {
+				response.markdown(`No chat model is available for MODEL_TYPE='${this.modelTypeFallback}'. Ensure Copilot Chat is enabled and the configured model is accessible.`);
+				return;
+			}
+			response.markdown(`No model specified by request, using ${model.name}`);
 		}
 
-		const messages = this.buildLanguageModelMessages(snapshot, promptWasVague);
+		const messages = this.buildLanguageModelMessages(ctx);
+
 		const modelResponse = await model.sendRequest(messages, {}, token);
 
 		for await (const part of modelResponse.text) {
@@ -74,10 +77,10 @@ export abstract class BaseChatParticipant<C extends BaseChatContext> {
 		}
 	}
 
-	async selectModelByType(modelType: string): Promise<vscode.LanguageModelChat | undefined> {
+	async getModel(modelType: string = this.modelTypeFallback) {
 		const normalized = modelType.trim();
 	
-		if (!normalized || normalized === "copilot") {
+		if (!normalized || normalized == "copilot") {
 			const [defaultModel] = await vscode.lm.selectChatModels({ vendor: "copilot" });
 			return defaultModel;
 		}
@@ -102,22 +105,21 @@ export abstract class BaseChatParticipant<C extends BaseChatContext> {
 		return fallbackModel;
 	}
 
-	buildCapabilitiesIntro(): string {
-		return [
-			"### What you can ask",
-			"- @diagram explain this flow",
-			"- @diagram suggest a refactor",
-			"- @diagram compare the code with the diagram",
-			"- @diagram point out potential design issues, unnecessary complexity and how to improve them",
-			// "- @diagram improve the generated skeleton",
-			// "- @diagram tell me whether the diagram changes your recommendation",
-			"",
-		].join("\n");
-	}
+	// buildCapabilitiesIntro(): string {
+	// 	return [
+	// 		"### Usage examples:",
+	// 		"- @<name> explain this flow",
+	// 		"- @<name> suggest a refactor",
+	// 		"- @<name> point out potential design issues, unnecessary complexity and how to improve them",
+	// 		// "- @<name> improve the generated skeleton",
+	// 		// "- @<name> tell me whether the diagram changes your recommendation",
+	// 		"",
+	// 	].join("\n");
+	// }
 
 	abstract getChatContext(userPrompt: string): Promise<C>;
 
-	abstract buildLanguageModelMessages(context: C, promptWasVague: boolean): vscode.LanguageModelChatMessage[];
+	abstract buildLanguageModelMessages(context: C): vscode.LanguageModelChatMessage[];
 
 	abstract buildContextHeader(snapshot: C): string;
 }

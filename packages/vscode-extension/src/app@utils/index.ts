@@ -4,6 +4,10 @@ import vscode, { Position, Selection, TextDocument, TextDocumentShowOptions, Tex
 import { ParsingImageCache } from "./cache";
 import decodeDataUrl from "data-urls";
 
+export const SUPPORTED_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx"];
+
+export const isSupportedFile = (filePath: string) => SUPPORTED_EXTENSIONS.includes(extname(filePath));
+
 export function getNonce(size = 11) {
 	return crypto.randomBytes(size).toString("hex");
 }
@@ -37,6 +41,35 @@ export async function jumpToPosition(file: Uri | string, line: number, col: numb
 	existingEditor.revealRange(selection, TextEditorRevealType.InCenter);
 }
 
+export function getRootPath(targetDocument?: TextDocument) {
+	if (!targetDocument)
+		return workspace.workspaceFolders?.[0]?.uri.fsPath;
+	return workspace.getWorkspaceFolder(targetDocument.uri)?.uri.fsPath ?? workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+export function doCommonChecksAndGetDoc(doc?: TextDocument) {
+	const targetDocument = doc ?? window.activeTextEditor?.document;
+	if (!targetDocument) {
+		window.showWarningMessage("No active editor found. Open a React component file first.");
+		return;
+	}
+
+	const activeFilePath = targetDocument.uri.fsPath;
+	if (!isSupportedFile(activeFilePath)) {
+		if (!doc)
+			window.showWarningMessage("Active file is not a JavaScript or TypeScript file. Open a React component file first.");
+		return;
+	}
+
+	const rootPath = getRootPath(targetDocument);
+	if (!rootPath) {
+		window.showWarningMessage("No workspace folder found. Open the project folder first.");
+		return;
+	}
+
+	return { activeFilePath, rootPath, targetDocument };
+}
+
 /** Get the value of the config key and the config itself */
 export function getConfigOption<T>(section: string, key: string, defaultValue?: T) {
 	const config = workspace.getConfiguration(section);
@@ -47,7 +80,7 @@ export async function saveDiagramImage(document: TextDocument, data: { dataUrl?:
 	const image = decodeDataUrl(data.dataUrl ?? "");
 	if (!image) {
 		window.showWarningMessage("Could not parse the data to create the diagram image.");
-		return;
+		return null;
 	}
 	
 	const cachedImage = cache.updateImageEntry(document, image.body, image.mimeType);

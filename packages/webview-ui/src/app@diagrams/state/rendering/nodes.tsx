@@ -13,7 +13,7 @@ export type StateVisualNodeData = {
 	height?: number;
 };
 
-function NodeShell({ width, height, children }: { width?: number; height?: number; children: ReactNode }) {
+export function NodeShell({ width, height, children }: { width?: number; height?: number; children: ReactNode }) {
 	return (
 		<>
 			{commonSourceHandles(false, 0, 0)}
@@ -25,7 +25,7 @@ function NodeShell({ width, height, children }: { width?: number; height?: numbe
 	);
 }
 
-function CenteredLabel({ label, color, background, className }: { label?: string, color?: string, background?: string, className?: string }) {
+export function CenteredLabel({ label, color, background, className }: { label?: string, color?: string, background?: string, className?: string }) {
 	if (!label?.length)
 		return null;
 
@@ -41,14 +41,14 @@ function CenteredLabel({ label, color, background, className }: { label?: string
 
 type RFNodeProps = { data: StateVisualNodeData };
 
-const StateUpdateNode = memo(({ data }: RFNodeProps) => {
+export const StateUpdateNode = memo(({ data }: RFNodeProps) => {
 	const width = data.width;
 	const height = data.height;
 
 	return (
 		<NodeShell width={width} height={height}>
 			<div
-				className="flex items-center justify-center box-border rounded-lg border px-2 text-center text-[12.5px]"
+				className="flex items-center justify-center box-border rounded-xl border px-2 text-center text-[12.5px]"
 				style={{
 					width,
 					height,
@@ -63,7 +63,7 @@ const StateUpdateNode = memo(({ data }: RFNodeProps) => {
 	);
 });
 
-const DecisionNode = memo(({ data }: RFNodeProps) => {
+export const DecisionNode = memo(({ data }: RFNodeProps) => {
 	const width = data.width;
 	const height = data.height;
 
@@ -87,7 +87,7 @@ const DecisionNode = memo(({ data }: RFNodeProps) => {
 	);
 });
 
-const EntryNode = memo(({ data }: RFNodeProps) => {
+export const EntryNode = memo(({ data }: RFNodeProps) => {
 	const size = Math.min(data.width ?? 0, data.height ?? 0);
 
 	return (
@@ -105,7 +105,7 @@ const EntryNode = memo(({ data }: RFNodeProps) => {
 	);
 });
 
-const ExitNode = memo(({ data }: RFNodeProps) => {
+export const ExitNode = memo(({ data }: RFNodeProps) => {
 	const size = Math.min(data.width ?? 20, data.height ?? 20);
 
 	return (
@@ -136,7 +136,7 @@ const ExitNode = memo(({ data }: RFNodeProps) => {
 	);
 });
 
-const ExceptionNode = memo(({ data }: RFNodeProps) => {
+export const ExceptionNode = memo(({ data }: RFNodeProps) => {
 	const size = Math.min(data.width ?? 20, data.height ?? 20);
 
 	const stroke = Math.max(2, Math.round(size * 0.12)); // thickness

@@ -1,4 +1,4 @@
-import { commands, ExtensionContext, ExtensionMode, RelativePattern, Uri, window, workspace } from "vscode";
+import { commands, ExtensionContext, ExtensionMode, LanguageModelChatMessage, LanguageModelDataPart, LanguageModelTextPart, RelativePattern, Uri, window, workspace } from "vscode";
 import { ComponentActivityPanel } from "./app@panels/ComponentActivityPanel";
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
 import { normalizeFilePath } from "./app@utils";

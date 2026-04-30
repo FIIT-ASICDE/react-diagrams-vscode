@@ -1,13 +1,11 @@
 import { Disposable, TextDocument, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
-import { getConfigOption, getNonce, getUri, jumpToPosition, saveDiagramImage } from "../app@utils";
+import { doCommonChecksAndGetDoc, getConfigOption, getNonce, getUri, jumpToPosition, saveDiagramImage } from "../app@utils";
 import { basename, extname } from "path";
-import { componentStateCache, getRootPath, ImageCacheEntry } from "../app@utils/cache";
+import { componentStateCache, ImageCacheEntry } from "../app@utils/cache";
 
 export class ComponentStatePanel {
 	public static readonly NAME = "Component State";
 	public static readonly WEBVIEW_DIR = "dist/webview";
-	private static readonly SUPPORTED_EXTENSIONS = [".js", ".jsx", ".ts", ".tsx"];
-	// private static readonly modelCache = new Map<string, any>();
 
 	public static current?: ComponentStatePanel;
 
@@ -16,8 +14,8 @@ export class ComponentStatePanel {
 	// private currentFilePath?: string;
 	private refreshRequestId = 0;
 
-	private pendingImageRequest?: Promise<ImageCacheEntry | undefined>;
-	private pendingImageRequestResolve?: (value: ImageCacheEntry | undefined) => void;
+	private pendingImageRequest?: Promise<ImageCacheEntry | null>;
+	private pendingImageRequestResolve?: (value: ImageCacheEntry | null) => void;
 
 	/**
 	 * The ComponentStatePanel class private constructor (called only from the render method).
@@ -68,7 +66,7 @@ export class ComponentStatePanel {
 	}
 
 	public static updateCache(document?: TextDocument, forceUpdate?) {
-		const result = ComponentStatePanel.doCommonChecksAndGetDoc(document);
+		const result = doCommonChecksAndGetDoc(document);
 		if (!result)
 			return;
 
@@ -84,7 +82,7 @@ export class ComponentStatePanel {
 	// }
 
 	public async refresh(document?: TextDocument, forceUpdate?) {
-		const result = ComponentStatePanel.doCommonChecksAndGetDoc(document);
+		const result = doCommonChecksAndGetDoc(document);
 		if (!result)
 			return;
 		const { activeFilePath, rootPath, targetDocument } = result;
@@ -134,42 +132,15 @@ export class ComponentStatePanel {
 
 	public requestCurrentDiagramImage(saveToDisk = true) {
 		if (!this.panel.visible)
-			return null;
+			return;
 		if (this.pendingImageRequest)
 			return this.pendingImageRequest;
 
-		const { promise, resolve } = Promise.withResolvers<ImageCacheEntry | undefined>();
+		const { promise, resolve } = Promise.withResolvers<ImageCacheEntry | null>();
 		this.pendingImageRequest = promise;
 		this.pendingImageRequestResolve = resolve;
 		this.postMessage("requestDiagramImage", { saveToDisk });
 		return this.pendingImageRequest;
-	}
-
-	public static doCommonChecksAndGetDoc(doc?: TextDocument) {
-		const targetDocument = doc ?? window.activeTextEditor?.document;
-		if (!targetDocument) {
-			window.showWarningMessage("No active editor found. Open a React component file first.");
-			return;
-		}
-
-		const activeFilePath = targetDocument.uri.fsPath;
-		if (!ComponentStatePanel.isSupportedFile(activeFilePath)) {
-			if (!doc)
-				window.showWarningMessage("Active file is not a JavaScript or TypeScript file. Open a React component file first.");
-			return;
-		}
-
-		const rootPath = getRootPath(targetDocument);
-		if (!rootPath) {
-			window.showWarningMessage("No workspace folder found. Open the project folder first.");
-			return;
-		}
-
-		return { activeFilePath, rootPath, targetDocument };
-	}
-
-	private static isSupportedFile(filePath: string) {
-		return ComponentStatePanel.SUPPORTED_EXTENSIONS.includes(extname(filePath));
 	}
 
 	/**
@@ -237,12 +208,12 @@ export class ComponentStatePanel {
 				if (uri) {
 					const pos = data.data.pos;
 					// console.debug(pos)
-					jumpToPosition(uri, pos.line - 1, pos.column - 1);
+					jumpToPosition(uri, pos.line - 1, pos.col - 1);
 				}
 				return;
 
 			case "onDiagramImage":
-				const { targetDocument } = ComponentStatePanel.doCommonChecksAndGetDoc(componentStateCache.getCurrentDocument()) ?? {};
+				const { targetDocument } = doCommonChecksAndGetDoc(componentStateCache.getCurrentDocument()) ?? {};
 				if (!targetDocument)
 					return;
 

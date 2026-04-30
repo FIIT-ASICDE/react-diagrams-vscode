@@ -1,5 +1,4 @@
-import * as vscode from "vscode";
-import { LanguageModelChatMessage, LanguageModelDataPart } from "vscode";
+import { LanguageModelChatMessage, LanguageModelDataPart, LanguageModelTextPart, TextDocument, workspace } from "vscode";
 import type { StateDiagram } from "@react-diagrams/core";
 import { componentStateCache } from "@/app@utils/cache";
 import { ImageCacheEntry } from "@/app@utils/cache/parsing-cache";
@@ -8,13 +7,12 @@ import {
 	BaseChatContext,
 	BaseChatParticipant,
 	ContextData,
-	ContextDataStatus,
 	contextAvailable,
 	contextStatus,
-	isContextAvailable,
-	statusTag,
+	isContextAvailable
 } from "../BaseChatParticipant";
-import { getConfigOption } from "@/app@utils";
+import { doCommonChecksAndGetDoc, getConfigOption } from "@/app@utils";
+import { relative } from "path";
 
 const getCapabilities = () => {
 	const [capabilities = ["code"]] = getConfigOption<string[]>('state.diagram', 'chatParticipantCapabilities', ["code"]);
@@ -33,45 +31,41 @@ export type StateDiagramChatContext = BaseChatContext & {
 };
 
 export class StateDiagramParticipant extends BaseChatParticipant<StateDiagramChatContext> {
-	private async getDiagramImageEntry(): Promise<ContextData<ImageCacheEntry>> {
-		const cached = componentStateCache.getImage();
+	async getDiagramImageEntry(doc?: TextDocument): Promise<ContextData<ImageCacheEntry>> {
+		const cached = componentStateCache.getImage(doc);
 		if (cached)
 			return contextAvailable(cached);
 
 		const requested = await ComponentStatePanel.current?.requestCurrentDiagramImage(false);
 		if (requested === null)
 			return contextStatus("unobtainable");
-		if (requested === undefined)
-			return contextStatus("unavailable");
-
-		return contextAvailable(requested);
+		return requested ? contextAvailable(requested) : contextStatus("unavailable");
 	}
 
-	private async getDiagram(): Promise<ContextData<StateDiagram>> {
-		const doc = componentStateCache.getCurrentDocument();
+	async getDiagram(doc?: TextDocument): Promise<ContextData<StateDiagram>> {
 		const entry = componentStateCache.get(doc);
 		if (!entry)
 			return contextStatus("unavailable");
 
 		try {
 			const data = await entry.data;
-			return contextAvailable(data as StateDiagram);
+			return contextAvailable(data);
 		} catch {
-			return contextStatus("unavailable");
+			return contextStatus("unobtainable");
 		}
 	}
 
 	override async getChatContext(userPrompt: string): Promise<StateDiagramChatContext> {
 		const { code: codeEnabled, diagram: diagramEnabled, diagramImage: diagramImageEnabled } = getCapabilities();
-		const doc = componentStateCache.getCurrentDocument();
+		const { targetDocument: doc, rootPath } = doCommonChecksAndGetDoc(componentStateCache.getCurrentDocument()) ?? {};
 
-		const codeData = !codeEnabled ? contextStatus<string>("disabled") : doc ? contextAvailable(doc.getText()) : contextStatus<string>("unavailable");
-		const diagramData = diagramEnabled ? await this.getDiagram() : contextStatus<StateDiagram>("disabled");
-		const imageData = diagramImageEnabled ? await this.getDiagramImageEntry() : contextStatus<ImageCacheEntry>("disabled");
+		const codeData = codeEnabled ? (doc ? contextAvailable(doc.getText()) : contextStatus<string>("unavailable")) : contextStatus<string>("disabled");
+		const diagramData = diagramEnabled ? await this.getDiagram(doc) : contextStatus<StateDiagram>("disabled");
+		const imageData = diagramImageEnabled ? await this.getDiagramImageEntry(doc) : contextStatus<ImageCacheEntry>("disabled");
 
 		return {
 			userPrompt,
-			currentFilePath: doc?.uri.fsPath ?? statusTag("unavailable"),
+			currentFilePath: rootPath && doc?.uri.fsPath && relative(rootPath, doc.uri.fsPath),
 			currentCodeOrSelection: codeData,
 			codeContextKind: "full-file",
 			currentDiagram: diagramData,
@@ -79,64 +73,66 @@ export class StateDiagramParticipant extends BaseChatParticipant<StateDiagramCha
 		};
 	}
 
-	override buildLanguageModelMessages(context: StateDiagramChatContext, promptWasVague: boolean): LanguageModelChatMessage[] {
+	override buildLanguageModelMessages(context: StateDiagramChatContext): LanguageModelChatMessage[] {
 		const systemInstruction = [
 			"Role: expert assistant for TypeScript, TSX, and React and State diagrams.",
 			`Answer in: ${this.responseLanguage}.`,
 			"Always analyze code together with the state diagram context.",
 			"You can explain behavior, suggest refactors, compare code and diagram, and find potential state related issues.",
-			"Always say whether and how the diagram influenced your answer.",
+			"Always state whether and how the diagram influenced your answer.",
 			"If code improvements would improve the resulting diagram, propose concrete code changes.",
 			"Keep answers practical, structured, and implementation-focused.",
 		].join("\n");
 
-		const effectiveTask = promptWasVague
-			? "Provide a short capabilities intro, suggest concrete next prompts, then give best-effort analysis from available context."
-			: context.userPrompt;
+		const effectiveTask = context.userPrompt.length < 5 ? "Provide a short capabilities intro, suggest concrete next prompts, then give best-effort analysis from available context." : context.userPrompt;
 
-		const modelDescription = "Diagram model shape: component = parsed component metadata; stateVariables = component state declarations; mutators = functions that mutate state with control-flow and update nodes.";
+		const modelDescription = "Diagram model: component = parsed component metadata; stateVariables = component state declarations (outer groups); mutators = functions that mutate respective stateVariable with control-flow and update nodes, (inner groups).";
+		const modelDescriptionVisual = "Diagram model: component = parsed component metadata; stateVariables = component state declarations (outer groups); mutators = functions that mutate respective stateVariable with control-flow and update nodes, (inner groups).";
 
-		const parts: Array<vscode.LanguageModelTextPart | vscode.LanguageModelDataPart> = [
-			LanguageModelDataPart.text(systemInstruction),
-			LanguageModelDataPart.text(`Task request: ${effectiveTask}`),
-	
-			// LanguageModelDataPart.text(this.buildContextHeader(context), "text/markdown"),
+		const rootPath = workspace.workspaceFolders?.[0].uri.fsPath;
+		const parts: Array<LanguageModelTextPart | LanguageModelDataPart> = [
+			new LanguageModelTextPart(`Task request: ${effectiveTask}`),
+			new LanguageModelTextPart(`Active file: ${context.currentFilePath || "unavailable"}`),
 		];
 
-		parts.push(LanguageModelDataPart.text(`Active file: ${context.currentFilePath || statusTag("unavailable")}`));
-
 		if (isContextAvailable(context.currentCodeOrSelection)) {
-			parts.push(LanguageModelDataPart.text("Code:"));
-			parts.push(LanguageModelDataPart.text(context.currentCodeOrSelection.data));
+			parts.push(new LanguageModelTextPart("Code:"));
+			parts.push(new LanguageModelTextPart(context.currentCodeOrSelection.data));
 		} else {
-			parts.push(LanguageModelDataPart.text(`Code context: ${statusTag(context.currentCodeOrSelection.status)}`));
+			parts.push(new LanguageModelTextPart(`Code: ${context.currentCodeOrSelection.status}`));
 		}
-
 		if (isContextAvailable(context.currentDiagram)) {
-			parts.push(LanguageModelDataPart.text("State diagram (structured JSON object):"));
-			parts.push(LanguageModelDataPart.text(modelDescription));
-			parts.push(LanguageModelDataPart.json(context.currentDiagram.data));
+			parts.push(new LanguageModelTextPart("State diagram (structured JSON object):"));
+			parts.push(new LanguageModelTextPart(JSON.stringify({ 
+				...context.currentDiagram.data, 
+				source: context.currentDiagram.data.source && rootPath && relative(rootPath, context.currentDiagram.data.source)
+			})));
 		} else {
-			parts.push(LanguageModelDataPart.text(`State diagram: ${statusTag(context.currentDiagram.status)}`));
+			parts.push(new LanguageModelTextPart(`State diagram: ${context.currentDiagram.status}`));
 		}
 
 		if (isContextAvailable(context.currentDiagramImage)) {
-			parts.push(LanguageModelDataPart.text("State diagram image (visual rendering):"));
+			parts.push(new LanguageModelTextPart("State diagram image:"));
 			parts.push(LanguageModelDataPart.image(context.currentDiagramImage.data.data, context.currentDiagramImage.data.mimeType.toString()));
 		} else {
-			parts.push(LanguageModelDataPart.text(`State diagram image: ${statusTag(context.currentDiagramImage.status)}`));
+			parts.push(new LanguageModelTextPart(`State diagram image: ${context.currentDiagramImage.status}`));
 		}
 
-		return [LanguageModelChatMessage.User(parts)];
+		parts.push(new LanguageModelTextPart(isContextAvailable(context.currentDiagramImage) ? modelDescriptionVisual : modelDescription));
+
+		return [
+			LanguageModelChatMessage.User(systemInstruction),
+			LanguageModelChatMessage.User(parts)
+		];
 	}
 
 	override buildContextHeader(snapshot: StateDiagramChatContext): string {
 		return [
 			"### Context received",
-			`- Active file: ${snapshot.currentFilePath || statusTag("unavailable")}`,
-			`- Code: ${isContextAvailable(snapshot.currentCodeOrSelection) ? snapshot.codeContextKind : statusTag(snapshot.currentCodeOrSelection.status)}`,
-			`- Diagram JSON: ${isContextAvailable(snapshot.currentDiagram) ? statusTag("available") : statusTag(snapshot.currentDiagram.status)}`,
-			`- Diagram image: ${isContextAvailable(snapshot.currentDiagramImage) ? statusTag("available") : statusTag(snapshot.currentDiagramImage.status)}`,
+			`- Active file: **${snapshot.currentFilePath || "unavailable"}**`,
+			`- Code: **${isContextAvailable(snapshot.currentCodeOrSelection) ? snapshot.codeContextKind : snapshot.currentCodeOrSelection.status}**`,
+			`- State diagram: **${isContextAvailable(snapshot.currentDiagram) ? "available" : snapshot.currentDiagram.status}**`,
+			`- State diagram image: **${isContextAvailable(snapshot.currentDiagramImage) ? "available" : snapshot.currentDiagramImage.status}**`,
 			"",
 			"",
 		].join("\n");

@@ -43,14 +43,14 @@ export const ELK_OPTIONS: LayoutOptions = {
 	'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
 	'elk.layered.feedbackEdges': 'true',
 
-	"elk.spacing.edgeNode": "32",
 	"elk.layered.spacing.edgeNodeBetweenLayers": "20",
 	"elk.spacing.portConnection": "30", // dist edge goes down from node
 	'elk.layered.allowNonFlowPortsToSwitchSides': 'true',
 	'elk.portConstraints': 'FIXED_SIDE',
 	'elk.edgeRouting': 'POLYLINE',
-
-	'elk.spacing.nodeNode': '50',
+	
+	"elk.spacing.edgeNode": "42",
+	'elk.spacing.nodeNode': '54',
 	'elk.padding': elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad, LAYOUT.mutator.pad),
 
 	// 'elk.edgeLabels.placement': 'CENTER',
@@ -71,7 +71,7 @@ export function getGraphNodeSize({ nodeType, kind, ...node }: StateGraphNode) {
 		return { width: LAYOUT.graphNodeWidth, height: LAYOUT.graphNodeHeight };
 
 	if (kind == 'decision' || kind == 'try-decision' || kind == 'switch-decision' || kind == 'loop-decision' || kind == 'merge')
-		return { width: 64, height: 44 };
+		return { width: 65, height: 45 };
 
 	return { width: 38, height: 38 };
 }

@@ -27,7 +27,7 @@ export default function IfElseWithEarlyReturn() {
 	}
 
 	function func01(num = 1) {
-		setState1(0);
+		setState1(0x01);
 
 		if (typeof num != "number")
 			return;
@@ -61,7 +61,8 @@ export default function IfElseWithEarlyReturn() {
 				[arr[i],arr[lowest]] = [arr[lowest], arr[i]];
 		}
 
-		setState1(arr.length);
+		if (arr.length > 5)
+			setState1(arr.length);
 	}
 
 	// ...
