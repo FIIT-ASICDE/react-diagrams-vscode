@@ -29,9 +29,9 @@ import {
 	StateUpdate,
 	StateUpdateKind,
 	StateVariable,
-} from '../../app@state-diagram-model/types';
-import { codePosStr, createId, getAllCalls, getCodePos, getFuncName, normText } from './utils';
-import { truncate } from '../../app@core/utils';
+} from '../../../app@state-diagram-model/types';
+import { codePosStr, createId, getAllCalls, getCodePos, getFuncName, normText } from '../utils';
+import { truncate } from '../../../app@core/utils';
 
 export function createFlowNode(kind: ControlFlowNodeKind, node: Node, mutator: StateMutatingFunction, label?: string/*, sourceFile: SourceFile*/): ControlFlowNode {
 	const pos = getCodePos(node);

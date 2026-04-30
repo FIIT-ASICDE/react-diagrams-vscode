@@ -10,10 +10,10 @@ import {
 	TryStatement,
 	VariableDeclaration,
 } from 'ts-morph';
-import { StateVariable } from '../../app@state-diagram-model/types';
-import { createId, getBindingElementName, getCodePos,  getFirstAncestorOfKinds } from './utils';
-import { SupportedComponentDeclaration } from './types';
-import { truncate } from '../../app@core/utils';
+import { StateVariable } from '../../../app@state-diagram-model/types';
+import { createId, getBindingElementName, getCodePos,  getFirstAncestorOfKinds } from '../utils';
+import { SupportedComponentDeclaration } from '../types';
+import { truncate } from '../../../app@core/utils';
 
 /** Returns the matched hook call and its canonical hook name. */
 function getTrackedStateHookCall(node: Node | undefined, identifiers: Map<string, string>, hookNames: Set<string>) {

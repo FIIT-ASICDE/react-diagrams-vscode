@@ -17,9 +17,9 @@ import {
 	StateUpdate,
 	StateUpdateKind,
 	StateVariable,
-} from '../../app@state-diagram-model/types';
-import { createId, getCodePos, getDeclarationKind, getFirstAncestorOfKinds, getFuncName, normText } from './utils';
-import { SupportedComponentDeclaration, SupportedDeclaration } from './types';
+} from '../../../app@state-diagram-model/types';
+import { createId, getCodePos, getDeclarationKind, getFirstAncestorOfKinds, getFuncName, normText } from '../utils';
+import { SupportedComponentDeclaration, SupportedDeclaration } from '../types';
 
 export function classifyStateUpdateKind(argument?: Node): StateUpdateKind {
 	if (!argument)
