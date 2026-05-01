@@ -87,12 +87,63 @@ export function isDirectlyOwnedByComponent(declaration: Node, component: Support
 	return getFirstAncestorOfKinds(declaration, [Node.isFunctionDeclaration, Node.isFunctionExpression, Node.isArrowFunction, Node.isMethodDeclaration,]) == component
 }
 
-export function collectStateVariables(component: SupportedComponentDeclaration, sourceFile: SourceFile, hookNames = ['useState']) {
+function collectTupleStateVariable(declaration: VariableDeclaration, sourceFile: SourceFile, hookName: string, stateHookCall: CallExpression): StateVariable | undefined {
+	const nameNode = declaration.getNameNode();
+	if (!Node.isArrayBindingPattern(nameNode) || nameNode.getElements().length < 2)
+		return;
+
+	const [stateElement, setterElement] = nameNode.getElements();
+	const stateName = getBindingElementName(stateElement);
+	const setterName = getBindingElementName(setterElement);
+	if (!stateName || !setterName || !Node.isBindingElement(stateElement))
+		return;
+
+	const pos = getCodePos(stateElement.getNameNode(), sourceFile);
+	return {
+		id: createId('state', stateName, pos),
+		hook: hookName,
+		name: stateName,
+		setterName,
+		mutPattern: 'setter-call',
+		initializerText: stateHookCall.getArguments()[0]?.getText(),
+		typeText: inferStateTypeText(stateHookCall),
+		pos,
+		states: [],
+		mutators: [],
+	};
+}
+
+function collectRefStateVariable(declaration: VariableDeclaration, sourceFile: SourceFile, hookName: string, stateHookCall: CallExpression): StateVariable | undefined {
+	const nameNode = declaration.getNameNode();
+	if (!Node.isIdentifier(nameNode))
+		return;
+
+	const stateName = nameNode.getText().trim();
+	if (!stateName)
+		return;
+
+	const pos = getCodePos(nameNode, sourceFile);
+	return {
+		id: createId('state', stateName, pos),
+		hook: hookName,
+		name: stateName,
+		setterName: 'current',
+		mutPattern: 'ref-current',
+		initializerText: stateHookCall.getArguments()[0]?.getText(),
+		typeText: inferStateTypeText(stateHookCall),
+		pos,
+		states: [],
+		mutators: [],
+	};
+}
+
+export function collectStateVariables(component: SupportedComponentDeclaration, sourceFile: SourceFile, hookNames = ['useState'], refHookNames = ['useRef']) {
 	const body = component.getBody();
 	if (!body || !Node.isBlock(body))
 		return [];
 
 	const { identifiers, hookNamesSet } = collectStateHookIdentifiers(sourceFile, hookNames);
+	const { identifiers: refIdentifiers, hookNamesSet: refHookNamesSet } = collectStateHookIdentifiers(sourceFile, refHookNames);
 	const declarations = body.getDescendantsOfKind(SyntaxKind.VariableDeclaration);;
 	const stateVariables: StateVariable[] = [];
 
@@ -100,39 +151,24 @@ export function collectStateVariables(component: SupportedComponentDeclaration, 
 		if (!isDirectlyOwnedByComponent(declaration, component))
 			continue;
 
-		const nameNode = declaration.getNameNode();
-		if (!Node.isArrayBindingPattern(nameNode))
-			continue;
-
 		const initializer = declaration.getInitializer();
 		const tracked = getTrackedStateHookCall(initializer, identifiers, hookNamesSet);
-		if (!tracked)
+		if (tracked) {
+			const { call: stateHookCall, hookName } = tracked;
+			const tupleStateVariable = collectTupleStateVariable(declaration, sourceFile, hookName, stateHookCall);
+			if (tupleStateVariable)
+				stateVariables.push(tupleStateVariable);
 			continue;
+		}
 
-		const { call: stateHookCall, hookName } = tracked;
-		const [stateElement, setterElement] = nameNode.getElements();
-		const stateName = getBindingElementName(stateElement);
-		const setterName = getBindingElementName(setterElement);
-		if (!stateName || !setterName || !Node.isBindingElement(stateElement))
+		const trackedRef = getTrackedStateHookCall(initializer, refIdentifiers, refHookNamesSet);
+		if (!trackedRef)
 			continue;
-
-		// console.log(stateElement, setterElement, stateHookCall, initializer);
-		const pos = getCodePos(stateElement.getNameNode(), sourceFile);
-		const stateVariable: StateVariable = {
-			id: createId('state', stateName, pos),
-			hook: hookName,
-			name: stateName,
-			setterName,
-			initializerText: stateHookCall.getArguments()[0]?.getText(),
-			typeText: inferStateTypeText(stateHookCall),
-			pos,
-
-			states: [],
-			mutators: [],
-			// inlineMutator: undefined,
-		};
-
-		stateVariables.push(stateVariable);
+	
+		const { call: stateHookCall, hookName } = trackedRef;
+		const refStateVariable = collectRefStateVariable(declaration, sourceFile, hookName, stateHookCall);
+		if (refStateVariable)
+			stateVariables.push(refStateVariable);
 	}
 
 	return stateVariables;

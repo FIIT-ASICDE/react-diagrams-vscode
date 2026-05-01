@@ -1,7 +1,7 @@
-import { Project, Node, SyntaxKind, SourceFile, VariableDeclaration, CallExpression, Statement } from 'ts-morph';
+import { Project, Node, SyntaxKind, SourceFile, VariableDeclaration, CallExpression, Statement, BinaryExpression } from 'ts-morph';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { CodePos } from '../../app@state-diagram-model/types';
+import { CodePos, StateVariable } from '../../app@state-diagram-model/types';
 import { SupportedDeclaration  } from './types';
 import { FunctionDeclarationKind } from '../../app@state-diagram-model/types';
 import murmurHash3 from 'imurmurhash';
@@ -104,6 +104,64 @@ export function getAllCalls(node: Node, funcName: string, filterType: "filter" |
 	if (filterType == "some")
 		return calls.some(cl => getFuncName(cl) == funcName);
 	return calls.filter(cl => getFuncName(cl) == funcName);
+}
+
+export function isAssignmentOperator(kind: SyntaxKind) {
+	return kind >= SyntaxKind.EqualsToken && kind <= SyntaxKind.CaretEqualsToken; // this works... see @ts-morph\common\lib\typescript.d.ts
+}
+
+export function isDirectPropertyAccess(node: Node | undefined, ownerName: string, propName: string) {
+	if (!node || !Node.isPropertyAccessExpression(node))
+		return false;
+
+	const owner = node.getExpression();
+	return Node.isIdentifier(owner) && owner.getText() == ownerName && node.getName() == propName;
+}
+
+export function getStateMutationNodes(node: Node, stateVariable: StateVariable, filterType: 'filter' | 'some' = 'filter') {
+	if (stateVariable.mutPattern == 'setter-call')
+		return getAllCalls(node, stateVariable.setterName, filterType);
+	// mutPattern == 'ref-current'
+
+	const { name: ownerName, setterName } = stateVariable;
+	const result: Node[] = [];
+	/* Not really optimal but anything else I tried was even worse or it broke funcionality */
+	for (const binaryExpression of node.getDescendantsOfKind(SyntaxKind.BinaryExpression)) {
+		if (!isAssignmentOperator(binaryExpression.getOperatorToken().getKind()))
+			continue;
+		if (!isDirectPropertyAccess(binaryExpression.getLeft(), ownerName, setterName))
+			continue;
+		
+		if (filterType == 'some')
+			return true;
+		result.push(binaryExpression);
+	}
+
+	for (const prefixExpression of node.getDescendantsOfKind(SyntaxKind.PrefixUnaryExpression)) {
+		const kind = prefixExpression.getOperatorToken();
+		if (kind != SyntaxKind.PlusPlusToken && kind != SyntaxKind.MinusMinusToken)
+			continue;
+		if (!isDirectPropertyAccess(prefixExpression.getOperand(), ownerName, setterName))
+			continue;
+
+		if (filterType == 'some')
+			return true;
+		result.push(prefixExpression);
+	}
+
+	for (const postfixExpression of node.getDescendantsOfKind(SyntaxKind.PostfixUnaryExpression)) {
+		const kind = postfixExpression.getOperatorToken();
+		if (kind != SyntaxKind.PlusPlusToken && kind != SyntaxKind.MinusMinusToken)
+			continue;
+		if (!isDirectPropertyAccess(postfixExpression.getOperand(), ownerName, setterName))
+			continue;
+
+		if (filterType == 'some')
+			return true;
+		result.push(postfixExpression);
+	}
+
+	return filterType == 'some' ? false : result.sort((a, b) => a.getStart() - b.getStart()); // sort handles un, bin, op precedence edge case
 }
 
 export function normText(text?: string | Node) {

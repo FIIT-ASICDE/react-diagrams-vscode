@@ -129,6 +129,15 @@
             "type": "string"
           }
         },
+        "state.diagram.knownRefVariableHooks": {
+          "type": "array",
+          "description": "List of hook function names that declare ref-like state variables in format refName = useRefLike(initialValue). Mutations are tracked only for direct writes to refName.current.",
+          "default": ["useRef"],
+          "items": {
+            "type": "string"
+          },
+          "tags": ["experimental"]
+        },
         "state.diagram.mergeSquashingOptimization": {
           "type": "array",
           "uniqueItems": true,

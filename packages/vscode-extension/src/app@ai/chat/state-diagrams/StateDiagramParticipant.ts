@@ -103,10 +103,14 @@ export class StateDiagramParticipant extends BaseChatParticipant<StateDiagramCha
 		}
 		if (isContextAvailable(context.currentDiagram)) {
 			parts.push(new LanguageModelTextPart("State diagram (structured JSON object):"));
-			parts.push(new LanguageModelTextPart(JSON.stringify({ 
+
+			const serializedDiagram = JSON.stringify({
 				...context.currentDiagram.data, 
 				source: context.currentDiagram.data.source && rootPath && relative(rootPath, context.currentDiagram.data.source)
-			})));
+			}, (key, value) => {
+				return value === "" ? undefined : value;
+			});
+			parts.push(new LanguageModelTextPart(serializedDiagram));
 		} else {
 			parts.push(new LanguageModelTextPart(`State diagram: ${context.currentDiagram.status}`));
 		}

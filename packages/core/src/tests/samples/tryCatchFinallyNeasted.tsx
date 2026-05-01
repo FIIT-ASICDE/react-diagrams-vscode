@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 export default function TryCatchFinallyNested() {
   const [state, setState] = useState<"idle" | "loading" | "retrying" | "success" | "error" | "cleanup">("idle");
-  const [errorCount, setErrorCount] = useState(0);
+  const errorCount = useRef(0);
 
   async function loadData(shouldThrow: boolean, shouldRetry: boolean, logidyLogLog = false) {
     setState("loading");
@@ -18,7 +18,7 @@ export default function TryCatchFinallyNested() {
 
       setState("success");
     } catch (err) {
-      setErrorCount(prev => prev + 1);
+      errorCount.current += 1;
       setState("error");
 
       if (shouldRetry) {
@@ -29,16 +29,17 @@ export default function TryCatchFinallyNested() {
             if (Math.random() > 0.5) {
               throw new Error("Retry failure");
             }
-  
+    
             setState("success");
           } catch {
             setState("error");
           }
         }
-        while (state == 'error' && errorCount < 3);
+        while (state == 'error' && errorCount.current < 3);
       }
     } finally {
       setState('cleanup');
+      errorCount.current = 0;
     }
   }
 

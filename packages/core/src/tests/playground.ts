@@ -16,7 +16,9 @@ const reactForm = join(__dirname, 'samples', 'ifElseChain.tsx');
 const result = parseReactComponent(reactForm);
 console.log(inspect(result, { depth: null, colors: true }));
 
-// console.log(JSON.stringify(result));
+console.log(JSON.stringify(result, (key, value) => {
+	return value === "" ? undefined : value;
+}));
 
 
 // console.log(JSON.stringify(result));

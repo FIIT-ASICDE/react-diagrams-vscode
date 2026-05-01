@@ -9,6 +9,8 @@ export type StateHookKind = string /*| 'useState'*/;
 
 export type Id = string /*| number*/;
 
+export type MutationPattern = 'setter-call' | 'ref-current';
+
 export interface StateDiagramComponent {
 	name: string;
 	pos: CodePos;
@@ -21,6 +23,7 @@ export interface StateVariable {
 	hook: StateHookKind;
 	name: string;
 	setterName: string;
+	mutPattern: MutationPattern;
 	initializerText?: string;
 	typeText?: string;
 	pos: CodePos;
@@ -79,6 +82,7 @@ export interface StateUpdate {
 	nodeType: 'state-update';
 	stateVariableId: Id;
 	setterName: string;
+	mutPattern: MutationPattern;
 	kind: StateUpdateKind;
 	pos: CodePos;
 	label?: string; // expression txt

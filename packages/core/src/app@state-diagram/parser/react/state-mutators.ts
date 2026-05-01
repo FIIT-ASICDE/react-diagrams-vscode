@@ -18,7 +18,7 @@ import {
 	StateUpdateKind,
 	StateVariable,
 } from '../../../app@state-diagram-model/types';
-import { createId, getCodePos, getDeclarationKind, getFirstAncestorOfKinds, getFuncName, normText } from '../utils';
+import { createId, getCodePos, getDeclarationKind, getFirstAncestorOfKinds, getFuncName, getStateMutationNodes, normText } from '../utils';
 import { SupportedComponentDeclaration, SupportedDeclaration } from '../types';
 
 export function classifyStateUpdateKind(argument?: Node): StateUpdateKind {
@@ -42,17 +42,30 @@ export function classifyStateUpdateKind(argument?: Node): StateUpdateKind {
 	return 'expression';
 }
 
-export function createStateUpdate(stateVariable: StateVariable, callExpression: CallExpression/*, sourceFile: SourceFile*/) {
-	const arg = callExpression.getArguments()[0];
-	const label = arg ? normText(arg) : undefined;
+export function getStateUpdateLabel(mutationNode: Node, stateVariable: StateVariable, arg?: Node) {
+	if (stateVariable.mutPattern == 'ref-current' && Node.isBinaryExpression(mutationNode) && mutationNode.getOperatorToken().getKind() != SyntaxKind.EqualsToken)
+		return `${mutationNode.getOperatorToken().getText().trim()} ${normText(arg)}`;
+
+	if (arg)
+		return normText(arg);
+
+	if (Node.isPrefixUnaryExpression(mutationNode) || Node.isPostfixUnaryExpression(mutationNode))
+		return mutationNode.getOperatorToken() == SyntaxKind.PlusPlusToken ? '++' : '--';
+	return normText(mutationNode);
+}
+
+export function createStateUpdate(stateVariable: StateVariable, mutationNode: Node/*, sourceFile: SourceFile*/) {
+	const arg = Node.isCallExpression(mutationNode) ? mutationNode.getArguments()[0] : Node.isBinaryExpression(mutationNode) ? mutationNode.getRight() : undefined;
+	const label = getStateUpdateLabel(mutationNode, stateVariable, arg);
 	const kind = classifyStateUpdateKind(arg);
-	const pos = getCodePos(callExpression);
+	const pos = getCodePos(mutationNode);
 
 	const update: StateUpdate = {
 		id: createId('update', `${stateVariable.name}:${kind}`, pos),
 		nodeType: 'state-update',
 		stateVariableId: stateVariable.id,
 		setterName: stateVariable.setterName,
+		mutPattern: stateVariable.mutPattern,
 		kind,
 		pos,
 		label,
@@ -141,37 +154,27 @@ export function populateStateUpdatesAndMutators(component: SupportedComponentDec
 	if (!stateVariables.length)
 		return mutatorBodies;
 
-	const bySetter = new Map<string, StateVariable>();
-	for (const stateVariable of stateVariables)
-		bySetter.set(stateVariable.setterName, stateVariable);
+	for (const stateVariable of stateVariables) {
+		const mutationNodes = getStateMutationNodes(component, stateVariable) as Node[];
+		for (const mutationNode of mutationNodes) {
+			const fn = getFirstAncestorOfKinds<SupportedDeclaration>(mutationNode, [
+				Node.isFunctionDeclaration,
+				Node.isFunctionExpression,
+				Node.isArrowFunction
+			], component);
 
-	const callExpressions = component.getDescendantsOfKind(SyntaxKind.CallExpression);
-	for (const callExpression of callExpressions) {
-		const setterName = getFuncName(callExpression);
-		if (!setterName)
-			continue;
+			const update = createStateUpdate(stateVariable, mutationNode);
+			addUniqueUpdateToStateVariable(stateVariable, update);
 
-		const stateVariable = bySetter.get(setterName);
-		if (!stateVariable)
-			continue;
+			const mutator = getOrCreateMutator(stateVariable, component, fn);
+			addUpdateNodeToMutator(mutator, update);
 
-		const fn = getFirstAncestorOfKinds<SupportedDeclaration>(callExpression, [
-			Node.isFunctionDeclaration,
-			Node.isFunctionExpression,
-			Node.isArrowFunction
-		], component);
-
-		const update = createStateUpdate(stateVariable, callExpression);
-		addUniqueUpdateToStateVariable(stateVariable, update);
-
-		const mutator = getOrCreateMutator(stateVariable, component, fn);
-		addUpdateNodeToMutator(mutator, update);
-
-		if (!mutatorBodies.has(mutator.id)) {
-			const body = (fn ?? component as SupportedDeclaration).getBody();
-			// console.log(body);
-			if (body && Node.isBlock(body))
-				mutatorBodies.set(mutator.id, body);
+			if (!mutatorBodies.has(mutator.id)) {
+				const body = (fn ?? component as SupportedDeclaration).getBody();
+				// console.log(body);
+				if (body && Node.isBlock(body))
+					mutatorBodies.set(mutator.id, body);
+			}
 		}
 	}
 

@@ -30,7 +30,7 @@ import {
 	StateUpdateKind,
 	StateVariable,
 } from '../../../app@state-diagram-model/types';
-import { codePosStr, createId, getAllCalls, getCodePos, getFuncName, normText } from '../utils';
+import { codePosStr, createId, getCodePos, getFuncName, getStateMutationNodes, normText } from '../utils';
 import { truncate } from '../../../app@core/utils';
 
 export function createFlowNode(kind: ControlFlowNodeKind, node: Node, mutator: StateMutatingFunction, label?: string/*, sourceFile: SourceFile*/): ControlFlowNode {
@@ -90,8 +90,8 @@ export function normalizeOpenEdges(openEdges: OpenEdge[], to?: StateGraphNode) {
 	return result;
 }
 
-export const isRelevant = (node: Node, setterName: string, hasSetterAhead = false) => {
-	if (getAllCalls(node, setterName, "some"))
+export const isRelevant = (node: Node, stateVariable: StateVariable, hasSetterAhead = false) => {
+	if (getStateMutationNodes(node, stateVariable, 'some'))
 		return true;
 
 	if (!hasSetterAhead)
@@ -209,10 +209,10 @@ export class GraphBuilder {
 
 	visitReturn(statement: ReturnStatement, incoming: OpenEdge[]) {
 		let current = incoming;
-		const setterCalls = getAllCalls(statement, this.stateVariable.setterName) as CallExpression[];
+		const mutationNodes = getStateMutationNodes(statement, this.stateVariable) as Node[];
 
-		for (const call of setterCalls) {
-			const updateNode = this.updateNodesByPos.get(codePosStr(getCodePos(call)));
+		for (const mutationNode of mutationNodes) {
+			const updateNode = this.updateNodesByPos.get(codePosStr(getCodePos(mutationNode)));
 			if (!updateNode)
 				continue;
 
@@ -234,7 +234,7 @@ export class GraphBuilder {
 	}
 
 	visitIf(statement: IfStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext): OpenEdge[] {
-		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+		if (!isRelevant(statement, this.stateVariable, hasSetterAhead)) // omit unrelated
 			return incoming;
 
 		const conditionText = statement.getExpression().getText();
@@ -267,7 +267,7 @@ export class GraphBuilder {
 	}
 
 	visitTry(statement: TryStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext) {
-		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+		if (!isRelevant(statement, this.stateVariable, hasSetterAhead)) // omit unrelated
 			return incoming;
 
 		const decisionNode = this.appendFlowNode('try-decision', statement, 'try', emplaceMergeIfCan(incoming, `merge->try`, this.options));
@@ -317,7 +317,7 @@ export class GraphBuilder {
 	}
 
 	visitSwitch(statement: SwitchStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext) {
-		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+		if (!isRelevant(statement, this.stateVariable, hasSetterAhead)) // omit unrelated
 			return incoming;
 
 		const decisionNode = this.appendFlowNode('switch-decision', statement, truncate(statement.getExpression().getText(), 80), emplaceMergeIfCan(incoming, `merge->switch`, this.options));
@@ -329,7 +329,7 @@ export class GraphBuilder {
 
 		for (let i = clauses.length - 1; i >= 0; i--) {
 			hasSetterAfterClause[i] = seenSetterAhead;
-			if (getAllCalls(clauses[i], this.stateVariable.setterName, 'some'))
+			if (getStateMutationNodes(clauses[i], this.stateVariable, 'some'))
 				seenSetterAhead = true;
 		}
 
@@ -357,7 +357,7 @@ export class GraphBuilder {
 
 			for (let j = statements.length - 1; j >= 0; j--) {
 				hasSetterAfterStmt[j] = seenSetterInClause;
-				if (getAllCalls(statements[j], this.stateVariable.setterName, 'some'))
+				if (getStateMutationNodes(statements[j], this.stateVariable, 'some'))
 					seenSetterInClause = true;
 			}
 
@@ -377,7 +377,7 @@ export class GraphBuilder {
 	}
 
 	visitLoop(statement: ForStatement | WhileStatement, incoming: OpenEdge[], hasSetterAhead = false) {
-		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+		if (!isRelevant(statement, this.stateVariable, hasSetterAhead)) // omit unrelated
 			return incoming;
 
 		const conditionText = Node.isWhileStatement(statement) ? statement.getExpression().getText() : statement.getCondition()?.getText() ?? 'for';
@@ -402,7 +402,7 @@ export class GraphBuilder {
 	}
 
 	visitDoWhile(statement: DoStatement, incoming: OpenEdge[], hasSetterAhead = false) {
-		if (!isRelevant(statement, this.stateVariable.setterName, hasSetterAhead)) // omit unrelated
+		if (!isRelevant(statement, this.stateVariable, hasSetterAhead)) // omit unrelated
 			return incoming;
 
 		const bodyEntry = this.appendFlowNode('merge', statement, 'do');
@@ -438,7 +438,7 @@ export class GraphBuilder {
 
 			for (let i = statements.length - 1; i >= 0; i--) {
 				hasSetterAfter[i] = seenSetterAhead;
-				if (getAllCalls(statements[i], this.stateVariable.setterName, "some"))
+				if (getStateMutationNodes(statements[i], this.stateVariable, 'some'))
 					seenSetterAhead = true;
 			}
 
@@ -477,9 +477,9 @@ export class GraphBuilder {
 		if (Node.isThrowStatement(what))
 			return this.visitEnd(what, incoming, 'throw');
 
-		const setterCalls = getAllCalls(what, this.stateVariable.setterName) as CallExpression[];
-		for (const call of setterCalls) {
-			const updateNode = this.updateNodesByPos.get(codePosStr(getCodePos(call)));
+		const mutationNodes = getStateMutationNodes(what, this.stateVariable) as Node[];
+		for (const mutationNode of mutationNodes) {
+			const updateNode = this.updateNodesByPos.get(codePosStr(getCodePos(mutationNode)));
 			if (!updateNode)
 				continue;
 
