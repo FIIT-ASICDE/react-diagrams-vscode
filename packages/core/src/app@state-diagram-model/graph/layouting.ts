@@ -49,7 +49,7 @@ export const ELK_OPTIONS: LayoutOptions = {
 	'elk.portConstraints': 'FIXED_SIDE',
 	'elk.edgeRouting': 'POLYLINE',
 	
-	'elk.spacing.edgeEdge': '35',
+	'elk.spacing.edgeEdge': '40',
 	"elk.spacing.edgeNode": "45",
 	'elk.spacing.nodeNode': '54',
 	'elk.padding': elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad, LAYOUT.mutator.pad),

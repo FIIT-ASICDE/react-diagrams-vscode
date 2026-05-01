@@ -90,13 +90,15 @@ export function normalizeOpenEdges(openEdges: OpenEdge[], to?: StateGraphNode) {
 	return result;
 }
 
-export const isRelevant = (node: Node, stateVariable: StateVariable, hasSetterAhead = false) => {
+export const isRelevant = (node: Node, stateVariable: StateVariable, hasSetterAhead = false, options?: StateGraphOptions) => {
 	if (getStateMutationNodes(node, stateVariable, 'some'))
 		return true;
 
 	if (!hasSetterAhead)
 		return false;
 
+	if (options && !options.considerEarlyExits)
+		return false;
 	return node.getDescendants().some(n => Node.isReturnStatement(n) || Node.isThrowStatement(n));
 };
 
@@ -117,6 +119,7 @@ export type MergeSquashType = "merge->merge" | "merge->decision" | "merge->try" 
 export interface StateGraphOptions {
 	mergeSquashing?: MergeSquashType[];
 	useGuardsWhenPossible?: boolean;
+	considerEarlyExits?: boolean;
 }
 
 export const emplaceMergeIfCan = (incoming: OpenEdge[], mergeSquashType: MergeSquashType, options?: StateGraphOptions, currNode?: StateGraphNode) => {
@@ -234,7 +237,7 @@ export class GraphBuilder {
 	}
 
 	visitIf(statement: IfStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext): OpenEdge[] {
-		if (!isRelevant(statement, this.stateVariable, hasSetterAhead)) // omit unrelated
+		if (!isRelevant(statement, this.stateVariable, hasSetterAhead, this.options)) // omit unrelated
 			return incoming;
 
 		const conditionText = statement.getExpression().getText();
@@ -267,7 +270,7 @@ export class GraphBuilder {
 	}
 
 	visitTry(statement: TryStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext) {
-		if (!isRelevant(statement, this.stateVariable, hasSetterAhead)) // omit unrelated
+		if (!isRelevant(statement, this.stateVariable, hasSetterAhead, this.options)) // omit unrelated
 			return incoming;
 
 		const decisionNode = this.appendFlowNode('try-decision', statement, 'try', emplaceMergeIfCan(incoming, `merge->try`, this.options));
@@ -317,7 +320,7 @@ export class GraphBuilder {
 	}
 
 	visitSwitch(statement: SwitchStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext) {
-		if (!isRelevant(statement, this.stateVariable, hasSetterAhead)) // omit unrelated
+		if (!isRelevant(statement, this.stateVariable, hasSetterAhead, this.options)) // omit unrelated
 			return incoming;
 
 		const decisionNode = this.appendFlowNode('switch-decision', statement, truncate(statement.getExpression().getText(), 80), emplaceMergeIfCan(incoming, `merge->switch`, this.options));
@@ -377,7 +380,7 @@ export class GraphBuilder {
 	}
 
 	visitLoop(statement: ForStatement | WhileStatement, incoming: OpenEdge[], hasSetterAhead = false) {
-		if (!isRelevant(statement, this.stateVariable, hasSetterAhead)) // omit unrelated
+		if (!isRelevant(statement, this.stateVariable, hasSetterAhead, this.options)) // omit unrelated
 			return incoming;
 
 		const conditionText = Node.isWhileStatement(statement) ? statement.getExpression().getText() : statement.getCondition()?.getText() ?? 'for';
@@ -402,7 +405,7 @@ export class GraphBuilder {
 	}
 
 	visitDoWhile(statement: DoStatement, incoming: OpenEdge[], hasSetterAhead = false) {
-		if (!isRelevant(statement, this.stateVariable, hasSetterAhead)) // omit unrelated
+		if (!isRelevant(statement, this.stateVariable, hasSetterAhead, this.options)) // omit unrelated
 			return incoming;
 
 		const bodyEntry = this.appendFlowNode('merge', statement, 'do');

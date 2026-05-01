@@ -1,5 +1,5 @@
 import { Disposable, TextDocument, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
-import { doCommonChecksAndGetDoc, getConfigOption, getNonce, getUri, jumpToPosition, saveDiagramImage } from "../app@utils";
+import { doCommonChecksAndGetDoc, getCommonDiagramConfigOptions, getConfigOption, getNonce, getUri, jumpToPosition, saveDiagramImage } from "../app@utils";
 import { basename } from "path";
 import { componentStateCache, ImageCacheEntry } from "../app@utils/cache";
 
@@ -70,13 +70,9 @@ export class ComponentStatePanel {
 		if (!result)
 			return;
 
-		const [useGuardsWhenPossible, config] = getConfigOption<boolean>('state.diagram', 'useGuardsWhenPossible');
-		const knownStateVariableHooks = config.get<string[]>('knownStateVariableHooks', ["useState"]);
-		const knownRefVariableHooks = config.get<string[]>('knownRefVariableHooks', ["useRef"]);
-		const mergeSquashing = config.get<string[]>('mergeSquashingOptimization');
-
+		const commonConf = getCommonDiagramConfigOptions();
 		const { rootPath, targetDocument } = result;
-		return componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible, knownStateVariableHooks, knownRefVariableHooks, mergeSquashing }, forceUpdate);
+		return componentStateCache.update(targetDocument, { rootPath, ...commonConf }, forceUpdate);
 	}
 
 	// public static isShowingDocument(document: TextDocument) {
@@ -94,12 +90,8 @@ export class ComponentStatePanel {
 		this.panel.title = `${ComponentStatePanel.NAME} (${basename(activeFilePath)})`;
 
 		try {
-			const [useGuardsWhenPossible, config] = getConfigOption<boolean>('state.diagram', 'useGuardsWhenPossible');
-			const knownStateVariableHooks = config.get<string[]>('knownStateVariableHooks', ["useState"]);
-			const knownRefVariableHooks = config.get<string[]>('knownRefVariableHooks', ["useRef"]);
-			const mergeSquashing = config.get<string[]>('mergeSquashingOptimization');
-
-			const model = await componentStateCache.update(targetDocument, { rootPath, useGuardsWhenPossible, knownStateVariableHooks, knownRefVariableHooks, mergeSquashing }, forceUpdate);
+			const commonConf = getCommonDiagramConfigOptions();
+			const model = await componentStateCache.update(targetDocument, { rootPath, ...commonConf }, forceUpdate);
 
 			if (requestId != this.refreshRequestId) // Ignore if a newer refresh started while this parse was running.
 				return console.debug("Outdated refresh result discarded");

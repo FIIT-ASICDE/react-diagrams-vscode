@@ -101,6 +101,7 @@ export class StateDiagramParticipant extends BaseChatParticipant<StateDiagramCha
 		} else {
 			parts.push(new LanguageModelTextPart(`Code: ${context.currentCodeOrSelection.status}`));
 		}
+
 		if (isContextAvailable(context.currentDiagram)) {
 			parts.push(new LanguageModelTextPart("State diagram (structured JSON object):"));
 

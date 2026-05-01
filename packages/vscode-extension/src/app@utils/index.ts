@@ -21,6 +21,16 @@ export function normalizeFilePath(filePath: string) {
 	return process.platform == "win32" ? normalizedPath.toLowerCase() : normalizedPath;
 }
 
+export function getCommonDiagramConfigOptions(section = "state.diagram") {
+	const [useGuardsWhenPossible, config] = getConfigOption<boolean>(section, 'useGuardsWhenPossible');
+	const knownStateVariableHooks = config.get<string[]>('knownStateVariableHooks', ["useState"]);
+	const knownRefVariableHooks = config.get<string[]>('knownRefVariableHooks', ["useRef"]);
+	const mergeSquashing = config.get<string[]>('mergeSquashingOptimization');
+	const considerEarlyExits = config.get<boolean>('considerEarlyExits');
+
+	return { useGuardsWhenPossible, knownStateVariableHooks, knownRefVariableHooks, mergeSquashing, considerEarlyExits };
+}
+
 export async function jumpToPosition(file: Uri | string, line: number, col: number, selectCount = 1, options: TextDocumentShowOptions = {}) {
 	const uri = typeof file == "string" ? Uri.file(file) : file;
 

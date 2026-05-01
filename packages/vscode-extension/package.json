@@ -62,6 +62,11 @@
           "default": true,
           "description": "Use [guards] in the State Diagram transitions instead of decision nodes if possible."
         },
+        "state.diagram.considerEarlyExits": {
+          "type": "boolean",
+          "default": true,
+          "description": "Consider early exits, return and throw, in the State Diagram transitions."
+        },
         "state.diagram.backgroundColor": {
           "type": "string",
           "default": "auto",
@@ -141,7 +146,7 @@
         "state.diagram.mergeSquashingOptimization": {
           "type": "array",
           "uniqueItems": true,
-          "default": ["merge->decision", "merge->exit"],
+          "default": ["merge->merge", "merge->decision", "merge->exit"],
           "items": {
             "type": "string",
             "enum": [
