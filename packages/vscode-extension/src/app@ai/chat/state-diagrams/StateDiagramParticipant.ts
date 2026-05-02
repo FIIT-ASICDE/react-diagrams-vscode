@@ -3,9 +3,8 @@ import type { StateDiagram } from "@react-diagrams/core";
 import { componentStateCache } from "@/app@utils/cache";
 import { ImageCacheEntry } from "@/app@utils/cache/parsing-cache";
 import { ComponentStatePanel } from "@/app@panels/ComponentStatePanel";
-import {
+import BaseChatParticipant, {
 	BaseChatContext,
-	BaseChatParticipant,
 	ContextData,
 	contextAvailable,
 	contextStatus,
@@ -13,9 +12,10 @@ import {
 } from "../BaseChatParticipant";
 import { doCommonChecksAndGetDoc, getConfigOption } from "@/app@utils";
 import { relative } from "path";
+import { diagramToJson, getDiagram, getDiagramImageEntry } from "./utils";
 
 const getCapabilities = () => {
-	const [capabilities = ["code"]] = getConfigOption<string[]>('state.diagram', 'chatParticipantCapabilities', ["code"]);
+	const [capabilities = ["code", "diagram"]] = getConfigOption<string[]>('state.diagram', 'chatParticipantCapabilities', ["code", "diagram"]);
 	return {
 		code: capabilities.includes("code"),
 		diagram: capabilities.includes("diagram"),
@@ -30,42 +30,18 @@ export type StateDiagramChatContext = BaseChatContext & {
 	currentDiagramImage: ContextData<ImageCacheEntry>;
 };
 
-export class StateDiagramParticipant extends BaseChatParticipant<StateDiagramChatContext> {
-	async getDiagramImageEntry(doc?: TextDocument): Promise<ContextData<ImageCacheEntry>> {
-		const cached = componentStateCache.getImage(doc);
-		if (cached)
-			return contextAvailable(cached);
-
-		const requested = await ComponentStatePanel.current?.requestCurrentDiagramImage(false);
-		if (requested === null)
-			return contextStatus("unobtainable");
-		return requested ? contextAvailable(requested) : contextStatus("unavailable");
-	}
-
-	async getDiagram(doc?: TextDocument): Promise<ContextData<StateDiagram>> {
-		const entry = componentStateCache.get(doc);
-		if (!entry)
-			return contextStatus("unavailable");
-
-		try {
-			const data = await entry.data;
-			return contextAvailable(data);
-		} catch {
-			return contextStatus("unobtainable");
-		}
-	}
-
+export default class StateDiagramParticipant extends BaseChatParticipant<StateDiagramChatContext> {
 	override async getChatContext(userPrompt: string): Promise<StateDiagramChatContext> {
 		const { code: codeEnabled, diagram: diagramEnabled, diagramImage: diagramImageEnabled } = getCapabilities();
 		const { targetDocument: doc, rootPath } = doCommonChecksAndGetDoc(componentStateCache.getCurrentDocument()) ?? {};
 
 		const codeData = codeEnabled ? (doc ? contextAvailable(doc.getText()) : contextStatus<string>("unavailable")) : contextStatus<string>("disabled");
-		const diagramData = diagramEnabled ? await this.getDiagram(doc) : contextStatus<StateDiagram>("disabled");
-		const imageData = diagramImageEnabled ? await this.getDiagramImageEntry(doc) : contextStatus<ImageCacheEntry>("disabled");
+		const diagramData = diagramEnabled ? await getDiagram(doc) : contextStatus<StateDiagram>("disabled");
+		const imageData = diagramImageEnabled ? await getDiagramImageEntry(doc) : contextStatus<ImageCacheEntry>("disabled");
 
 		return {
 			userPrompt,
-			currentFilePath: rootPath && doc?.uri.fsPath && relative(rootPath, doc.uri.fsPath),
+			currentFilePath: (rootPath && doc?.uri.fsPath && relative(rootPath, doc.uri.fsPath)) ?? doc?.uri.fsPath,
 			currentCodeOrSelection: codeData,
 			codeContextKind: "full-file",
 			currentDiagram: diagramData,
@@ -79,10 +55,12 @@ export class StateDiagramParticipant extends BaseChatParticipant<StateDiagramCha
 			`Answer in: ${this.responseLanguage}.`,
 			"Always analyze code together with the state diagram context.",
 			"You can explain behavior, suggest refactors, compare code and diagram, and find potential state related issues.",
-			"Always state whether and how the diagram influenced your answer.",
-			"If code improvements would improve the resulting diagram, propose concrete code changes.",
-			"Keep answers practical, structured, and implementation-focused.",
-		].join("\n");
+			...(context.currentDiagram.status == "available" || context.currentDiagramImage.status == "available" ? [
+				"Always state whether and how the diagram influenced your answer.",
+				"Prioritize code improvments that would improve or simplify the diagram while keeping original behavior intact.",
+			] : ["If appropriate, inform user that they have to enable participant capabilities and open file with a valid component to get the full answer capabilities."]),
+			"Keep answers practical, structured, and implementation-focused, propose concrete code changes.",
+		];
 
 		const effectiveTask = context.userPrompt.length < 5 ? "Provide a short capabilities intro, suggest concrete next prompts, then give best-effort analysis from available context." : context.userPrompt;
 
@@ -105,12 +83,8 @@ export class StateDiagramParticipant extends BaseChatParticipant<StateDiagramCha
 		if (isContextAvailable(context.currentDiagram)) {
 			parts.push(new LanguageModelTextPart("State diagram (structured JSON object):"));
 
-			const serializedDiagram = JSON.stringify({
-				...context.currentDiagram.data, 
-				source: context.currentDiagram.data.source && rootPath && relative(rootPath, context.currentDiagram.data.source)
-			}, (key, value) => {
-				return value === "" ? undefined : value;
-			});
+			const serializedDiagram = diagramToJson(context.currentDiagram.data, rootPath); 
+			// console.debug("Serialized diagram:", serializedDiagram);
 			parts.push(new LanguageModelTextPart(serializedDiagram));
 		} else {
 			parts.push(new LanguageModelTextPart(`State diagram: ${context.currentDiagram.status}`));
@@ -126,7 +100,7 @@ export class StateDiagramParticipant extends BaseChatParticipant<StateDiagramCha
 		parts.push(new LanguageModelTextPart(isContextAvailable(context.currentDiagramImage) ? modelDescriptionVisual : modelDescription));
 
 		return [
-			LanguageModelChatMessage.User(systemInstruction),
+			LanguageModelChatMessage.User(systemInstruction.join("\n")),
 			LanguageModelChatMessage.User(parts)
 		];
 	}

@@ -31,9 +31,9 @@ export type BaseChatContext = {
 	codeContextKind: "selected" | "full-file";
 };
 
-export abstract class BaseChatParticipant<C extends BaseChatContext> {
+export default abstract class BaseChatParticipant<C extends BaseChatContext> {
 	constructor(
-		public readonly id: string = 'vs-code-ext.diagram',
+		public readonly id: string = 'react-diagrams.diagram',
 		public readonly modelTypeFallback: string = 'copilot',
 		public readonly responseLanguage: string = 'English',
 	) 

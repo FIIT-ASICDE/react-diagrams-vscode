@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { componentStateCache } from "@/app@utils/cache";
 
-const DIAGRAM_CHAT_PARTICIPANT_ID = "vs-code-ext.diagram";
+const DIAGRAM_CHAT_PARTICIPANT_ID = "react-diagrams.diagram";
 const MODEL_TYPE = "copilot";
 const RESPONSE_LANGUAGE = "English";
 

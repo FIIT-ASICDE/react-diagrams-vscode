@@ -1,7 +1,8 @@
 {
   "name": "@react-diagrams/vscode-extension",
-  "displayName": "vs-code-ext",
+  "displayName": "react-diagrams",
   "description": "",
+  "publisher": "FIIT-react-diagrams",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.111.0"
@@ -10,41 +11,71 @@
     "Other"
   ],
   "activationEvents": [
-    "onChatParticipant:vs-code-ext.diagram"
+    "onChatParticipant:react-diagrams.diagram"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "chatParticipants": [
       {
-        "id": "vs-code-ext.state-diagram",
+        "id": "react-diagrams.state-diagram",
         "name": "state-diagram",
         "fullName": "State Diagram Assistant",
         "description": "Understands TypeScript, TSX, and state diagrams using your current code and diagram context.",
         "isSticky": true
       }
     ],
+    "languageModelTools": [
+      {
+        "name": "stateDiagram_getCurrentDiagram",
+        "toolReferenceName": "stateDiagram",
+        "displayName": "Get Current State Diagram",
+        "modelDescription": "Returns the current in-memory React component state diagram JSON representation for last valid saved file. After that, use 'source' path with 'read' vscode tool to read the corresponding source code if you havent done so, before submitting any code changes.",
+        "userDescription": "Get the current React component state diagram.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "stateDiagram_getCurrentImage",
+        "toolReferenceName": "stateDiagramImage",
+        "displayName": "Get Current State Diagram Image",
+        "modelDescription": "Returns the render of currently viewed state diagram image. Available if the Component State Panel is open and visible.",
+        "userDescription": "Get the current state diagram screenshot.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
     "commands": [
       {
-        "command": "vs-code-ext.componentState",
-        "title": "React Component State"
+        "command": "react-diagrams.componentState",
+        "title": "State Diagram: Component State Panel"
       },
       {
-        "command": "vs-code-ext.requestStateDiagramImage",
-        "title": "Request State Diagram Image"
+        "command": "react-diagrams.requestStateDiagramImage",
+        "title": "State Diagram: Request Current Diagram Image"
       },
       {
-        "command": "vs-code-ext.componentActivity",
+        "command": "react-diagrams.installStateDiagramAgent",
+        "title": "State Diagram: Install State Diagram Agent"
+      },
+      {
+        "command": "react-diagrams.componentActivity",
         "title": "React Component Activity"
       }
     ],
     "keybindings": [
       {
-        "command": "vs-code-ext.componentState",
+        "command": "react-diagrams.componentState",
         "key": "alt+d alt+s",
         "when": "editorTextFocus"
       },
       {
-        "command": "vs-code-ext.componentActivity",
+        "command": "react-diagrams.componentActivity",
         "key": "alt+d alt+a",
         "when": "editorTextFocus"
       }
