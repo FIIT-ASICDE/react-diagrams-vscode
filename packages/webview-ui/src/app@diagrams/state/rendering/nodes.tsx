@@ -3,8 +3,9 @@ import { memo, type CSSProperties, type ReactNode } from 'react';
 import { Handle, Position, type NodeTypes } from '@xyflow/react';
 import { getColor } from '@/app@utils/utils';
 import { commonSourceHandles, commonTargetHandles } from '@/app@diagrams/activity/diagram-rendering/nodeTypes';
+import { cn } from '@/app@shadcn/lib/utils';
 
-const labelClass = "leading-none font-semibold px-0.75 py-0.5 rounded"
+const labelClass = "leading-none font-semibold px-0.75 py-0.5 rounded text-center"
 
 export type StateVisualNodeData = {
 	label?: string;
@@ -31,10 +32,18 @@ export function CenteredLabel({ label, color, background, className }: { label?:
 
 	return (
 		<span
-			className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 truncate text-center text-[10px] ${labelClass} ${className}`}
+			className={cn(`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 truncate text-[10px]`, labelClass, className)}
 			style={{ color: color ?? 'var(--vscode-foreground)', background }}
 		>
 			{label}
+		</span>
+	);
+}
+
+export function StateUpdateBadge({label, color, className}: { label?: string; color?: string; className?: string }) {
+	return (
+		<span className={cn(labelClass, className)} style={{ color: 'white', background: color }}>
+			{label?.length ? label : 'update'}
 		</span>
 	);
 }
@@ -57,7 +66,7 @@ export const StateUpdateNode = memo(({ data }: RFNodeProps) => {
 					color: 'white',
 				}}
 			>
-				<span className={`${labelClass}`} style={{ color: "white", background: data.color }}>{data.label}</span>
+				<StateUpdateBadge label={data.label} color={data.color} />
 			</div>
 		</NodeShell>
 	);
@@ -188,10 +197,12 @@ const NODE_COLORS = {
 	switchDecision: 'color-mix(in srgb, #7c9b2e 88%, transparent)',
 	loopDecision: 'color-mix(in srgb, #008f9e 88%, transparent)',
 	throw: 'color-mix(in srgb, #ff4440 88%, transparent)',
-	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 75, blockedHueRanges: [ [350, 20] ] })} 88%, transparent)`,
+	stateVariable: (text) => getColor(text, 23),
+	mutator: (text) => getColor(text, 38),
+	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 74, blockedHueRanges: [ [350, 20] ] })} 88%, transparent)`,
 };
 
-export function getNodeColor(type: string, text: string): string {
+export function getNodeColor(type: string | keyof typeof NODE_COLORS, text: string): string {
 	const clr = NODE_COLORS[type]
 	if (clr)
 		return typeof clr == 'function' ? clr(text) : clr;

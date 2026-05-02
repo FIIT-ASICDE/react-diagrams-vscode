@@ -1,10 +1,10 @@
 import { useRef, useState } from "react";
 
-export default function TryCatchFinallyNested() {
+export default function TryCatchFinallyNested(props: { logidyLogLog?: boolean }) {
   const [state, setState] = useState<"idle" | "loading" | "retrying" | "success" | "error" | "cleanup">("idle");
   const errorCount = useRef(0);
 
-  async function loadData(shouldThrow: boolean, shouldRetry: boolean, logidyLogLog = false) {
+  async function loadData(shouldThrow: boolean, shouldRetry: boolean, logidyLogLog = props.logidyLogLog) {
     setState("loading");
 
 	if (logidyLogLog) {

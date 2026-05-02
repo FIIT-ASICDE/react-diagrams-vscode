@@ -6,7 +6,6 @@ import { vscode } from '@/app@vscode/api';
 
 type DiagramType = 'state' | 'activity';
 
-
 function App() {
 	const [diagramType, setDiagramType] = useState<DiagramType>('state');
 

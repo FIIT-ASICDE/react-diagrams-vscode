@@ -1,12 +1,23 @@
-import { getGraphNodeVisual } from './nodes';
+import { getGraphNodeVisual, getNodeColor } from './nodes';
 import { layoutBoxRow, layoutStateVariable, elkPadd, STATE_DIAGRAM_LAYOUT as LAYOUT, type StateDiagram } from '@react-diagrams/core/app@state-diagram-model';
 import type { GroupNodeProps } from '@/app@shadcn/components/labeled-group-node';
-import { getColor } from '@/app@utils/utils';
 import { MarkerType, type Edge, type Node } from '@xyflow/react';
+import { cn } from '@/app@shadcn/lib/utils';
 
 export type StateDiagramProps = {
 	model?: StateDiagram;
 };
+
+export const StateVariableLabel = ({ name, hook, initializerText, className }: { name: string; hook: string; initializerText?: string; className?: string }) => (
+	<span className={cn('text-white leading-0', className)}><b>{name}</b> : {hook} {initializerText && <> = <span className='font-semibold'>{initializerText}</span></>}</span>
+)
+
+export const MutatorLabel = ({ name, args, type, className }: { name: string; args?: string; type: string; className?: string }) => {
+	const mutatorArgs = type == 'arrow-function' ? `((${args}) =>` : `(${args})`;
+	return (
+		<span className={cn('text-white leading-0', className)}><span className='font-semibold'>{name}</span>{args != undefined && <i>{mutatorArgs}</i>}</span>
+	)
+}
 
 export async function renderXyFlow(model?: StateDiagram, transitionRouting: string = 'POLYLINE') {
 	const nodes: Node[] = [];
@@ -25,8 +36,8 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 			position: { x: stateVar.x, y: stateVar.y },
 			data: {
 				...stateVar,
-				name: <span className='text-white leading-0'><b>{stateVar.name}</b> : {stateVar.hook} {initializerText && <> = <span className='font-semibold'>{initializerText}</span></>}</span>, 
-				color: getColor(stateVar.name, 24),
+				name: <StateVariableLabel initializerText={initializerText} {...stateVar} />,
+				color: getNodeColor('stateVariable', stateVar.name),
 				children: !layoutedMutators?.length && <p className='text-gray-400 italic'>No mutators found</p> 
 			} as GroupNodeProps,
 			width: stateVar.width,
@@ -35,7 +46,6 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 		});
 
 		for (const { id: mutatorId, ...mutatorLayout } of layoutedMutators) {
-			const mutatorArgs = mutatorLayout.type == 'arrow-function' ? `((${mutatorLayout.args}) =>` : `(${mutatorLayout.args})`;
 			nodes.push({
 				id: mutatorId,
 				type: 'labeledGroupNode',
@@ -44,8 +54,8 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 				extent: 'parent',
 				data: { 
 					...mutatorLayout, 
-					name: <span className='text-white leading-0'><span className='font-semibold'>{mutatorLayout.name}</span>{mutatorLayout.args != undefined && <i>{mutatorArgs}</i>}</span>,
-					color: getColor(mutatorLayout.name, 40),
+					name: <MutatorLabel {...mutatorLayout}/>,
+					color: getNodeColor('mutator', mutatorLayout.name),
 				} as GroupNodeProps,
 				width: mutatorLayout.width,
 				height: mutatorLayout.height,
