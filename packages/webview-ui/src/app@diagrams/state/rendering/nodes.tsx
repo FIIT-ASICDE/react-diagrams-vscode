@@ -197,8 +197,8 @@ const NODE_COLORS = {
 	switchDecision: 'color-mix(in srgb, #7c9b2e 88%, transparent)',
 	loopDecision: 'color-mix(in srgb, #008f9e 88%, transparent)',
 	throw: 'color-mix(in srgb, #ff4440 88%, transparent)',
-	stateVariable: (text) => getColor(text, 23),
-	mutator: (text) => getColor(text, 38),
+	stateVariable: (text) => getColor(text, { lightness: 23, blockedHueRanges: [ [-1, -1] ] }),
+	mutator: (text) => getColor(text, { lightness: 38, blockedHueRanges: [ [-1, -1] ] }),
 	stateUpdate: (text) => `color-mix(in srgb, ${getColor(text, { lightness: 74, blockedHueRanges: [ [350, 20] ] })} 88%, transparent)`,
 };
 

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties, type ReactNode } from 'react';
 import { analyzeStateDiagram, type StateDiagram, type StateDiagramAnalytics, type StateUpdate } from '@react-diagrams/core/app@state-diagram-model';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/app@shadcn/components/ui/accordion';
 import { StateUpdateBadge, getNodeColor } from './rendering/nodes';
@@ -11,7 +11,7 @@ type StateDetailsPanelProps = {
 	className?: string;
 };
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+function StatCard({ label, value }: { label: string; value: string | number | React.JSX.Element }) {
 	return (
 		<div className="rounded-md border border-(--vscode-editorWidget-border) bg-(--vscode-editorWidget-background) px-2.5 py-2">
 			<div className="text-[11px] leading-none text-(--vscode-descriptionForeground)">{label}</div>
@@ -20,11 +20,11 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 	);
 }
 
-function StateUpdatesList({ updates, className }: { updates: StateUpdate[]; className?: string }) {
+function StateUpdatesList({ updates, className, label = "Reached states" }: { updates: StateUpdate[]; className?: string; label?: string }) {
 	return (
-		<div className={cn("space-y-2", className)}>
+		<div className={cn("mb-4.5", className)}>
 			<div className="text-[11px] font-semibold uppercase tracking-wide text-(--vscode-descriptionForeground) mb-1">
-				Reached states:
+				{label} ({updates.length}):
 			</div>
 			{updates.length > 0 && <div className="flex flex-wrap items-center gap-1.5">
 				{updates.map((update, idx) => {
@@ -40,13 +40,13 @@ function StateUpdatesList({ updates, className }: { updates: StateUpdate[]; clas
 	)
 }
 
-function AccordionLabel({ name, labelClass, labelStyle, children }: { name: React.ReactNode | string; labelClass?: string; labelStyle?: React.CSSProperties; children?: React.ReactNode }) {
+function AccordionLabel({ name, labelClass, labelStyle, children }: { name: ReactNode | string; labelClass?: string; labelStyle?: CSSProperties; children?: ReactNode }) {
 	return (
 		<div className="flex min-w-0 flex-1 items-center justify-between gap-1">
 			<span className={cn("w-fit rounded-sm text-xs truncate not-hover:max-w-45 font-semibold text-white", labelClass)} style={labelStyle}>
 				{name}
 			</span>
-			<p className="text-[11px] text-(--vscode-descriptionForeground) mr-2">
+			<p className="text-[11px] text-(--vscode-descriptionForeground) mr-1.75">
 				{children}
 			</p>
 		</div>
@@ -54,32 +54,40 @@ function AccordionLabel({ name, labelClass, labelStyle, children }: { name: Reac
 }
 
 const StateMutatorAccordions = ({ analysis, expandedStateVariables }: { analysis: StateDiagramAnalytics; expandedStateVariables: string[] }) => (
-	<Accordion type="multiple" defaultValue={expandedStateVariables}>
+	<Accordion type="multiple" defaultValue={expandedStateVariables} className="space-y-2 px-2 pb-2">
 		{analysis.stateVariables.map((stateVariable) => {
-			const variableColor = getNodeColor('stateVariable', stateVariable.name);
+			const variableColor = `color-mix(in srgb, ${getNodeColor('stateVariable', stateVariable.name)} 90%, transparent)`;
 
 			return (
-				<AccordionItem key={stateVariable.id} value={`state-${stateVariable.id}`} className="border-(--vscode-editorWidget-border)">
+				<AccordionItem key={stateVariable.id}
+					value={`state-${stateVariable.id}`}
+					className="rounded-md border border-(--state-var-color) bg-(--vscode-editorWidget-background) px-1"
+					style={{ '--state-var-color': variableColor } as React.CSSProperties}
+				>
 					<AccordionTrigger className="px-2 py-2 hover:no-underline">
 						<AccordionLabel name={<StateVariableLabel {...stateVariable} />} labelStyle={{ backgroundColor: variableColor }} labelClass='px-1 py-0.75'>
 							{stateVariable.reachedStates.length} states | {stateVariable.mutatorCount} mutators
 						</AccordionLabel>
 					</AccordionTrigger>
 
-					<AccordionContent className="space-y-2 p-2 pb-3 mb-2">
-						<StateUpdatesList updates={stateVariable.reachedStates} />
+					<AccordionContent className="space-y-2 border-t border-(--state-var-color) p-2 pb-2 mb-1">
+						<StateUpdatesList updates={stateVariable.reachedStates} label='Unique reached states' />
 
-						<Accordion type="multiple" defaultValue={[]}>
+						<Accordion type="multiple" defaultValue={[]} className="space-y-1.5">
 							{stateVariable.mutators.map((mutator) => {
-								const mutatorColor = getNodeColor('mutator', mutator.name);
+								const mutatorColor = `color-mix(in srgb, ${getNodeColor('mutator', mutator.name)} 90%, transparent)`;
 
 								return (
-									<AccordionItem key={mutator.id} value={`mutator-${stateVariable.id}-${mutator.id}`} className="border-(--vscode-editorWidget-border)">
+									<AccordionItem key={mutator.id}
+										value={`mutator-${stateVariable.id}-${mutator.id}`}
+										className="rounded-md border border-(--mutator-color) bg-(--vscode-editor-background)"
+										style={{ '--mutator-color': mutatorColor } as React.CSSProperties}
+									>
 										<AccordionTrigger className="px-2 py-2 hover:no-underline">
 											<AccordionLabel name={<MutatorLabel {...mutator} />} labelStyle={{ backgroundColor: mutatorColor }} labelClass='px-1 py-0.75' />
 										</AccordionTrigger>
 
-										<AccordionContent className="space-y-2 p-2 mb-2">
+										<AccordionContent className="space-y-2 border-t border-(--mutator-color) p-2 mb-1">
 											<div className="grid grid-cols-2 gap-2">
 												<StatCard label="Nodes" value={mutator.nodeCount} />
 												<StatCard label="Transitions" value={mutator.transitionCount} />
@@ -103,7 +111,7 @@ export default function StateDetailsPanel({ model, title = '', className = '' }:
 	const expandedStateVariables = useMemo(() => analysis.stateVariables.map((stateVariable) => `state-${stateVariable.id}`), [analysis.stateVariables]);
 
 	return (
-		<div className={cn(`h-full overflow-y-auto border-l border-(--vscode-editorWidget-border) bg-(--vscode-editor-background)`, className)}>
+		<div className={cn(`h-full overflow-y-auto [scrollbar-width:thin] border-l border-(--vscode-editorWidget-border) bg-(--vscode-editor-background)`, className)}>
 			<div className="sticky top-0 z-10 border-b border-(--vscode-editorWidget-border) bg-(--vscode-editor-background) px-3 py-2">
 				<h2 className="text-sm font-semibold text-(--vscode-foreground)">{title || `${analysis.metrics.componentName ?? 'Unknown'}`}</h2>
 			</div>
@@ -113,12 +121,14 @@ export default function StateDetailsPanel({ model, title = '', className = '' }:
 					{/* <StatCard label="Component" value={analysis.metrics.componentName ?? 'Unknown'} /> */}
 					<StatCard label="State variables" value={analysis.metrics.stateVariableCount} />
 					<StatCard label="Mutators" value={analysis.metrics.mutatorCount} />
-					<StatCard label="Nodes" value={analysis.metrics.nodeCount} />
+					<StatCard label="Nodes | Unique states" value={
+						<>{analysis.metrics.nodeCount} <span className="text-(--vscode-descriptionForeground)">|</span> {analysis.metrics.stateCount}</>
+					}/>
 					<StatCard label="Transitions" value={analysis.metrics.transitionCount} />
 				</div>
 
 				{!analysis.stateVariables.length && (
-					<p className="text-xs italic text-(--vscode-descriptionForeground)">
+					<p className="px-2 text-xs italic text-(--vscode-descriptionForeground)">
 						No state variables found for this diagram.
 					</p>
 				)}

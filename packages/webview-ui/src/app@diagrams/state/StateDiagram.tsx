@@ -6,8 +6,6 @@ import { renderXyFlow, type StateDiagramProps } from './rendering/render';
 import StateDetailsPanel from './StateDetailsPanel';
 import { downloadDiagramImage, snapdomToPngDataUrl } from '@/app@utils/utils';
 import { VSCodeButton } from "@vscode/webview-ui-toolkit/react";
-import { Button } from '@/app@shadcn/components/ui/button';
-import { Sheet, SheetContent } from '@/app@shadcn/components/ui/sheet';
 import { cn } from '@/app@shadcn/lib/utils';
 import { vscode } from '@/app@vscode/api';
 import type { Message } from '@react-diagrams/core/app@vscode';
@@ -35,8 +33,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	const [nodes, setNodes] = useNodesState<Node>([]);
 	const [edges, setEdges] = useEdgesState<Edge>([]);
 	const [cachedImage, setCachedImage] = useState<string | null>(null);
-	const [isDetailsOpen, setIsDetailsOpen] = useState(true);
-	const [isMobileDetailsOpen, setIsMobileDetailsOpen] = useState(false);
+	const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
 	const modelCacheKey = useMemo(() => JSON.stringify(model ?? null), [model]);
 	const hasModel = useMemo(() => Boolean(model?.stateVariables?.length), [model]);
@@ -61,7 +58,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		});
 
 		return () => { cancelled = true };
-	}, [model]);
+	}, [model, setEdges, setNodes, transitionRouting]);
 
 	useEffect(() => {
 		setCachedImage(null);
@@ -131,18 +128,12 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 						<VSCodeButton className={`z-10 absolute left-1.5 top-2 scale-[0.64] not-hover:opacity-85`} onClick={() => onDiagramImage(true)}>
 							<Camera className="w-full h-full" />
 						</VSCodeButton>
-						<Button variant="outline" size="icon-sm" className="absolute right-2 top-2 z-10 hidden lg:inline-flex"
-							onClick={() => setIsDetailsOpen((open) => !open)}
+						<VSCodeButton className={`z-10 absolute right-1.5 top-2 scale-[0.64] not-hover:opacity-85`}
+							onClick={() => setIsDetailsOpen(open => !open)}
 							title={isDetailsOpen ? 'Collapse details panel' : 'Expand details panel'}
 						>
-							{isDetailsOpen ? <PanelRightClose /> : <PanelRightOpen />}
-						</Button>
-						<Button variant="outline" size="icon-sm" className="absolute right-2 top-2 z-10 lg:hidden"
-							onClick={() => setIsMobileDetailsOpen(true)}
-							title="Open details panel"
-						>
-							<PanelRightOpen />
-						</Button>
+							{isDetailsOpen ? <PanelRightClose className="w-full h-full" /> : <PanelRightOpen className="w-full h-full" />}
+						</VSCodeButton>
 						<AutoFitView ready={nodes.length > 0} />
 						<Controls fitViewOptions={fitToViewOptions} className='not-hover:opacity-85 text-gray-400' />
 						<MiniMap pannable zoomable style={{width: 150, height: 100 }} className='not-hover:opacity-85' nodeColor={minimapNodeColor} nodeStrokeColor={minimapNodeStrokeColor} />
@@ -151,15 +142,9 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 				</ReactFlow>
 			</div>
 
-			<div className={cn(`hidden h-full transition-[width] duration-200 lg:block`, isDetailsOpen ? 'w-[360px]' : 'w-0 overflow-hidden')}>
+			<div className={cn(`h-full transition-[width] duration-200`, isDetailsOpen ? 'w-[clamp(335px,32vw,390px)]' : 'w-0 overflow-hidden')}>
 				<StateDetailsPanel model={model} />
 			</div>
-
-			<Sheet open={isMobileDetailsOpen} onOpenChange={setIsMobileDetailsOpen}>
-				<SheetContent side="right" className="w-[88vw] p-0 sm:max-w-[420px]">
-					<StateDetailsPanel model={model} />
-				</SheetContent>
-			</Sheet>
 		</div>
 	);
 }

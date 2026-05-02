@@ -3,6 +3,7 @@ import type { Id, StateDiagram, StateMutatingFunction, StateUpdate, StateVariabl
 export interface StateDiagramGlobalMetrics {
 	componentName?: string;
 	stateVariableCount: number;
+	stateCount: number;
 	mutatorCount: number;
 	nodeCount: number;
 	transitionCount: number;
@@ -27,7 +28,7 @@ export interface StateVariableAnalytics {
 	mutatorCount: number;
 	nodeCount: number;
 	transitionCount: number;
-	reachedStates: StateUpdate[];
+	reachedStates: StateUpdate[]; // unique...
 	mutators: StateMutatorAnalytics[];
 }
 
@@ -40,6 +41,7 @@ export interface StateDiagramAnalytics {
 const emptyAnalytics: StateDiagramAnalytics = {
 	metrics: {
 		stateVariableCount: 0,
+		stateCount: 0,
 		mutatorCount: 0,
 		nodeCount: 0,
 		transitionCount: 0,
@@ -48,11 +50,11 @@ const emptyAnalytics: StateDiagramAnalytics = {
 };
 
 export function getMutatorAnalytics({id, name, args, type, ...mutator}: StateMutatingFunction): StateMutatorAnalytics {
-	const stateDedup = new Set();
+	// const stateDedup = new Set();
 	const reachedStates = mutator.nodes.filter(n => {
-		if (n.nodeType != 'state-update' || stateDedup.has(n.label)) 
+		if (n.nodeType != 'state-update' /*|| stateDedup.has(n.label)*/) 
 			return false;
-		stateDedup.add(n.label);
+		// stateDedup.add(n.label);
 		return true;
 	}) as StateUpdate[]
 
@@ -79,6 +81,7 @@ export function analyzeStateDiagram(diagram?: StateDiagram): StateDiagramAnalyti
 		metrics: {
 			componentName: diagram.component?.name,
 			stateVariableCount: stateVariables.length,
+			stateCount: stateVariables.reduce((sum, stateVariable) => sum + stateVariable.reachedStates.length, 0), // unique...
 			mutatorCount: stateVariables.reduce((sum, stateVariable) => sum + stateVariable.mutatorCount, 0),
 			nodeCount: stateVariables.reduce((sum, stateVariable) => sum + stateVariable.nodeCount, 0),
 			transitionCount: stateVariables.reduce((sum, stateVariable) => sum + stateVariable.transitionCount, 0),

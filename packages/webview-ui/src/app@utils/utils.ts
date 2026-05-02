@@ -23,6 +23,18 @@ export function getColor(forWhat?, options: number | { lightness?: number; satur
 	for (let i = 0; i < txt.length; i++)
 		h = (h * 31 + txt.charCodeAt(i)) >>> 0;
 
+	if (!blockedHueRanges.some(([start, end]) => start == -1 && end == -1) && h % 100 < 7)
+	{
+		const minG = 50;
+		const maxG = 160;
+		const spread = 30;
+		
+		const totalSlots = Math.floor((maxG - minG) / spread) + 1;
+		const slot = h % totalSlots;
+		const grayValue = minG + (slot * spread);
+		return chroma(grayValue, grayValue, grayValue).hex();
+	}
+
 	const hue = shiftHue(h % 360, blockedHueRanges);
 	return chroma.lch(lightness, saturation, hue).hex();
 }
