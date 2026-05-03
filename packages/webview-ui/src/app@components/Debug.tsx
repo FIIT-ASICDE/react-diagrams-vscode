@@ -10,21 +10,21 @@ type DebugProps = {
 type SettingsForm = {
 	code: boolean;
 	diagramJson: boolean;
+	diagramMermaid: boolean;
 	diagramImage: boolean;
 	allowToolCall: boolean;
 	maxToolIterations: number;
 	diagramImageTimeoutMs: number;
-	diagramRelevanceCheck: boolean;
 };
 
 const DEFAULT_SETTINGS: SettingsForm = {
 	code: true,
 	diagramJson: true,
+	diagramMermaid: true,
 	diagramImage: true,
 	allowToolCall: true,
 	maxToolIterations: 3,
 	diagramImageTimeoutMs: 15000,
-	diagramRelevanceCheck: true,
 };
 
 function toSettingsForm(value: unknown): SettingsForm {
@@ -37,11 +37,11 @@ function toSettingsForm(value: unknown): SettingsForm {
 	return {
 		code: typeof candidate.code == 'boolean' ? candidate.code : DEFAULT_SETTINGS.code,
 		diagramJson: typeof candidate.diagramJson == 'boolean' ? candidate.diagramJson : DEFAULT_SETTINGS.diagramJson,
+		diagramMermaid: typeof candidate.diagramMermaid == 'boolean' ? candidate.diagramMermaid : DEFAULT_SETTINGS.diagramMermaid,
 		diagramImage: typeof candidate.diagramImage == 'boolean' ? candidate.diagramImage : DEFAULT_SETTINGS.diagramImage,
 		allowToolCall: typeof candidate.allowToolCall == 'boolean' ? candidate.allowToolCall : DEFAULT_SETTINGS.allowToolCall,
 		maxToolIterations: typeof candidate.maxToolIterations == 'number' ? candidate.maxToolIterations : DEFAULT_SETTINGS.maxToolIterations,
 		diagramImageTimeoutMs: typeof candidate.diagramImageTimeoutMs == 'number' ? candidate.diagramImageTimeoutMs : DEFAULT_SETTINGS.diagramImageTimeoutMs,
-		diagramRelevanceCheck: typeof candidate.diagramRelevanceCheck == 'boolean' ? candidate.diagramRelevanceCheck : DEFAULT_SETTINGS.diagramRelevanceCheck,
 	};
 }
 
@@ -85,6 +85,11 @@ export default function Debug({ value, onApply }: DebugProps) {
 			</label>
 
 			<label className="flex items-center gap-2">
+				<input type="checkbox" checked={form.diagramMermaid} onChange={onChangeBool('diagramMermaid')} />
+				<span>Include diagram Mermaid</span>
+			</label>
+
+			<label className="flex items-center gap-2">
 				<input type="checkbox" checked={form.diagramImage} onChange={onChangeBool('diagramImage')} />
 				<span>Include diagram image</span>
 			</label>
@@ -116,11 +121,6 @@ export default function Debug({ value, onApply }: DebugProps) {
 					onChange={onChangeNumber('diagramImageTimeoutMs')}
 					className="rounded-sm border border-(--vscode-panel-border) bg-(--vscode-input-background) p-1"
 				/>
-			</label>
-
-			<label className="flex items-center gap-2">
-				<input type="checkbox" checked={form.diagramRelevanceCheck} onChange={onChangeBool('diagramRelevanceCheck')} />
-				<span>Enable diagram relevance check</span>
 			</label>
 
 			<div className="flex items-center gap-2">

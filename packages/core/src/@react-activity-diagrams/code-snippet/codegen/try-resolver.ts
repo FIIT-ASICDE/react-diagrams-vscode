@@ -1,6 +1,13 @@
 import { type Node, type Edge } from "@xyflow/react";
 import { normalize } from "../shared/string-utils";
-import { getData, getStr, isBackEdge, isTryExitEdge, isExceptionEdge } from "./Helpers";
+import {
+	fallthroughSuccessor,
+	getData,
+	getStr,
+	isBackEdge,
+	isExceptionEdge,
+	isTryExitEdge,
+} from "./Helpers";
 import type { BranchResolver } from "./Branch-resolver";
 
 /**
@@ -137,7 +144,7 @@ export class TryResolver {
 		}
 
 		if (!afterTry || afterTry === finallyTarget) {
-			const successor = this.fallthroughSuccessor(finallyTarget);
+			const successor = fallthroughSuccessor(this.edges, finallyTarget);
 			if (successor && successor !== finallyTarget) return successor;
 		}
 
@@ -234,27 +241,5 @@ export class TryResolver {
 	private getTryOwner(nodeId: string): string {
 		const node = this.nodeById.get(nodeId);
 		return node ? String(getData(node).tryOwner ?? "") : "";
-	}
-
-	private fallthroughSuccessor(id: string): string | undefined {
-		const out = this.edges.filter(
-			(e) =>
-				String(e.source) === id &&
-				!isBackEdge(e) &&
-				!isExceptionEdge(e.label),
-		);
-		if (out.length === 0) return undefined;
-
-		const unlabeled = out.find((e) => {
-			const n = normalize(e.label);
-			return !n || n === "next";
-		});
-		if (unlabeled) return String(unlabeled.target);
-
-		const fallish = out.find((e) => {
-			const n = normalize(e.label);
-			return n === "no" || n === "false" || n === "done" || n === "finally";
-		});
-		return String((fallish ?? out[0]).target);
 	}
 }

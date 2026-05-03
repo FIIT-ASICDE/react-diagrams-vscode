@@ -157,6 +157,8 @@ export default function ActivityDiagram() {
 			<DiagramToolbar
 				mode={viewMode}
 				currentTitle={currentTitle}
+				nodeCount={activeNodes.length}
+				edgeCount={activeEdges.length}
 				canGoBack={canGoBack}
 				onBack={goBack}
 				onSwitchToViewer={handleSwitchToViewer}

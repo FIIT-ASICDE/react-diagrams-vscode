@@ -1,8 +1,8 @@
 import { type Node, type Edge } from "@xyflow/react";
-import { START_EDGE_SOURCE_ID, type FuncArg } from "../shared/types";
-import { indent, normalize, sanitizeStatement, stringifyLabel } from "../shared/string-utils";
+import { type FuncArg } from "../shared/types";
+import { indent, normalize, stringifyLabel } from "../shared/string-utils";
 import { formatFunctionHeader, looksAsync } from "../graph/node-utils";
-import { findLabeledEdge, getOutgoingEdges } from "../graph/traversal";
+import { getOutgoingEdges } from "../graph/traversal";
 import type { Construct } from "../shared/construct";
 
 import {
@@ -13,7 +13,19 @@ import {
 	RETURN,
 	chooseDominant,
 } from "./Types";
-import { getData, getStr, getConstruct, isBackEdge, isExceptionEdge } from "./Helpers";
+import {
+	actionText,
+	extractLabel,
+	fallthroughSuccessor,
+	getConstruct,
+	getData,
+	getStr,
+	isBackEdge,
+	isExceptionEdge,
+	outgoingForwardEdges,
+	pickEdge,
+	sniffTerminator,
+} from "./Helpers";
 import { BranchResolver } from "./Branch-resolver";
 import { TryResolver } from "./try-resolver";
 
@@ -57,7 +69,6 @@ export class CodeGenerator {
 			this.nodeById,
 			this.edges,
 			this.activeLoops,
-			(node) => this.isTerminatorNode(node),
 		);
 		this.tryRes = new TryResolver(this.nodeById, this.edges, this.branches);
 	}
@@ -188,7 +199,7 @@ export class CodeGenerator {
 				case "function":
 				case "hook":
 					this.emitInlineSnippet(node, level);
-					return { outcome: FALL, next: this.fallthroughSuccessor(id) };
+					return { outcome: FALL, next: fallthroughSuccessor(this.edges, id) };
 				case "pending-return":
 					this.writeStatement(
 						getStr(getData(node).pendingReturnSourceText).trim() || "return;",
@@ -207,10 +218,10 @@ export class CodeGenerator {
 			case "merge":
 			case "initial":
 			case "start":
-				return { outcome: FALL, next: this.fallthroughSuccessor(id) };
+				return { outcome: FALL, next: fallthroughSuccessor(this.edges, id) };
 			case "expandable":
 				this.emitInlineSnippet(node, level);
-				return { outcome: FALL, next: this.fallthroughSuccessor(id) };
+				return { outcome: FALL, next: fallthroughSuccessor(this.edges, id) };
 			case "decision":
 				return this.emitIf(node, level);
 			case "loop": {
@@ -227,21 +238,21 @@ export class CodeGenerator {
 	// ── Action / inline / terminator ─────────────────────────────────────────
 
 	private emitAction(node: Node, level: number): EmitResult {
-		const text = this.actionText(node);
+		const text = actionText(node);
 		this.writeStatement(text, level);
 
-		const sniffed = getConstruct(node) ? undefined : this.sniffTerminator(text);
+		const sniffed = getConstruct(node) ? undefined : sniffTerminator(text);
 		if (sniffed) {
 			if (sniffed.kind === "break" && !sniffed.label && !this.canBreak()) {
-				return { outcome: FALL, next: this.fallthroughSuccessor(String(node.id)) };
+				return { outcome: FALL, next: fallthroughSuccessor(this.edges, String(node.id)) };
 			}
 			if (sniffed.kind === "continue" && !sniffed.label && !this.isInLoop()) {
-				return { outcome: FALL, next: this.fallthroughSuccessor(String(node.id)) };
+				return { outcome: FALL, next: fallthroughSuccessor(this.edges, String(node.id)) };
 			}
 			return { outcome: sniffed, next: undefined };
 		}
 
-		return { outcome: FALL, next: this.fallthroughSuccessor(String(node.id)) };
+		return { outcome: FALL, next: fallthroughSuccessor(this.edges, String(node.id)) };
 	}
 
 	private emitInlineSnippet(node: Node, level: number): void {
@@ -250,7 +261,7 @@ export class CodeGenerator {
 	}
 
 	private emitTerminator(node: Node, construct: Construct, level: number): EmitResult {
-		const text = this.actionText(node);
+		const text = actionText(node);
 
 		switch (construct) {
 			case "return":
@@ -259,18 +270,18 @@ export class CodeGenerator {
 				return { outcome: RETURN, next: undefined };
 
 			case "break": {
-				const label = this.extractLabel(text, "break");
+				const label = extractLabel(text, "break");
 				if (!label && !this.canBreak()) {
-					return { outcome: FALL, next: this.fallthroughSuccessor(String(node.id)) };
+					return { outcome: FALL, next: fallthroughSuccessor(this.edges, String(node.id)) };
 				}
 				this.writeStatement(text, level);
 				return { outcome: { kind: "break", label }, next: undefined };
 			}
 
 			case "continue": {
-				const label = this.extractLabel(text, "continue");
+				const label = extractLabel(text, "continue");
 				if (!label && !this.isInLoop()) {
-					return { outcome: FALL, next: this.fallthroughSuccessor(String(node.id)) };
+					return { outcome: FALL, next: fallthroughSuccessor(this.edges, String(node.id)) };
 				}
 				this.writeStatement(text, level);
 				return { outcome: { kind: "continue", label }, next: undefined };
@@ -288,10 +299,10 @@ export class CodeGenerator {
 		const condition =
 			getStr(data.sourceText).trim() || getStr(data.label).trim() || "condition";
 
-		const outgoing = this.outgoingForwardEdges(id);
-		const yesEdge = this.pickEdge(outgoing, ["yes", "true"]);
+		const outgoing = outgoingForwardEdges(this.edges, id);
+		const yesEdge = pickEdge(outgoing, ["yes", "true"]);
 		const noEdge =
-			this.pickEdge(outgoing, ["no", "false", "done"]) ??
+			pickEdge(outgoing, ["no", "false", "done"]) ??
 			outgoing.find((e) => e !== yesEdge);
 
 		const yesTarget = yesEdge ? String(yesEdge.target) : undefined;
@@ -330,7 +341,7 @@ export class CodeGenerator {
 
 		return {
 			outcome: FALL,
-			next: joinId ? this.fallthroughSuccessor(joinId) : noTarget,
+			next: joinId ? fallthroughSuccessor(this.edges, joinId) : noTarget,
 		};
 	}
 
@@ -342,7 +353,7 @@ export class CodeGenerator {
 		const expr =
 			getStr(data.sourceText).trim() || getStr(data.label).trim() || "value";
 
-		const outgoing = this.outgoingForwardEdges(id);
+		const outgoing = outgoingForwardEdges(this.edges, id);
 		const caseEdges = outgoing.filter((e) => this.parseSwitchLabels(e.label).length > 0);
 
 		const caseTargets = caseEdges.map((e) => String(e.target));
@@ -444,7 +455,7 @@ export class CodeGenerator {
 	private doWhileFallResult(id: string): EmitResult {
 		return {
 			outcome: FALL,
-			next: this.doWhileExitTarget(id) ?? this.fallthroughSuccessor(id),
+			next: this.doWhileExitTarget(id) ?? fallthroughSuccessor(this.edges, id),
 		};
 	}
 
@@ -486,10 +497,10 @@ export class CodeGenerator {
 		const label = getStr(data.label).trim();
 		const loopLabel = getStr(data.loopLabel).trim();
 
-		const outgoing = this.outgoingForwardEdges(id);
-		const bodyEdge = this.pickEdge(outgoing, ["yes", "each", "true", "body", "next"]);
+		const outgoing = outgoingForwardEdges(this.edges, id);
+		const bodyEdge = pickEdge(outgoing, ["yes", "each", "true", "body", "next"]);
 		const exitEdge =
-			this.pickEdge(outgoing, ["no", "false", "done", "exit"]) ??
+			pickEdge(outgoing, ["no", "false", "done", "exit"]) ??
 			outgoing.find((e) => String(e.target) !== String(bodyEdge?.target));
 
 		const bodyTarget = bodyEdge ? String(bodyEdge.target) : undefined;
@@ -755,8 +766,8 @@ export class CodeGenerator {
 	// ── do-while helpers ─────────────────────────────────────────────────────
 
 	private doWhileExitTarget(loopId: string): string | undefined {
-		const outgoing = this.outgoingForwardEdges(loopId);
-		const noEdge = this.pickEdge(outgoing, ["no", "false", "done", "exit"]);
+		const outgoing = outgoingForwardEdges(this.edges, loopId);
+		const noEdge = pickEdge(outgoing, ["no", "false", "done", "exit"]);
 		if (noEdge) return String(noEdge.target);
 
 		const yesBackTarget = this.edges.find(
@@ -801,67 +812,12 @@ export class CodeGenerator {
 		return undefined;
 	}
 
-	// ── Terminator sniffing ──────────────────────────────────────────────────
-
-	private isTerminatorNode(node: Node): boolean {
-		const construct = getConstruct(node);
-		if (
-			construct === "return" ||
-			construct === "throw" ||
-			construct === "break" ||
-			construct === "continue"
-		) {
-			return true;
-		}
-		return Boolean(this.sniffTerminator(this.actionText(node)));
-	}
-
-	private sniffTerminator(text: string): Outcome | undefined {
-		const t = text.trim();
-		if (/^return\b/.test(t) || /^throw\b/.test(t)) return RETURN;
-		if (/^break\b/.test(t)) return { kind: "break", label: this.extractLabel(t, "break") };
-		if (/^continue\b/.test(t)) return { kind: "continue", label: this.extractLabel(t, "continue") };
-		return undefined;
-	}
-
-	private extractLabel(text: string, keyword: "break" | "continue"): string | undefined {
-		const m = text.match(new RegExp(`^${keyword}\\s+([A-Za-z_$][\\w$]*)`));
-		return m ? m[1] : undefined;
-	}
-
 	// ── Scope helpers ────────────────────────────────────────────────────────
 
 	private isInLoop(): boolean { return this.activeLoops.size > 0; }
 	private canBreak(): boolean { return this.breakDepth > 0; }
 
-	// ── Edge / successor helpers ─────────────────────────────────────────────
-
-	private outgoingForwardEdges(id: string): Edge[] {
-		return getOutgoingEdges(this.edges, id).filter(
-			(e) => !isBackEdge(e) && !isExceptionEdge(e.label),
-		);
-	}
-
-	private fallthroughSuccessor(id: string): string | undefined {
-		const out = this.outgoingForwardEdges(id);
-		if (out.length === 0) return undefined;
-
-		const unlabeled = out.find((e) => {
-			const n = normalize(e.label);
-			return !n || n === "next";
-		});
-		if (unlabeled) return String(unlabeled.target);
-
-		const fallish = out.find((e) => {
-			const n = normalize(e.label);
-			return n === "no" || n === "false" || n === "done" || n === "finally";
-		});
-		return String((fallish ?? out[0]).target);
-	}
-
-	private pickEdge(outgoing: Edge[], preferredLabels: string[]): Edge | undefined {
-		return findLabeledEdge(outgoing, preferredLabels);
-	}
+	// ── Try-entry detection ──────────────────────────────────────────────────
 
 	private hasIncomingTryEdge(nodeId: string): boolean {
 		return this.edges.some(
@@ -1098,20 +1054,14 @@ export class CodeGenerator {
 
 	private findStartEdge(): Edge | undefined {
 		return (
-			this.edges.find((e) => String(e.source) === START_EDGE_SOURCE_ID) ??
 			this.edges.find((e) => {
 				const src = this.nodeById.get(String(e.source));
-				return src?.type === "start" || src?.type === "initial";
+				return src?.type === "initial";
 			})
 		);
 	}
 
 	// ── Text / snippet writing ───────────────────────────────────────────────
-
-	private actionText(node: Node): string {
-		const data = getData(node);
-		return getStr(data.sourceText).trim() || sanitizeStatement(getStr(data.label).trim());
-	}
 
 	private writeStatement(text: string, level: number): void {
 		if (!text) return;

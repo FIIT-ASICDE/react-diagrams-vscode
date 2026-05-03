@@ -280,7 +280,6 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
 				host.writer.addEdge(exit, loopId, getFallthroughEdgeLabel(host, exit), false);
 			}
 
-			// condition=true repeats the do-body.
 			host.writer.addEdge(loopId, body.entry, 'yes', true);
 		} else {
 			// Empty body: condition is the only visible loop node.

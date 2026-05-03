@@ -1,7 +1,10 @@
 import { type Node, type Edge } from "@xyflow/react";
 import { normalize } from "../shared/string-utils";
-import { getOutgoingEdges } from "../graph/traversal";
-import { getData, getConstruct, isBackEdge, isExceptionEdge } from "./Helpers";
+import {
+	isBackEdge,
+	isTerminatorNode,
+	outgoingForwardEdges,
+} from "./Helpers";
 
 /**
  * Resolves branch-join nodes and computes reachability distances
@@ -12,7 +15,6 @@ export class BranchResolver {
 		private readonly nodeById: Map<string, Node>,
 		private readonly edges: Edge[],
 		private readonly activeLoops: ReadonlySet<string>,
-		private readonly isTerminatorNode: (node: Node) => boolean,
 	) {}
 
 	findBranchJoin(a: string, b: string): string | undefined {
@@ -51,10 +53,10 @@ export class BranchResolver {
 			if (!node || node.type === "end") continue;
 
 			// Don't walk past terminators or active loop headers for local join detection.
-			if (this.isTerminatorNode(node)) continue;
+			if (isTerminatorNode(node)) continue;
 			if (this.activeLoops.has(current.id)) continue;
 
-			for (const edge of this.outgoingForwardEdges(current.id)) {
+			for (const edge of outgoingForwardEdges(this.edges, current.id)) {
 				queue.push({ id: String(edge.target), distance: current.distance + 1 });
 			}
 		}
@@ -104,11 +106,5 @@ export class BranchResolver {
 		}
 
 		return bestTarget;
-	}
-
-	private outgoingForwardEdges(id: string): Edge[] {
-		return getOutgoingEdges(this.edges, id).filter(
-			(e) => !isBackEdge(e) && !isExceptionEdge(e.label),
-		);
 	}
 }

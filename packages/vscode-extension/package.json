@@ -86,6 +86,11 @@
         "default": true,
         "description": "Include activity diagram JSON when available."
       },
+      "reactDiagrams.chat.diagramMermaid": {
+        "type": "boolean",
+        "default": true,
+        "description": "Include activity diagram Mermaid (generated from current nodes and edges) when available."
+      },
       "reactDiagrams.chat.diagramImage": {
         "type": "boolean",
         "default": true,
@@ -109,11 +114,6 @@
         "minimum": 1000,
         "maximum": 60000,
         "description": "Timeout in milliseconds for capturing the rendered diagram image."
-      },
-      "reactDiagrams.chat.diagramRelevanceCheck": {
-        "type": "boolean",
-        "default": true,
-        "description": "Check whether the current diagram is relevant before sending it to the model."
       },
       "reactDiagrams.chat.debug": {
         "type": "boolean",

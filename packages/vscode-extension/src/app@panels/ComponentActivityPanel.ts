@@ -252,8 +252,6 @@ export class ComponentActivityPanel {
 			this.pendingImageRequest = undefined;
 		}
 
-		this.lastDiagramImageDataUrl = undefined;
-
 		return new Promise<string | undefined>((resolve) => {
 			const timeout = setTimeout(() => {
 				const pending = this.pendingImageRequest;
@@ -846,13 +844,15 @@ export class ComponentActivityPanel {
 			const dataUrl =
 				typeof message.data?.dataUrl === "string" ? message.data.dataUrl : undefined;
 
-			this.lastDiagramImageDataUrl = dataUrl;
+			if (dataUrl) {
+				this.lastDiagramImageDataUrl = dataUrl;
+			}
 
 			if (this.pendingImageRequest) {
 				const pending = this.pendingImageRequest;
 				this.pendingImageRequest = undefined;
 				clearTimeout(pending.timeout);
-				pending.resolve(dataUrl);
+				pending.resolve(dataUrl ?? this.lastDiagramImageDataUrl);
 			}
 
 			if (message.data?.error) {

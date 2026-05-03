@@ -1,11 +1,9 @@
 import * as vscode from "vscode";
-import { ChatContextSnapshot } from "../types";
-import { AgentContext } from "../context/agent-context";
-import { UserFocus } from "../focus/user-focus";
+import { ChatContext } from "../context/chat-context";
 import {
-  CODE_FROM_DIAGRAM_TOOL_NAME,
-  DIAGRAM_TOOL_NAME,
   RESPONSE_LANGUAGE,
+  DIAGRAM_TOOL_NAME,
+  CODE_FROM_DIAGRAM_TOOL_NAME,
 } from "../config";
 
 export function buildSystemPrompt(): string {
@@ -13,137 +11,61 @@ export function buildSystemPrompt(): string {
     "Role: expert assistant for TypeScript, TSX, and activity diagrams.",
     `Respond in: ${RESPONSE_LANGUAGE}.`,
     "",
-    "Decide the appropriate response type from the user's prompt:",
+    "## Available context",
+    "- The request may include code, diagram JSON, and/or an attached diagram image.",
     "",
-    "1. REFACTOR — the user asks to refactor, rewrite, restructure, or clean up code.",
-    "   Return refactored code inside a single fenced code block (```typescript ... ```).",
-    "   The block is applied directly to the file, so it must contain ONLY valid code —",
-    "   no comments like '// rest unchanged'.",
-    "   If a `FOCUS` section is provided, return ONLY that focused code.",
-    "   Otherwise return the full code you were given.",
-    "   Preserve behavior unless the user explicitly asks to change it.",
+    "## Tool usage",
+    `- Call \`${DIAGRAM_TOOL_NAME}\` whenever the user wants to create, generate, visualize, show, or update an activity diagram from code.`,
+    `  - If source code is provided in the context (CODE section), pass it as the \`sourceText\` input to the tool.`,
+    `  - Do NOT skip the tool call and just describe what the diagram would look like — always invoke the tool.`,
+    `- Call \`${CODE_FROM_DIAGRAM_TOOL_NAME}\` whenever the user wants to generate or reconstruct code FROM an existing activity diagram.`,
+    `  - This applies when the user asks to "generate code", "write code for this diagram", or similar.`,
     "",
-    "   If the user ALSO asks for explanation: put the code block FIRST, then prose after.",
-    "   Use at most ONE code block total.",
-    "",
-    "2. EXPLANATION / ANALYSIS — the user asks to explain, analyze, compare, or find issues.",
-    "   Answer in prose. No code block unless showing a very short example.",
-    "",
-    "3. TOOLS — you have two tools available. Pick the right one based on the user's intent:",
-    "",
-    `   a) ${DIAGRAM_TOOL_NAME}`,
-    "      Use when the user wants to CREATE, GENERATE, SHOW, VISUALIZE, or DRAW",
-    "      an activity diagram FROM CODE.",
-    "      Examples: 'create a diagram', 'show flow', 'visualize this function'.",
-    "      If a `FOCUS` section is present, pass ONLY that focused code as `sourceText`.",
-    "      Do NOT pass the entire file when the user asked about a specific function.",
-    "",
-    `   b) ${CODE_FROM_DIAGRAM_TOOL_NAME}`,
-    "      Use when the user wants to GENERATE, CREATE, PRODUCE, or BUILD CODE",
-    "      FROM THE EXISTING ACTIVITY DIAGRAM. The activity diagram is already",
-    "      rendered on screen; the user wants its TypeScript equivalent.",
-    "      Examples: 'generate code from this diagram', 'turn the diagram into code'.",
-    "      Do NOT try to write this code yourself — the tool does it deterministically.",
-    "      This tool takes no required input; just call it.",
-    "",
-    "Rules:",
-    "- A `FOCUS` section always takes precedence over the full file.",
-    "- Do not assume anything not explicitly provided.",
-    "- Answer strictly what the user asked — nothing more, nothing less.",
+    "## Response format",
+    "- After a tool call, interpret the tool result and answer the user concisely.",
+    "- If the user asks for an explanation or refactoring suggestion (no diagram needed), respond with prose or a code block — no tool call required.",
+    "- Only ask for missing context when the request cannot be answered from the provided code, diagram JSON, or attached image.",
+    "- If the diagram is present, use it to analyse logic only after you analyse the code itself, and state whether the diagram changed your understanding of the code flow.",
   ].join("\n");
 }
 
 type UserPart = vscode.LanguageModelTextPart | vscode.LanguageModelDataPart;
 
-export function buildInitialUserParts(
-  snapshot: ChatContextSnapshot,
-  context: AgentContext,
-  focus: UserFocus,
-): UserPart[] {
-  const text = assembleInitialUserText(snapshot, context, focus);
+export function buildPrompt(userMessage: string, context: ChatContext): string {
+  const parts: string[] = [];
 
-  const parts: UserPart[] = [new vscode.LanguageModelTextPart(text)];
-  if (context.diagramImage.part) parts.push(context.diagramImage.part);
+  parts.push(`User message:\n${userMessage}`);
+
+  if (context.code) {
+    parts.push("CODE:\n```ts\n" + context.code + "\n```");
+  }
+
+  if (context.diagramJson) {
+    parts.push("DIAGRAM JSON:\n```json\n" + context.diagramJson + "\n```");
+  }
+
+  if (context.diagramMermaid) {
+    parts.push("DIAGRAM MERMAID:\n```mermaid\n" + context.diagramMermaid + "\n```");
+  }
+
+  if (context.diagramImage && context.diagramImagePart) {
+    parts.push("DIAGRAM IMAGE IS ATTACHED. Use the attached image as input for diagram analysis requests.");
+  }
+
+  if (context.toolResults.length > 0) {
+    parts.push("TOOL RESULTS:\n```json\n" + JSON.stringify(context.toolResults, null, 2) + "\n```");
+  }
+
+  return parts.join("\n\n");
+}
+
+export function buildPromptParts(userMessage: string, context: ChatContext): UserPart[] {
+  const prompt = buildPrompt(userMessage, context);
+  const parts: UserPart[] = [new vscode.LanguageModelTextPart(prompt)];
+
+  if (context.diagramImage && context.diagramImagePart) {
+    parts.push(context.diagramImagePart);
+  }
+
   return parts;
-}
-
-function assembleInitialUserText(
-  snapshot: ChatContextSnapshot,
-  context: AgentContext,
-  focus: UserFocus,
-): string {
-  const lines: string[] = [
-    `User prompt: ${snapshot.userPrompt}`,
-    "",
-    `File: ${snapshot.activeFilePath ?? "<none>"}`,
-    `Code context kind: ${snapshot.codeContextKind}`,
-  ];
-
-  appendFocusSection(lines, focus);
-  appendCodeSection(lines, context, focus);
-  appendDiagramJsonSection(lines, context);
-  appendDiagramImageMarker(lines, context);
-
-  return lines.join("\n");
-}
-
-function appendFocusSection(lines: string[], focus: UserFocus): void {
-  if (!focus.snippet) return;
-
-  lines.push(
-    "",
-    `FOCUS — the user is asking about this${focus.name ? ` (${focus.name})` : ""}:`,
-    "```typescript",
-    focus.snippet,
-    "```",
-  );
-}
-
-function appendCodeSection(lines: string[], context: AgentContext, focus: UserFocus): void {
-  if (!context.code.present) {
-    lines.push("", "Available code: <none>");
-    return;
-  }
-
-  lines.push(
-    "",
-    focus.snippet ? "Full file (for surrounding context only):" : "Available code:",
-    "```typescript",
-    context.code.text,
-    "```",
-  );
-}
-
-function appendDiagramJsonSection(lines: string[], context: AgentContext): void {
-  if (context.diagramJson.present) {
-    lines.push("", "Available activity diagram JSON:", context.diagramJson.text);
-  } else {
-    lines.push("", "Available activity diagram JSON: <none>");
-  }
-}
-
-function appendDiagramImageMarker(lines: string[], context: AgentContext): void {
-  lines.push(
-    "",
-    context.diagramImage.present
-      ? "A rendered diagram image is attached below."
-      : "Rendered diagram image: <none>",
-  );
-}
-
-export function buildToolFollowUpText(refreshed: AgentContext): string {
-  return [
-    "",
-    "---",
-    "Refreshed diagram context after the tool ran:",
-    refreshed.diagramJson.present
-      ? "Diagram JSON:\n" + refreshed.diagramJson.text
-      : "Diagram JSON: <still unavailable>",
-    "",
-    refreshed.diagramImage.present
-      ? "A rendered diagram image is attached below."
-      : "Rendered diagram image: <still unavailable>",
-    "",
-    "Now finish the user's original request using this refreshed context.",
-  ].join("\n");
 }

@@ -3,7 +3,6 @@ export type FuncArg = {
 	type?: string;
 };
 
-export const START_EDGE_SOURCE_ID = "start_1";
 
 export type NodeData = {
 	label?: unknown;

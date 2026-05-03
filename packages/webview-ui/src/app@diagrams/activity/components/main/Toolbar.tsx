@@ -5,6 +5,8 @@ export type ViewMode = 'viewer' | 'playground';
 type Props = {
 	mode: ViewMode;
 	currentTitle: string;
+	nodeCount: number;
+	edgeCount: number;
 	canGoBack: boolean;
 	onBack: () => void;
 	onSwitchToViewer: () => void;
@@ -44,6 +46,8 @@ function Separator() {
 export function DiagramToolbar({
 	mode,
 	currentTitle,
+	nodeCount,
+	edgeCount,
 	canGoBack,
 	onBack,
 	onSwitchToViewer,
@@ -118,6 +122,13 @@ export function DiagramToolbar({
 					title={isPlayground ? 'Playground' : currentTitle}
 				>
 					{isPlayground ? 'Playground' : currentTitle}
+				</span>
+
+				<span
+					className="shrink-0 rounded border border-[var(--vscode-panel-border)] px-2 py-0.5 text-[10px] font-medium text-[var(--vscode-descriptionForeground)]"
+					title="Current diagram node and edge counts"
+				>
+					N: {nodeCount} | E: {edgeCount}
 				</span>
 			</div>
 

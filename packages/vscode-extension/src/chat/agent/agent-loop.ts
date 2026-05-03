@@ -1,36 +1,45 @@
 import * as vscode from "vscode";
-import { ChatContextSnapshot } from "../types";
-import { AgentContext, collectAgentContext } from "../context/agent-context";
-import { UserFocus } from "../focus/user-focus";
+import { ChatContext, ToolResult } from "../context/chat-context";
 import { CODE_FROM_DIAGRAM_TOOL_NAME, getConfig, DIAGRAM_TOOL_NAME } from "../config";
 import { streamOnce } from "./model-stream";
 import {
-  buildInitialUserParts,
+  buildPromptParts,
   buildSystemPrompt,
-  buildToolFollowUpText,
 } from "./prompt-builder";
 import { buildToolInput, isAllowedTool } from "./tool-dispatch";
 
 export interface AgenticLoopArgs {
   model: vscode.LanguageModelChat;
   tools: vscode.LanguageModelChatTool[];
-  snapshot: ChatContextSnapshot;
-  context: AgentContext;
-  focus: UserFocus;
+  userMessage: string;
+  context: ChatContext;
+  refreshContext: () => Promise<void>;
   request: vscode.ChatRequest;
   token: vscode.CancellationToken;
   stream: vscode.ChatResponseStream;
+  onToolCallEvent?: (event: ToolCallEvent) => void;
+}
+
+export interface ToolCallEvent {
+  iteration: number;
+  name: string;
+  callId: string;
+  input: Record<string, unknown> | undefined;
+  startedAt: string;
+  finishedAt: string;
+  success: boolean;
+  errorMessage?: string;
 }
 
 export async function runAgenticLoop(args: AgenticLoopArgs): Promise<string | undefined> {
-  const messages: vscode.LanguageModelChatMessage[] = [
-    vscode.LanguageModelChatMessage.User(buildSystemPrompt()),
-    vscode.LanguageModelChatMessage.User(buildInitialUserParts(args.snapshot, args.context, args.focus)),
-  ];
-
   const config = getConfig();
 
   for (let iteration = 0; iteration < config.maxToolIterations + 1; iteration++) {
+    const messages: vscode.LanguageModelChatMessage[] = [
+      vscode.LanguageModelChatMessage.User(buildSystemPrompt()),
+      vscode.LanguageModelChatMessage.User(buildPromptParts(args.userMessage, args.context)),
+    ];
+
     const isLastIteration = iteration === config.maxToolIterations;
     const options = buildRequestOptions(args.tools, isLastIteration);
 
@@ -42,10 +51,21 @@ export async function runAgenticLoop(args: AgenticLoopArgs): Promise<string | un
       return result.text || "The model requested an unknown tool. Please try again.";
     }
 
-    const toolResult = await invokeTool(args, result.toolCall);
-    if (!toolResult) return undefined;
+    const toolResult = await invokeTool(args, result.toolCall, iteration);
+    if (!toolResult) {
+      args.context.toolResults.push({
+        toolName: result.toolCall.name,
+        callId: result.toolCall.callId,
+        iteration,
+        success: false,
+        at: new Date().toISOString(),
+        errorMessage: "Tool invocation failed",
+      });
+      continue;
+    }
 
-    await appendToolRoundToMessages(args, messages, result.toolCall, toolResult);
+    args.context.toolResults.push(buildToolResultMetadata(result.toolCall, toolResult, iteration));
+    await args.refreshContext();
   }
 
   return "I wasn't able to complete the request.";
@@ -63,19 +83,41 @@ function buildRequestOptions(
 async function invokeTool(
   args: AgenticLoopArgs,
   toolCall: vscode.LanguageModelToolCallPart,
+  iteration: number,
 ): Promise<vscode.LanguageModelToolResult | undefined> {
   announceToolStart(args.stream, toolCall.name);
 
-  const input = buildToolInput(toolCall.name, args.snapshot, args.focus, toolCall.input);
+  const input = buildToolInput(toolCall.name, args.context, toolCall.input);
+  const startedAt = new Date().toISOString();
 
   try {
-    return await vscode.lm.invokeTool(
+    const toolResult = await vscode.lm.invokeTool(
       toolCall.name,
       { input, toolInvocationToken: args.request.toolInvocationToken },
       args.token,
     );
+    args.onToolCallEvent?.({
+      iteration,
+      name: toolCall.name,
+      callId: toolCall.callId,
+      input,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      success: true,
+    });
+    return toolResult;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    args.onToolCallEvent?.({
+      iteration,
+      name: toolCall.name,
+      callId: toolCall.callId,
+      input,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      success: false,
+      errorMessage: msg,
+    });
     args.stream.markdown(`❌ Tool invocation failed: \`${msg}\``);
     return undefined;
   }
@@ -89,44 +131,16 @@ function announceToolStart(stream: vscode.ChatResponseStream, toolName: string):
   }
 }
 
-async function appendToolRoundToMessages(
-  args: AgenticLoopArgs,
-  messages: vscode.LanguageModelChatMessage[],
+function buildToolResultMetadata(
   toolCall: vscode.LanguageModelToolCallPart,
-  toolResult: vscode.LanguageModelToolResult,
-): Promise<void> {
-  await delay(750);
-
-  const refreshed = await collectAgentContext(args.snapshot);
-  const mergedContent = mergeToolResultWithFollowUp(
-    toolResult,
-    buildToolFollowUpText(refreshed),
-    refreshed.diagramImage.part,
-  );
-
-  messages.push(
-    vscode.LanguageModelChatMessage.Assistant([toolCall]),
-    vscode.LanguageModelChatMessage.User([
-      new vscode.LanguageModelToolResultPart(toolCall.callId, mergedContent),
-    ]),
-  );
-}
-
-type MessagePart = vscode.LanguageModelTextPart | vscode.LanguageModelDataPart;
-
-function mergeToolResultWithFollowUp(
-  toolResult: vscode.LanguageModelToolResult,
-  followUpText: string,
-  imagePart?: vscode.LanguageModelDataPart,
-): MessagePart[] {
-  const merged: MessagePart[] = [
-    ...(toolResult.content as MessagePart[]),
-    new vscode.LanguageModelTextPart(followUpText),
-  ];
-  if (imagePart) merged.push(imagePart);
-  return merged;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+  _toolResult: vscode.LanguageModelToolResult,
+  iteration: number,
+): ToolResult {
+  return {
+    toolName: toolCall.name,
+    callId: toolCall.callId,
+    iteration,
+    success: true,
+    at: new Date().toISOString(),
+  };
 }

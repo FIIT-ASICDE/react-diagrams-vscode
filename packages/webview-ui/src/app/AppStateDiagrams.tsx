@@ -8,21 +8,21 @@ import { vscode, type UpdatePayload } from '@/app@vscode/api';
 type ChatSettingsConfig = {
 	code: boolean;
 	diagramJson: boolean;
+	diagramMermaid: boolean;
 	diagramImage: boolean;
 	allowToolCall: boolean;
 	maxToolIterations: number;
 	diagramImageTimeoutMs: number;
-	diagramRelevanceCheck: boolean;
 };
 
 const DEFAULT_CHAT_SETTINGS: ChatSettingsConfig = {
 	code: true,
 	diagramJson: true,
+	diagramMermaid: true,
 	diagramImage: true,
 	allowToolCall: true,
 	maxToolIterations: 3,
 	diagramImageTimeoutMs: 15000,
-	diagramRelevanceCheck: true,
 };
 
 function App() {
