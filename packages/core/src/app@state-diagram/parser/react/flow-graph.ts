@@ -68,9 +68,6 @@ export function normalizeOpenEdges(openEdges: OpenEdge[], to?: StateGraphNode) {
 			continue;
 		}
 
-		if (edge.from.kind == 'switch-decision' && to?.kind == 'merge')
-			continue;
-
 		const existing = caseByFromId.get(edge.from.id);
 		if (!existing) {
 			caseByFromId.set(edge.from.id, edge);
@@ -420,6 +417,10 @@ export class GraphBuilder {
 
 			fallthroughOpen = current;
 		}
+
+		const hasDefaultClause = clauses.some(c => Node.isDefaultClause(c));
+		if (!hasDefaultClause)
+			fallthroughOpen.push({ from: decisionNode, kind: StateTransitionKind.Default }); // implicit default...
 
 		return this.collapseWithMerge(statement, [...switchBreakEdges, ...fallthroughOpen]);
 	}

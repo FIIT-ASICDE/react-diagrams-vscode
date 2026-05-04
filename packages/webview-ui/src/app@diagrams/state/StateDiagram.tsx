@@ -145,7 +145,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 				</ReactFlow>
 			</div>
 
-			<div className={cn(`h-full transition-[width] duration-200`, isDetailsOpen ? 'w-[clamp(335px,32vw,390px)]' : 'w-0 overflow-hidden')} onClick={(ev) => {
+			<div className={cn(`h-full transition-[width] duration-200`, isDetailsOpen ? 'w-[clamp(340px,32vw,395px)]' : 'w-0 overflow-hidden')} onClick={(ev) => {
 				if (ev.ctrlKey && ev.shiftKey) {
 					console.debug(model);
 					console.debug(JSON.stringify(model, (key, value) => value === "" ? undefined : value));
