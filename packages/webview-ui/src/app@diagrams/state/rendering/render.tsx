@@ -108,7 +108,7 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 					type: 'routable',
 					animated: loopBack,
 					markerEnd: { type: MarkerType.ArrowClosed },
-					style: { strokeWidth: 1.4, borderRadius: 10 },
+					style: { strokeWidth: 1.45, borderRadius: 10 },
 					data: { pathPoints, labelPos, minPoints: 2 },
 				});
 			}

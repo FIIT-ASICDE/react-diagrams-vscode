@@ -102,6 +102,29 @@ export const isRelevant = (node: Node, stateVariable: StateVariable, hasSetterAh
 	return node.getDescendants().some(n => Node.isReturnStatement(n) || Node.isThrowStatement(n));
 };
 
+export const emplaceMergeIfCan = (incoming: OpenEdge[], mergeSquashType: MergeSquashType, options?: StateGraphOptions, currNode?: StateGraphNode) => {
+	currNode ??= incoming[0]?.from;
+	return incoming.length == 1 && options?.mergeSquashing?.includes(mergeSquashType) && incoming[0]?.kind == StateTransitionKind.Normal && currNode?.kind == 'merge' ? currNode : undefined;
+}
+
+export function createLoopContext(context: StateVisitContext | undefined, label: string | undefined, breakEdges: OpenEdge[], continueEdges: OpenEdge[]) {
+	const loopContext: StateVisitContext = {
+		breakCollector: breakEdges,
+		continueCollector: continueEdges,
+		breakCollectorsByLabel: context?.breakCollectorsByLabel,
+		continueCollectorsByLabel: context?.continueCollectorsByLabel,
+	};
+
+	if (!label)
+		return loopContext;
+
+	loopContext.breakCollectorsByLabel = new Map(context?.breakCollectorsByLabel);
+	loopContext.continueCollectorsByLabel = new Map(context?.continueCollectorsByLabel);
+	loopContext.breakCollectorsByLabel.set(label, breakEdges);
+	loopContext.continueCollectorsByLabel.set(label, continueEdges);
+	return loopContext;
+}
+
 export interface OpenEdge { // We dont yet know "to", remember type and from...
 	from: StateGraphNode;
 	kind: StateTransitionKind;
@@ -113,6 +136,8 @@ export interface OpenEdge { // We dont yet know "to", remember type and from...
 export interface StateVisitContext {
 	breakCollector?: OpenEdge[];
 	continueCollector?: OpenEdge[];
+	breakCollectorsByLabel?: Map<string, OpenEdge[]>;
+	continueCollectorsByLabel?: Map<string, OpenEdge[]>;
 }
 
 export type MergeSquashType = "merge->merge" | "merge->decision" | "merge->try" | "merge->switch" | "merge->loop" | "do->x" | "merge->exit";
@@ -120,11 +145,6 @@ export interface StateGraphOptions {
 	mergeSquashing?: MergeSquashType[];
 	useGuardsWhenPossible?: boolean;
 	considerEarlyExits?: boolean;
-}
-
-export const emplaceMergeIfCan = (incoming: OpenEdge[], mergeSquashType: MergeSquashType, options?: StateGraphOptions, currNode?: StateGraphNode) => {
-	currNode ??= incoming[0]?.from;
-	return incoming.length == 1 && options?.mergeSquashing?.includes(mergeSquashType) && incoming[0]?.kind == StateTransitionKind.Normal && currNode?.kind == 'merge' ? currNode : undefined;
 }
 
 export class GraphBuilder {
@@ -303,25 +323,33 @@ export class GraphBuilder {
 		return this.collapseWithMerge(statement, finalOpen);
 	}
 
-	visitBreak(_statement: BreakStatement, incoming: OpenEdge[], context?: StateVisitContext) {
-		if (!context?.breakCollector)
+	visitBreak(statement: BreakStatement, incoming: OpenEdge[], context?: StateVisitContext) {
+		const label = statement.getLabel()?.getText();
+		const collector = label ? context?.breakCollectorsByLabel?.get(label) : context?.breakCollector;
+		if (!collector)
 			return incoming;
 
-		context.breakCollector.push(...incoming);
+		collector.push(...incoming);
 		return [];
 	}
 
-	visitContinue(_statement: ContinueStatement, incoming: OpenEdge[], context?: StateVisitContext) {
-		if (!context?.continueCollector)
+	visitContinue(statement: ContinueStatement, incoming: OpenEdge[], context?: StateVisitContext) {
+		const label = statement.getLabel()?.getText();
+		const collector = label ? context?.continueCollectorsByLabel?.get(label) : context?.continueCollector;
+		if (!collector)
 			return incoming;
 
-		context.continueCollector.push(...incoming);
+		collector.push(...incoming);
 		return [];
 	}
 
-	visitSwitch(statement: SwitchStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext) {
+	visitSwitch(statement: SwitchStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext, label?: string) {
 		if (!isRelevant(statement, this.stateVariable, hasSetterAhead, this.options)) // omit unrelated
 			return incoming;
+
+		let switchContext = context;
+		if (label)
+			switchContext = { ...context, breakCollectorsByLabel: new Map(context?.breakCollectorsByLabel) };
 
 		const decisionNode = this.appendFlowNode('switch-decision', statement, truncate(statement.getExpression().getText(), 80), emplaceMergeIfCan(incoming, `merge->switch`, this.options));
 		this.connect(decisionNode, incoming, true);
@@ -338,6 +366,8 @@ export class GraphBuilder {
 
 		let fallthroughOpen: OpenEdge[] = [];
 		const switchBreakEdges: OpenEdge[] = [];
+		if (label)
+			switchContext?.breakCollectorsByLabel?.set(label, switchBreakEdges);
 
 		for (let i = 0; i < clauses.length; i++) {
 			const clause = clauses[i];
@@ -367,7 +397,9 @@ export class GraphBuilder {
 			for (let j = 0; j < statements.length; j++) {
 				current = this.visit(statements[j], current, hasSetterAfterStmt[j], {
 					breakCollector: switchBreakEdges,
-					continueCollector: context?.continueCollector,
+					continueCollector: switchContext?.continueCollector,
+					breakCollectorsByLabel: switchContext?.breakCollectorsByLabel,
+					continueCollectorsByLabel: switchContext?.continueCollectorsByLabel,
 				});
 				if (!current.length)
 					break;
@@ -379,7 +411,7 @@ export class GraphBuilder {
 		return this.collapseWithMerge(statement, [...switchBreakEdges, ...fallthroughOpen]);
 	}
 
-	visitLoop(statement: ForStatement | WhileStatement, incoming: OpenEdge[], hasSetterAhead = false) {
+	visitLoop(statement: ForStatement | WhileStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext, label?: string) {
 		if (!isRelevant(statement, this.stateVariable, hasSetterAhead, this.options)) // omit unrelated
 			return incoming;
 
@@ -389,12 +421,13 @@ export class GraphBuilder {
 
 		const loopBreakEdges: OpenEdge[] = [];
 		const loopContinueEdges: OpenEdge[] = [];
+		const loopContext = createLoopContext(context, label, loopBreakEdges, loopContinueEdges);
 
 		const bodyOpen = this.visit(
 			statement.getStatement(),
 			[{ from: decisionNode, kind: StateTransitionKind.Then }],
 			hasSetterAhead,
-			{ breakCollector: loopBreakEdges, continueCollector: loopContinueEdges },
+			loopContext
 		);
 
 		const loopBack = [...bodyOpen, ...loopContinueEdges].map(edge => ({ ...edge, kind: StateTransitionKind.Loop }));
@@ -404,7 +437,7 @@ export class GraphBuilder {
 		return this.collapseWithMerge(statement, [{ from: decisionNode, kind: StateTransitionKind.Else }, ...loopBreakEdges]);
 	}
 
-	visitDoWhile(statement: DoStatement, incoming: OpenEdge[], hasSetterAhead = false) {
+	visitDoWhile(statement: DoStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext, label?: string) {
 		if (!isRelevant(statement, this.stateVariable, hasSetterAhead, this.options)) // omit unrelated
 			return incoming;
 
@@ -413,9 +446,10 @@ export class GraphBuilder {
 
 		const loopBreakEdges: OpenEdge[] = [];
 		const loopContinueEdges: OpenEdge[] = [];
+		const loopContext = createLoopContext(context, label, loopBreakEdges, loopContinueEdges);
 
 		const loopEntryEdge: OpenEdge[] = [{ from: bodyEntry, kind: StateTransitionKind.Normal }]
-		const bodyOpen = this.visit(statement.getStatement(), loopEntryEdge, hasSetterAhead, { breakCollector: loopBreakEdges, continueCollector: loopContinueEdges });
+		const bodyOpen = this.visit(statement.getStatement(), loopEntryEdge, hasSetterAhead, loopContext);
 
 		const conditionText = statement.getExpression().getText();
 		const decisionNode = this.appendFlowNode('loop-decision', statement, truncate(conditionText, 80));
@@ -463,10 +497,26 @@ export class GraphBuilder {
 			return this.visitSwitch(what, incoming, hasSetterAhead, context);
 
 		if (Node.isForStatement(what) || Node.isWhileStatement(what))
-			return this.visitLoop(what, incoming, hasSetterAhead);
+			return this.visitLoop(what, incoming, hasSetterAhead, context);
 
 		if (Node.isDoStatement(what))
-			return this.visitDoWhile(what, incoming, hasSetterAhead);
+			return this.visitDoWhile(what, incoming, hasSetterAhead, context);
+
+		if (Node.isLabeledStatement(what)) {
+			const label = what.getLabel().getText();
+			const statement = what.getStatement();
+
+			if (Node.isForStatement(statement) || Node.isWhileStatement(statement))
+				return this.visitLoop(statement, incoming, hasSetterAhead, context, label);
+
+			if (Node.isDoStatement(statement))
+				return this.visitDoWhile(statement, incoming, hasSetterAhead, context, label);
+
+			if (Node.isSwitchStatement(statement))
+				return this.visitSwitch(statement, incoming, hasSetterAhead, context, label);
+
+			return this.visit(statement, incoming, hasSetterAhead, context);
+		}
 
 		if (Node.isBreakStatement(what))
 			return this.visitBreak(what, incoming, context);

@@ -19,7 +19,7 @@ The state diagram is derived from source code. It is static context and cannot b
 - Treat the diagram JSON as useful semantic context, not as a replacement for reading the source code.
 - Prefer conclusions that are supported by both the source code and the diagrams when both are available.
 - Use the diagram to detect or explain state variables, mutators, update flows, transition structure, unnecessary complexity, and possible refactor opportunities.
-- Prioritize behavior-preserving source-code improvements that simplify or clarify the resulting state diagram.
+- Prioritize behavior-preserving code improvements that would reduce its complexity/length and simplify or clarify the resulting state diagram.
 - Keep responses practical, structured, and implementation-focused.
 
 ## Context Strategy

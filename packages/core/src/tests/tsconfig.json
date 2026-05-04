@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "target": "ES2022",
+    "lib": [
+      "ES2022"
+    ],
+    "declaration": true,
+    "types": [
+      "node"
+    ],
+    "noImplicitAny": false,
+    "allowUnreachableCode": false,
+    "jsx": "react-jsx",
+  },
+}
