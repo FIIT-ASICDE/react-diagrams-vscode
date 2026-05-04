@@ -86,7 +86,7 @@
         "state.diagram.openStatePanelOnTheSide": {
           "type": "boolean",
           "default": true,
-          "description": "Open the State Diagram panel on the side instead of the main area"
+          "description": "Open the Component State Panel in a split view on the side instead of the main area."
         },
         "state.diagram.useGuardsWhenPossible": {
           "type": "boolean",
@@ -112,9 +112,9 @@
             "Force Dark"
           ],
           "enumDescriptions": [
-            "Uses the vscode theme.",
-            "Ignore theme and use a white background.",
-            "Ignore theme and use a dark background."
+            "Uses the VS Code theme.",
+            "Use a white background for the state diagram.",
+            "Use a dark background for the state diagram."
           ],
           "description": "The background color mode of State Diagram."
         },
@@ -135,7 +135,7 @@
         },
         "state.diagram.chatParticipantCapabilities": {
           "type": "array",
-          "description": "Select the State Diagram chat participant capabilities.",
+          "description": "Select the State Diagram chat participant capabilities i. e. what context it can access and utilize.",
           "uniqueItems": true,
           "default": ["code", "diagram"],
           "items": {

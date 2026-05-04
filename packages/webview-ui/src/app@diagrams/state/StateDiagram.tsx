@@ -10,6 +10,7 @@ import { cn } from '@/app@shadcn/lib/utils';
 import { vscode } from '@/app@vscode/api';
 import type { Message } from '@react-diagrams/core/app@vscode';
 import { Camera, PanelRightClose, PanelRightOpen } from "lucide-react"
+import type { StateUpdate } from '@react-diagrams/core/app@state-diagram-model';
 // import { toPng } from 'html-to-image';
 
 const fitToViewOptions = { padding: 0.025, duration: 100 };
@@ -64,8 +65,8 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		setCachedImage(null);
 	}, [modelCacheKey]);
 
-	const onDoubleClick = (event: React.MouseEvent, node: Node) => {
-		vscode.postMessage("nodeDblClick", { data: { ...node.data, name: undefined, children: undefined } });
+	const onDoubleClick = (event: React.MouseEvent, node: Node | StateUpdate) => {
+		vscode.postMessage("nodeDblClick", { data: { ...((node as any)?.data ?? node), name: undefined, children: undefined } });
 	}
 
 	let pendingImgRequest = useRef<Promise<string | null> | null>(null);
@@ -143,7 +144,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 			</div>
 
 			<div className={cn(`h-full transition-[width] duration-200`, isDetailsOpen ? 'w-[clamp(335px,32vw,390px)]' : 'w-0 overflow-hidden')}>
-				<StateDetailsPanel model={model} />
+				<StateDetailsPanel model={model} onStateDoubleClick={onDoubleClick} />
 			</div>
 		</div>
 	);

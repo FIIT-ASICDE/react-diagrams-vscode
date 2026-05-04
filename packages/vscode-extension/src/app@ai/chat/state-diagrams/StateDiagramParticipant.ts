@@ -64,8 +64,10 @@ export default class StateDiagramParticipant extends BaseChatParticipant<StateDi
 
 		const effectiveTask = context.userPrompt.length < 5 ? "Provide a short capabilities intro, suggest concrete next prompts, then give best-effort analysis from available context." : context.userPrompt;
 
-		const modelDescription = "Diagram model: component = parsed component metadata; stateVariables = component state declarations (outer groups); mutators = functions that mutate respective stateVariable with control-flow and update nodes, (inner groups).";
-		const modelDescriptionVisual = "Diagram model: component = parsed component metadata; stateVariables = component state declarations (outer groups); mutators = functions that mutate respective stateVariable with control-flow and update nodes, (inner groups).";
+		const modelDescription = "Diagram model: " + 
+			"component = parsed component metadata; stateVariables = component state declarations (outer groups); mutators = functions that mutate respective stateVariable with control-flow and update nodes, (inner groups).";
+		const modelDescriptionVisual = "Diagram model: " + 
+			"component = parsed component metadata; stateVariables = component state declarations (outer groups); mutators = functions that mutate respective stateVariable with control-flow and update nodes, (inner groups).";
 
 		const rootPath = workspace.workspaceFolders?.[0].uri.fsPath;
 		const parts: Array<LanguageModelTextPart | LanguageModelDataPart> = [

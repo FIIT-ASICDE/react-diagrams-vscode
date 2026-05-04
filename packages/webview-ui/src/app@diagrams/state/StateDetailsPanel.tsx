@@ -5,10 +5,12 @@ import { StateUpdateBadge, getNodeColor } from './rendering/nodes';
 import { MutatorLabel, StateVariableLabel } from './rendering/render';
 import { cn } from '@/app@shadcn/lib/utils';
 
+type StateData = (event: React.MouseEvent, node: StateUpdate) => void;
 type StateDetailsPanelProps = {
 	model?: StateDiagram;
 	title?: string;
 	className?: string;
+	onStateDoubleClick?: StateData;
 };
 
 function StatCard({ label, value }: { label: string; value: string | number | React.JSX.Element }) {
@@ -20,18 +22,20 @@ function StatCard({ label, value }: { label: string; value: string | number | Re
 	);
 }
 
-function StateUpdatesList({ updates, className, label = "Reached states" }: { updates: StateUpdate[]; className?: string; label?: string }) {
+function StateUpdatesList({ updates, className, label = "Reached states", onStateDoubleClick }: { updates: StateUpdate[]; className?: string; label?: string; onStateDoubleClick?: StateData }) {
 	return (
 		<div className={cn("mb-4.5", className)}>
 			<div className="text-[11px] font-semibold uppercase tracking-wide text-(--vscode-descriptionForeground) mb-1">
 				{label} ({updates.length}):
 			</div>
-			{updates.length > 0 && <div className="flex flex-wrap items-center gap-1.5">
+			{updates.length > 0 && <div className="flex flex-wrap items-center gap-1.5 gap-y-2.5">
 				{updates.map((update, idx) => {
 					const displayLabel = update.label?.trim() || `${update.setterName}(${update.kind})`;
 					const color = getNodeColor('stateUpdate', displayLabel);
 					return (
-						<StateUpdateBadge key={`${update.id}-${idx}`} label={displayLabel} color={color} className="text-[11px] p-1.25 min-w-8" />
+						<div onDoubleClick={(event) => onStateDoubleClick?.(event, update)}>
+							<StateUpdateBadge key={`${update.id}-${idx}`} label={displayLabel} color={color} className="text-[11px] p-1.25 min-w-8 cursor-pointer" />
+						</div>
 					);
 				})}
 			</div>}
@@ -53,7 +57,7 @@ function AccordionLabel({ name, labelClass, labelStyle, children }: { name: Reac
 	);
 }
 
-const StateMutatorAccordions = ({ analysis, expandedStateVariables }: { analysis: StateDiagramAnalytics; expandedStateVariables: string[] }) => (
+const StateMutatorAccordions = ({ analysis, expandedStateVariables, onStateDoubleClick }: { analysis: StateDiagramAnalytics; expandedStateVariables: string[]; onStateDoubleClick?: StateData }) => (
 	<Accordion type="multiple" defaultValue={expandedStateVariables} className="space-y-2 px-2 pb-2">
 		{analysis.stateVariables.map((stateVariable) => {
 			const variableColor = `color-mix(in srgb, ${getNodeColor('stateVariable', stateVariable.name)} 90%, transparent)`;
@@ -71,7 +75,7 @@ const StateMutatorAccordions = ({ analysis, expandedStateVariables }: { analysis
 					</AccordionTrigger>
 
 					<AccordionContent className="space-y-2 border-t border-(--state-var-color) p-2 pb-2 mb-1">
-						<StateUpdatesList updates={stateVariable.reachedStates} label='Unique reached states' />
+						<StateUpdatesList updates={stateVariable.reachedStates} onStateDoubleClick={onStateDoubleClick} label='Unique reached states' />
 
 						<Accordion type="multiple" defaultValue={[]} className="space-y-1.5">
 							{stateVariable.mutators.map((mutator) => {
@@ -92,7 +96,7 @@ const StateMutatorAccordions = ({ analysis, expandedStateVariables }: { analysis
 												<StatCard label="Nodes" value={mutator.nodeCount} />
 												<StatCard label="Transitions" value={mutator.transitionCount} />
 											</div>
-											<StateUpdatesList updates={mutator.reachedStates} />
+											<StateUpdatesList updates={mutator.reachedStates} onStateDoubleClick={onStateDoubleClick} />
 										</AccordionContent>
 									</AccordionItem>
 								);
@@ -105,7 +109,7 @@ const StateMutatorAccordions = ({ analysis, expandedStateVariables }: { analysis
 	</Accordion>
 )
 
-export default function StateDetailsPanel({ model, title = '', className = '' }: StateDetailsPanelProps) {
+export default function StateDetailsPanel({ model, title = '', className = '', onStateDoubleClick}: StateDetailsPanelProps) {
 	const analysis = useMemo(() => analyzeStateDiagram(model), [model]);
 
 	const expandedStateVariables = useMemo(() => analysis.stateVariables.map((stateVariable) => `state-${stateVariable.id}`), [analysis.stateVariables]);
@@ -133,7 +137,7 @@ export default function StateDetailsPanel({ model, title = '', className = '' }:
 					</p>
 				)}
 
-				<StateMutatorAccordions analysis={analysis} expandedStateVariables={expandedStateVariables} />
+				<StateMutatorAccordions analysis={analysis} expandedStateVariables={expandedStateVariables} onStateDoubleClick={onStateDoubleClick} />
 			</div>
 		</div>
 	);

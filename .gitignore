@@ -5,6 +5,7 @@ node_modules
 *.vsix
 *.github
 *.tsbuildinfo
+*.draft.md
 
 **/.vscode/settings.json
 **/.waylog/
