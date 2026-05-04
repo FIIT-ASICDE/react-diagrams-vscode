@@ -24,7 +24,7 @@ function StatCard({ label, value }: { label: string; value: string | number | Re
 
 function StateUpdatesList({ updates, className, label = "Reached states", onStateDoubleClick }: { updates: StateUpdate[]; className?: string; label?: string; onStateDoubleClick?: StateData }) {
 	return (
-		<div className={cn("mb-4.5", className)}>
+		<div className={cn("w-full mb-4.5", className)}>
 			<div className="text-[11px] font-semibold uppercase tracking-wide text-(--vscode-descriptionForeground) mb-1">
 				{label} ({updates.length}):
 			</div>
@@ -34,7 +34,7 @@ function StateUpdatesList({ updates, className, label = "Reached states", onStat
 					const color = getNodeColor('stateUpdate', displayLabel);
 					return (
 						<div onDoubleClick={(event) => onStateDoubleClick?.(event, update)}>
-							<StateUpdateBadge key={`${update.id}-${idx}`} label={displayLabel} color={color} className="text-[11px] p-1.25 min-w-8 cursor-pointer" />
+							<StateUpdateBadge key={`${update.id}-${idx}`} label={displayLabel} color={color} className="text-[11px] p-1.25 min-w-8 not-hover:truncate cursor-pointer" />
 						</div>
 					);
 				})}

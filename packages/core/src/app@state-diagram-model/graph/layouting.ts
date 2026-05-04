@@ -79,8 +79,12 @@ export function getGraphNodeSize({ nodeType, kind, ...node }: StateGraphNode) {
 
 export async function layoutMutator(mutator: StateMutatingFunction, elkLayout: LayoutOptions = {}) {
 	const layoutOptions = { ...ELK_OPTIONS, ...elkLayout };
-	if (mutator.nodes.length < 4)
-		layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] = `${+(layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] ?? 1) / 2}`;
+	if (mutator.nodes.length < 4) {
+		if (layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'])
+			layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] = `${+(layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] ?? 1) / 1.85}`;
+		if (layoutOptions['elk.padding'])
+			layoutOptions['elk.padding'] = elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad / 1.85, LAYOUT.mutator.pad / 1.85);
+	}
 
 	const graph = {
 		id: `elk-${mutator.id}`,

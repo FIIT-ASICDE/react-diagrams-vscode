@@ -44,10 +44,31 @@ type DownloadImgOptions = {
 	maxZoom?: number;
 	backgroundColor?: string;
 	padding?: number;
+	width?: number, height?: number,
+	maxWidth?: number;
+	maxHeight?: number;
 	snapdom?: SnapdomOptions;
 }
 
 type DiagramImageFormatter<T> = (diagram: HTMLElement, options: { [key: string]: any }) => Promise<T>;
+
+export function getDiagramImageSize(bounds: Rect, maxWidth = 2560, maxHeight = 1600) {
+	const safeWidth = Math.max(bounds.width, 1);
+	const safeHeight = Math.max(bounds.height, 1);
+	const aspectRatio = safeWidth / safeHeight;
+
+	if (aspectRatio >= maxWidth / maxHeight) {
+		return {
+			width: Math.round(maxWidth),
+			height: Math.max(1, Math.round(maxWidth / aspectRatio)),
+		};
+	}
+
+	return {
+		width: Math.max(1, Math.round(maxHeight * aspectRatio)),
+		height: Math.round(maxHeight),
+	};
+}
 
 export async function snapdomToPngDataUrl(diagram: HTMLElement, options: { [key: string]: any }) { // compatible design with reactflow...
 	const { backgroundColor, height, snapdom: snapdomOptions, style, width } = options;
@@ -89,9 +110,15 @@ export async function snapdomToPngDataUrl(diagram: HTMLElement, options: { [key:
 	}
 }
 
-export async function downloadDiagramImage<T>(nodesBounds: Rect | Node[], format: DiagramImageFormatter<T> = snapdomToPngDataUrl as DiagramImageFormatter<T>, width = 1920, height = 1080, options: DownloadImgOptions = {}) {
-	const { minZoom = 0.5, maxZoom = 1.5, backgroundColor = "#fdfdfe", padding = 0.02 } = options;
-	const viewport = getViewportForBounds(nodesBounds instanceof Array ? getNodesBounds(nodesBounds) : nodesBounds, width, height, minZoom, maxZoom, padding);
+export async function downloadDiagramImage<T>(nodesBounds: Rect | Node[], format: DiagramImageFormatter<T> = snapdomToPngDataUrl as DiagramImageFormatter<T>, options: DownloadImgOptions = {}) {
+	const { minZoom = 0.25, maxZoom = 2.25, backgroundColor = "#fdfdfe", padding = 0.02, maxWidth = 2560, maxHeight = 1600 } = options;
+	const bounds = nodesBounds instanceof Array ? getNodesBounds(nodesBounds) : nodesBounds;
+	if (!options.width || !options.height) {
+		const imgSize = getDiagramImageSize(bounds, maxWidth, maxHeight);
+		options.width = imgSize.width;
+		options.height = imgSize.height;
+	}
+	const viewport = getViewportForBounds(bounds, options.width, options.height, minZoom, maxZoom, padding);
 
 	const diagram = document.querySelector('.react-flow__viewport') as HTMLElement;
 	if (!diagram) {
@@ -100,14 +127,13 @@ export async function downloadDiagramImage<T>(nodesBounds: Rect | Node[], format
 	}
 	return await format(diagram, {
 		backgroundColor,
-		width,
-		height,
+		width: options.width,
+		height: options.height,
 		snapdom: options.snapdom,
 		style: {
-			width: `${width}px`,
-			height: `${height}px`,
+			width: `${options.width}px`,
+			height: `${options.height}px`,
 			transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
 		},
 	});
 }
-

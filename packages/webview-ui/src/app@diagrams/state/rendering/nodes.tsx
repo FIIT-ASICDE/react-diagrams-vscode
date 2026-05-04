@@ -66,7 +66,7 @@ export const StateUpdateNode = memo(({ data }: RFNodeProps) => {
 					color: 'white',
 				}}
 			>
-				<StateUpdateBadge label={data.label} color={data.color} />
+				<StateUpdateBadge label={data.label} color={data.color} className='not-hover:truncate' />
 			</div>
 		</NodeShell>
 	);

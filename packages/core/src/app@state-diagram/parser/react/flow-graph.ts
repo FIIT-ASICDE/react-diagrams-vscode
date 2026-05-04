@@ -5,6 +5,8 @@ import {
 	ContinueStatement,
 	DoStatement,
 	ForStatement,
+	ForInStatement,
+	ForOfStatement,
 	IfStatement,
 	Node,
 	ReturnStatement,
@@ -123,6 +125,17 @@ export function createLoopContext(context: StateVisitContext | undefined, label:
 	loopContext.breakCollectorsByLabel.set(label, breakEdges);
 	loopContext.continueCollectorsByLabel.set(label, continueEdges);
 	return loopContext;
+}
+
+export type LoopStatement = ForStatement | WhileStatement | ForOfStatement | ForInStatement;
+
+export function getLoopDecisionText(statement: LoopStatement) {
+	if (Node.isWhileStatement(statement))
+		return statement.getExpression().getText();
+	if (Node.isForStatement(statement))
+		return statement.getCondition()?.getText() ?? 'for';
+
+	return `${statement.getFirstDescendantByKind(SyntaxKind.VariableDeclaration)?.getText() ?? statement.getInitializer().getText()} ${Node.isForOfStatement(statement) ? 'of' : 'in'} ${statement.getExpression().getText()}`;
 }
 
 export interface OpenEdge { // We dont yet know "to", remember type and from...
@@ -246,11 +259,11 @@ export class GraphBuilder {
 		return this.visitEnd(statement, current);
 	}
 
-	visitEnd(statement: ThrowStatement | ReturnStatement | Block, incoming: OpenEdge[], what: 'exit' | 'throw' = 'exit') {
+	visitEnd(statement: ThrowStatement | ReturnStatement | Block, incoming: OpenEdge[], type: 'exit' | 'throw' = 'exit') {
 		const txt = Node.isBlock(statement) ? '' : statement.getExpression()?.getText();
 
 		const currNode = emplaceMergeIfCan(incoming, `merge->exit`, this.options);
-		const exitNode = this.appendFlowNode(what, statement, txt ? `${what} ${truncate(txt, 80)}` : ``, currNode);
+		const exitNode = this.appendFlowNode(type, statement, txt ? `${type} ${truncate(txt, 80)}` : ``, currNode);
 		if (currNode != exitNode)
 			this.connect(exitNode, incoming);
 		return [];
@@ -411,11 +424,11 @@ export class GraphBuilder {
 		return this.collapseWithMerge(statement, [...switchBreakEdges, ...fallthroughOpen]);
 	}
 
-	visitLoop(statement: ForStatement | WhileStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext, label?: string) {
+	visitLoop(statement: LoopStatement, incoming: OpenEdge[], hasSetterAhead = false, context?: StateVisitContext, label?: string) {
 		if (!isRelevant(statement, this.stateVariable, hasSetterAhead, this.options)) // omit unrelated
 			return incoming;
 
-		const conditionText = Node.isWhileStatement(statement) ? statement.getExpression().getText() : statement.getCondition()?.getText() ?? 'for';
+		const conditionText = getLoopDecisionText(statement);
 		const decisionNode = this.appendFlowNode('loop-decision', statement, truncate(conditionText, 80), emplaceMergeIfCan(incoming, `merge->loop`, this.options));
 		this.connect(decisionNode, incoming, true);
 
@@ -496,7 +509,7 @@ export class GraphBuilder {
 		if (Node.isSwitchStatement(what))
 			return this.visitSwitch(what, incoming, hasSetterAhead, context);
 
-		if (Node.isForStatement(what) || Node.isWhileStatement(what))
+		if (Node.isForStatement(what) || Node.isWhileStatement(what) || Node.isForOfStatement(what) || Node.isForInStatement(what))
 			return this.visitLoop(what, incoming, hasSetterAhead, context);
 
 		if (Node.isDoStatement(what))
@@ -506,7 +519,7 @@ export class GraphBuilder {
 			const label = what.getLabel().getText();
 			const statement = what.getStatement();
 
-			if (Node.isForStatement(statement) || Node.isWhileStatement(statement))
+			if (Node.isForStatement(statement) || Node.isWhileStatement(statement) || Node.isForOfStatement(statement) || Node.isForInStatement(statement))
 				return this.visitLoop(statement, incoming, hasSetterAhead, context, label);
 
 			if (Node.isDoStatement(statement))

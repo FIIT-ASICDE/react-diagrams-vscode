@@ -124,6 +124,8 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 					className='floating-edges'
 					onNodeDoubleClick={onDoubleClick}
 					style={{ background: bgColor == 'light' ? '#e8eaed' : (bgColor == 'dark' ? '#1f1f1f' : undefined) }}
+					minZoom={0.25}
+					maxZoom={2.25}
 				>
 					{hasModel && <>
 						<VSCodeButton className={`z-10 absolute left-1.5 top-2 scale-[0.64] not-hover:opacity-85`} onClick={() => onDiagramImage(true)}>
@@ -143,7 +145,12 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 				</ReactFlow>
 			</div>
 
-			<div className={cn(`h-full transition-[width] duration-200`, isDetailsOpen ? 'w-[clamp(335px,32vw,390px)]' : 'w-0 overflow-hidden')}>
+			<div className={cn(`h-full transition-[width] duration-200`, isDetailsOpen ? 'w-[clamp(335px,32vw,390px)]' : 'w-0 overflow-hidden')} onClick={(ev) => {
+				if (ev.ctrlKey && ev.shiftKey) {
+					console.debug(model);
+					console.debug(JSON.stringify(model, (key, value) => value === "" ? undefined : value));
+				}
+			}}>
 				<StateDetailsPanel model={model} onStateDoubleClick={onDoubleClick} />
 			</div>
 		</div>

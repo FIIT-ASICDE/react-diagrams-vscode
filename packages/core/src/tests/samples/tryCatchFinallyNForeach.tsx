@@ -2,7 +2,33 @@ import { useRef, useState } from "react";
 
 export default function TryCatchFinallyNested(props: { logidyLogLog?: boolean }) {
   const [state, setState] = useState<"idle" | "loading" | "retrying" | "success" | "error" | "cleanup">("idle");
+  const [mode, setMode] = useState("idle");
   const errorCount = useRef(0);
+
+  function handle(items: number[], lookup: Record<string, number>) {
+		outer: for (const item of items) {
+			if (item < 0) {
+				setMode("error");
+				break outer;
+			}
+
+			if (item === 0) {
+				setMode("skip");
+				continue outer;
+			}
+
+			setMode("seen");
+		}
+
+		for (const key in lookup) {
+			if (lookup[key] > 10) {
+				setMode(key);
+				break;
+			}
+		}
+
+		setMode("done");
+	}
 
   async function loadData(shouldThrow: boolean, shouldRetry: boolean, logidyLogLog = props.logidyLogLog) {
     setState("loading");
@@ -43,5 +69,8 @@ export default function TryCatchFinallyNested(props: { logidyLogLog?: boolean })
     }
   }
 
+  if (state == "success") {
+    return <button onClick={() => handle([1, 0, -1], { a: 1, b: 11 })}>Run</button>;
+  }
   return <button onClick={() => loadData(true, true)}>Load</button>;
 }
