@@ -38,7 +38,9 @@ function StateUpdatesList({ updates, className, label = "Reached states", onStat
 					const color = getNodeColor('stateUpdate', displayLabel);
 					return (
 						<div onDoubleClick={(event) => onStateDoubleClick?.(event, update)}>
-							<StateUpdateBadge key={`${update.id}-${idx}`} label={displayLabel} color={color} className="text-[11px] p-1.25 min-w-8 not-hover:truncate cursor-pointer" />
+							<StateUpdateBadge key={`${update.id}-${idx}`} label={displayLabel} color={color} 
+								className={cn("text-[11px] p-1.25 min-w-8 not-hover:truncate cursor-pointer", displayLabel.length < 3 && 'px-2.5')} 
+							/>
 						</div>
 					);
 				})}

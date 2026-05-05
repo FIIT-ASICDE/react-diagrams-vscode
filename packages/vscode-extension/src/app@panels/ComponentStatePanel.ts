@@ -126,7 +126,7 @@ export class ComponentStatePanel {
 		return this.panel.webview.postMessage({ type, data });
 	}
 
-	public requestCurrentDiagramImage(saveToDisk = true, useSnapdom = true) {
+	public requestCurrentDiagramImage(saveToDisk = true, useSnapdom) {
 		if (!this.panel.visible)
 			return;
 		if (this.pendingImageRequest)
@@ -135,7 +135,7 @@ export class ComponentStatePanel {
 		const { promise, resolve } = Promise.withResolvers<ImageCacheEntry | null>();
 		this.pendingImageRequest = promise;
 		this.pendingImageRequestResolve = resolve;
-		this.postMessage("requestDiagramImage", { saveToDisk, useSnapdom });
+		this.postMessage("requestDiagramImage", { saveToDisk, useSnapdom: useSnapdom ?? getConfigOption<string>('state.diagram', 'requestDiagramImageStrategy')[0] == 'SPEED' });
 		return this.pendingImageRequest;
 	}
 

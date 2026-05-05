@@ -1,3 +1,5 @@
+/* core module for state diagram parsing */
+
 export * from "./parser/react/parser";
 export * from "./parser/react/flow-graph";
 export * from "./parser/react/state-mutators";
