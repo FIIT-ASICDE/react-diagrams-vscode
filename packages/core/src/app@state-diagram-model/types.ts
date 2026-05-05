@@ -23,7 +23,7 @@ export interface StateVariable {
 	hook: StateHookKind;
 	name: string;
 	setterName: string;
-	mutPattern: MutationPattern;
+	mutPattern?: MutationPattern;
 	initializerText?: string;
 	typeText?: string;
 	pos: CodePos;
@@ -82,7 +82,7 @@ export interface StateUpdate {
 	nodeType: 'state-update';
 	stateVariableId: Id;
 	setterName: string;
-	mutPattern: MutationPattern;
+	mutPattern?: MutationPattern;
 	kind: StateUpdateKind;
 	pos: CodePos;
 	label?: string; // expression txt

@@ -119,7 +119,7 @@ export function isDirectPropertyAccess(node: Node | undefined, ownerName: string
 }
 
 export function getStateMutationNodes(node: Node, stateVariable: StateVariable, filterType: 'filter' | 'some' = 'filter') {
-	if (stateVariable.mutPattern == 'setter-call')
+	if (!stateVariable.mutPattern || stateVariable.mutPattern == 'setter-call')
 		return getAllCalls(node, stateVariable.setterName, filterType);
 	// mutPattern == 'ref-current'
 

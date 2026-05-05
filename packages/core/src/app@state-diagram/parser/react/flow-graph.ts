@@ -256,11 +256,11 @@ export class GraphBuilder {
 		return this.visitEnd(statement, current);
 	}
 
-	visitEnd(statement: ThrowStatement | ReturnStatement | Block, incoming: OpenEdge[], type: 'exit' | 'throw' = 'exit') {
+	visitEnd(statement: ThrowStatement | ReturnStatement | Block, incoming: OpenEdge[], type: 'return' | 'throw' = 'return') {
 		const txt = Node.isBlock(statement) ? '' : statement.getExpression()?.getText();
 
 		const currNode = emplaceMergeIfCan(incoming, `merge->exit`, this.options);
-		const exitNode = this.appendFlowNode(type, statement, txt ? `${type} ${truncate(txt, 80)}` : ``, currNode);
+		const exitNode = this.appendFlowNode(type == 'return' ? 'exit' : type, statement, txt ? `${type} ${truncate(txt, 80)}` : ``, currNode);
 		if (currNode != exitNode)
 			this.connect(exitNode, incoming);
 		return [];

@@ -104,7 +104,7 @@ function collectTupleStateVariable(declaration: VariableDeclaration, sourceFile:
 		hook: hookName,
 		name: stateName,
 		setterName,
-		mutPattern: 'setter-call',
+		// mutPattern: 'setter-call',
 		initializerText: stateHookCall.getArguments()[0]?.getText(),
 		typeText: inferStateTypeText(stateHookCall),
 		pos,
