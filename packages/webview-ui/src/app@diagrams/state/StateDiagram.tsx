@@ -11,7 +11,7 @@ import { vscode } from '@/app@vscode/api';
 import type { Message } from '@react-diagrams/core/app@vscode';
 import { Camera, PanelRightClose, PanelRightOpen } from "lucide-react"
 import type { StateUpdate } from '@react-diagrams/core/app@state-diagram-model';
-// import { toPng } from 'html-to-image';
+import { toPng } from 'html-to-image';
 
 const fitToViewOptions = { padding: 0.025, duration: 100 };
 
@@ -70,7 +70,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	}
 
 	let pendingImgRequest = useRef<Promise<string | null> | null>(null);
-	const onDiagramImage = useCallback(async (saveToDisk = true) => { 
+	const onDiagramImage = useCallback(async (saveToDisk = true, useSnapdom = true) => { 
 		console.debug("Image creation requested", saveToDisk);
 		if (cachedImage) {
 			vscode.postMessage("onDiagramImage", { dataUrl: cachedImage, saveToDisk });
@@ -78,7 +78,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		}
 
 		try {
-			const dataUrl = await (pendingImgRequest.current ?? (pendingImgRequest.current = downloadDiagramImage(nodes, snapdomToPngDataUrl)));
+			const dataUrl = await (pendingImgRequest.current ?? (pendingImgRequest.current = downloadDiagramImage(nodes, useSnapdom ? snapdomToPngDataUrl : toPng)));
 			setCachedImage(dataUrl);
 			vscode.postMessage("onDiagramImage", { dataUrl, saveToDisk });
 		}
@@ -94,7 +94,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		const onMessage = (event: MessageEvent<Message>) => {
 			// console.debug("Received message", event.data.data);
 			if (event.data?.type == 'requestDiagramImage')
-				void onDiagramImage(event.data.data?.saveToDisk);
+				void onDiagramImage(event.data.data?.saveToDisk, event.data.data?.useSnapdom);
 		};
 
 		window.addEventListener('message', onMessage);
