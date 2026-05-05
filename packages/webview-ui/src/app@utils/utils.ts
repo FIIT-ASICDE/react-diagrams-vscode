@@ -70,7 +70,7 @@ export async function snapdomToPngDataUrl(diagram: HTMLElement, options: { [key:
 	const exportRoot = document.createElement('div');
 	const exportViewport = diagram.cloneNode(true) as HTMLElement;
 
-	exportRoot.className = flowRoot?.className ?? 'react-flow';
+	exportRoot.className = `${flowRoot?.className ?? 'react-flow'} diagram-image-export`;
 
 	Object.assign(exportRoot.style, { backgroundColor, height: `${height}px`, width: `${width}px`, position: 'fixed', left: '0', top: '0', overflow: 'hidden', zIndex: '-1' });
 
