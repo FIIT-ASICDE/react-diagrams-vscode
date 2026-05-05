@@ -196,6 +196,7 @@ export function useActivityPlayground({
 		edgeTypes,
 		getActiveGraph,
 		handleCanvasInit,
+		reactFlowRef,
 		addPlaygroundNode,
 		clearPlayground,
 		switchToViewer,

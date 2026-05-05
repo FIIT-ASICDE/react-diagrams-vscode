@@ -52,6 +52,7 @@ export default function ActivityDiagram() {
 		edgeTypes,
 		getActiveGraph,
 		handleCanvasInit,
+		reactFlowRef,
 		addPlaygroundNode,
 		clearPlayground,
 		switchToViewer,
@@ -80,7 +81,7 @@ export default function ActivityDiagram() {
 		setPlaygroundEdges,
 	});
 
-	const { handleImageRequest } = useActivityExport({ postMessage });
+	const { handleImageRequest, savePng } = useActivityExport({ postMessage, reactFlowRef });
 
 	useActivityMessages({
 		applyIncomingDiagramPayload,
@@ -166,6 +167,7 @@ export default function ActivityDiagram() {
 				onAddNode={addPlaygroundNode}
 				onClearPlayground={handleClearPlayground}
 				onGenerateSkeleton={generateSkeleton}
+				onSavePng={() => savePng(`${currentTitle}.png`)}
 			/>
 
 			<div className="relative flex-1 overflow-hidden">

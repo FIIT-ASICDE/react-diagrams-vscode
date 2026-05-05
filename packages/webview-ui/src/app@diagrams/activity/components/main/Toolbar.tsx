@@ -14,6 +14,7 @@ type Props = {
 	onAddNode: (type: ActivityNodeType) => void;
 	onClearPlayground: () => void;
 	onGenerateSkeleton: () => void;
+	onSavePng: () => void;
 };
 
 const NODE_BUTTONS: { type: ActivityNodeType; label: string; symbol: string }[] = [
@@ -55,6 +56,7 @@ export function DiagramToolbar({
 	onAddNode,
 	onClearPlayground,
 	onGenerateSkeleton,
+	onSavePng,
 }: Props) {
 	const isViewer = mode === 'viewer';
 	const isPlayground = mode === 'playground';
@@ -130,6 +132,19 @@ export function DiagramToolbar({
 				>
 					N: {nodeCount} | E: {edgeCount}
 				</span>
+
+				<Separator />
+
+				{/* Save PNG */}
+				<button
+					type="button"
+					className={GHOST_BTN}
+					onClick={onSavePng}
+					title="Save diagram as PNG"
+				>
+					<span aria-hidden="true">⬇</span>
+					<span>PNG</span>
+				</button>
 			</div>
 
 			{/* ── Playground action bar ───────────────────────────────── */}
