@@ -1,5 +1,5 @@
 import { getGraphNodeVisual, getNodeColor } from './nodes';
-import { layoutBoxRow, layoutStateVariable, elkPadd, STATE_DIAGRAM_LAYOUT as LAYOUT, type StateDiagram } from '@react-diagrams/core/app@state-diagram-model';
+import { layoutBoxRow, layoutStateVariable, elkPadd, STATE_DIAGRAM_LAYOUT as LAYOUT, type Id, type StateDiagram } from '@react-diagrams/core/app@state-diagram-model';
 import type { GroupNodeProps } from '@/app@shadcn/components/labeled-group-node';
 import { MarkerType, type Edge, type Node } from '@xyflow/react';
 import { cn } from '@/app@shadcn/lib/utils';
@@ -19,14 +19,18 @@ export const MutatorLabel = ({ name, args, type, className }: { name: string; ar
 	)
 }
 
-export async function renderXyFlow(model?: StateDiagram, transitionRouting: string = 'POLYLINE') {
+export async function renderXyFlow(model?: StateDiagram, transitionRouting: string = 'POLYLINE', hiddenStateVariableIds?: ReadonlySet<Id>) {
 	const nodes: Node[] = [];
 	const edges: Edge[] = [];
 
 	if (!model?.stateVariables?.length)
 		return { nodes, edges };
 
-	const stateVariableLayouts = await Promise.all(model.stateVariables.map(stateVar => layoutStateVariable(stateVar, { 'elk.edgeRouting': transitionRouting })));
+	const stateVarsFiltered = hiddenStateVariableIds?.size ? model.stateVariables.filter(stateVar => !hiddenStateVariableIds.has(stateVar.id)) : model.stateVariables;
+	if (!stateVarsFiltered.length)
+		return { nodes, edges };
+
+	const stateVariableLayouts = await Promise.all(stateVarsFiltered.map(stateVar => layoutStateVariable(stateVar, { 'elk.edgeRouting': transitionRouting })));
 	const { layoutedItems: layoutedStateVariables } = await layoutBoxRow(stateVariableLayouts, { gap: LAYOUT.state.gap, padding: elkPadd(LAYOUT.canvasPadding, LAYOUT.canvasPadding) });
 
 	for (const { id: stateVarId, layoutedMutators, initializerText, ...stateVar } of layoutedStateVariables) {

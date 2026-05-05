@@ -10,7 +10,7 @@ import { cn } from '@/app@shadcn/lib/utils';
 import { vscode } from '@/app@vscode/api';
 import type { Message } from '@react-diagrams/core/app@vscode';
 import { Camera, PanelRightClose, PanelRightOpen } from "lucide-react"
-import type { StateUpdate } from '@react-diagrams/core/app@state-diagram-model';
+import type { Id, StateUpdate } from '@react-diagrams/core/app@state-diagram-model';
 import { toPng } from 'html-to-image';
 
 const fitToViewOptions = { padding: 0.025, duration: 100 };
@@ -35,8 +35,10 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	const [edges, setEdges] = useEdgesState<Edge>([]);
 	const [cachedImage, setCachedImage] = useState<string | null>(null);
 	const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+	const [hiddenStateVariableIds, setHiddenStateVariableIds] = useState<Set<Id>>(() => new Set());
 
 	const modelCacheKey = useMemo(() => JSON.stringify(model ?? null), [model]);
+	const hiddenStateVariableKey = useMemo(() => [...hiddenStateVariableIds].join('|'), [hiddenStateVariableIds]);
 	const hasModel = useMemo(() => Boolean(model?.stateVariables?.length), [model]);
 
 	const { bgColor, transitionRouting } = (window as any).CONFIG ?? {};
@@ -44,7 +46,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	useEffect(() => {
 		let cancelled = false;
 
-		renderXyFlow(model, transitionRouting).then((newState) => {
+		renderXyFlow(model, transitionRouting, hiddenStateVariableIds).then((newState) => {
 			if (!cancelled) {
 				setNodes(newState.nodes);
 				setEdges(newState.edges);
@@ -59,11 +61,37 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		});
 
 		return () => { cancelled = true };
-	}, [model, setEdges, setNodes, transitionRouting]);
+	}, [hiddenStateVariableIds, model, setEdges, setNodes, transitionRouting]);
 
 	useEffect(() => {
 		setCachedImage(null);
-	}, [modelCacheKey]);
+	}, [hiddenStateVariableKey, modelCacheKey]);
+
+	useEffect(() => {
+		setHiddenStateVariableIds((old) => {
+			if (!old.size)
+				return old;
+
+			const availableStateVariableIds = new Set(model?.stateVariables?.map(stateVariable => stateVariable.id) ?? []);
+			const next = new Set([...old].filter(stateVariableId => availableStateVariableIds.has(stateVariableId)));
+			return next.size == old.size ? old : next;
+		});
+	}, [modelCacheKey, model?.stateVariables]);
+
+	const onStateVariableHiddenChange = useCallback((stateVariableId: Id, hidden: boolean) => {
+		setHiddenStateVariableIds((previous) => {
+			const next = new Set(previous);
+			if (hidden)
+				next.add(stateVariableId);
+			else
+				next.delete(stateVariableId);
+			return next;
+		});
+	}, []);
+
+	const onShowAllStateVariables = useCallback(() => {
+		setHiddenStateVariableIds((previous) => previous.size ? new Set() : previous);
+	}, []);
 
 	const onDoubleClick = (event: React.MouseEvent, node: Node | StateUpdate) => {
 		vscode.postMessage("nodeDblClick", { data: { ...((node as any)?.data ?? node), name: undefined, children: undefined } });
@@ -78,7 +106,8 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		}
 
 		try {
-			const dataUrl = await (pendingImgRequest.current ?? (pendingImgRequest.current = downloadDiagramImage(nodes, useSnapdom ? snapdomToPngDataUrl : toPng)));
+			const imageGenFn = useSnapdom ? snapdomToPngDataUrl : toPng;
+			const dataUrl = await (pendingImgRequest.current ?? (pendingImgRequest.current = downloadDiagramImage(nodes, imageGenFn)));
 			setCachedImage(dataUrl);
 			vscode.postMessage("onDiagramImage", { dataUrl, saveToDisk });
 		}
@@ -151,7 +180,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 					console.debug(JSON.stringify(model, (key, value) => value === "" ? undefined : value));
 				}
 			}}>
-				<StateDetailsPanel model={model} onStateDoubleClick={onDoubleClick} />
+				<StateDetailsPanel model={model} hiddenStateVariableIds={hiddenStateVariableIds} onStateVariableHiddenChange={onStateVariableHiddenChange} onShowAllStateVariables={onShowAllStateVariables} onStateDoubleClick={onDoubleClick} />
 			</div>
 		</div>
 	);

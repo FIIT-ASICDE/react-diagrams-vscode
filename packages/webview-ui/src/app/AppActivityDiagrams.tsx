@@ -1,6 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { VSCodePanels, VSCodePanelTab, VSCodePanelView } from '@vscode/webview-ui-toolkit/react';
-import StateDiagram from '@/app@diagrams/state/StateDiagram';
 import ActivityDiagram from '@/app@diagrams/activity/ActivityDiagram';
 import { vscode } from '@/app@vscode/api';
 
@@ -33,7 +32,7 @@ function App() {
 				<VSCodePanelTab id="tests" className="mx-2">Tests</VSCodePanelTab>
 
 				<VSCodePanelView id="diagram" className="h-full p-1">
-					{diagramType === 'activity' ? <ActivityDiagram /> : <StateDiagram />}
+					<ActivityDiagram />
 				</VSCodePanelView>
 
 				<VSCodePanelView id="details">
