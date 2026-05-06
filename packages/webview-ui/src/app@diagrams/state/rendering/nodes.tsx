@@ -5,7 +5,7 @@ import { getColor } from '@/app@utils/utils';
 import { commonSourceHandles, commonTargetHandles } from '@/app@diagrams/activity/diagram-rendering/nodeTypes';
 import { cn } from '@/app@shadcn/lib/utils';
 
-const labelClass = "leading-none font-semibold px-0.75 py-0.5 rounded text-center"
+const labelClass = "leading-none font-semibold px-0.75 py-0.5 pb-0.75 rounded text-center"
 
 export type StateVisualNodeData = {
 	label?: string;
@@ -32,7 +32,7 @@ export function CenteredLabel({ label, color, background, className }: { label?:
 
 	return (
 		<span
-			className={cn(`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 truncate text-[10px]`, labelClass, className)}
+			className={cn(`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 truncate text-[10.5px]`, labelClass, className)}
 			style={{ color: color ?? 'var(--vscode-foreground)', background }}
 		>
 			{label}

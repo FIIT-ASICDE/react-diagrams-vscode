@@ -176,7 +176,7 @@
         },
         "state.diagram.requestDiagramImageStrategy": {
           "type": "string",
-          "default": "SPEED",
+          "default": "ACCURACY",
           "enum": [
             "SPEED",
             "ACCURACY"

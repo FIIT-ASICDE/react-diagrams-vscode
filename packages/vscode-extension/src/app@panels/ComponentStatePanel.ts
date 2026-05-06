@@ -126,7 +126,7 @@ export class ComponentStatePanel {
 		return this.panel.webview.postMessage({ type, data });
 	}
 
-	public requestCurrentDiagramImage(saveToDisk = true, useSnapdom) {
+	public requestCurrentDiagramImage(saveToDisk = true, useSnapdom?) {
 		if (!this.panel.visible)
 			return;
 		if (this.pendingImageRequest)

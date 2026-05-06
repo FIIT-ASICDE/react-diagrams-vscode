@@ -143,7 +143,7 @@ export interface OpenEdge { // We dont yet know "to", remember type and from...
 	label?: string;
 }
 
-export interface StateVisitContext {
+export interface StateVisitContext { // memory for break/continue targets in nested loops/switches etc...
 	breakCollector?: OpenEdge[];
 	continueCollector?: OpenEdge[];
 	breakCollectorsByLabel?: Map<string, OpenEdge[]>;
@@ -157,7 +157,7 @@ export interface StateGraphOptions {
 	considerEarlyExits?: boolean;
 }
 
-export class GraphBuilder {
+export class GraphBuilder { // walking AST and building the main diagram structure itself...
 	private readonly updateNodesByPos: Map<string, StateUpdate> = new Map(); // cache to dedup updates
 
 	constructor(
@@ -276,7 +276,7 @@ export class GraphBuilder {
 		const isElseif = Node.isIfStatement(elseBody);
 
 		const { from, kind } = incoming[0] ?? {};
-		if (this.options?.useGuardsWhenPossible && !isElseif && incoming.length == 1 && from?.nodeType == 'state-update' && kind == StateTransitionKind.Normal) {
+		if (this.options?.useGuardsWhenPossible && !isElseif && incoming.length == 1 && from?.nodeType == 'state-update' && kind == StateTransitionKind.Normal) { // can use transition guards instead of decision node...
 
 			const thenIncoming: OpenEdge[] = [{ from, kind: StateTransitionKind.Then, label: `[${truncate(conditionText, 80)}]` }];
 			const thenOpen = this.visit(thenBody, thenIncoming, hasSetterAhead, context);

@@ -130,8 +130,8 @@ export default function StateDetailsPanel({ model, title, className, hiddenState
 	return (
 		<div className={cn(`h-full overflow-y-auto [scrollbar-width:thin] border-l border-(--vscode-editorWidget-border) bg-(--vscode-editor-background)`, className)}>
 			<div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-(--vscode-editorWidget-border) bg-(--vscode-editor-background) px-3 py-2">
-				<h2 className="text-[16px] font-semibold text-(--vscode-foreground)">{title || `${analysis.metrics.componentName ?? 'Unknown'}`}</h2>
-				{!!hiddenStateVariableCount && <VSCodeButton appearance="secondary" className='h-5.75' onClick={onShowAllStateVariables}>Show all</VSCodeButton>}
+				<h2 className="text-[16px] font-semibold max-w-74 not-hover:truncate text-(--vscode-foreground)">{title || `${analysis.metrics.componentName ?? 'Unknown'}`}</h2>
+				{!!hiddenStateVariableCount && <VSCodeButton appearance="secondary" className='min-w-18.25 h-5.75' onClick={onShowAllStateVariables}>Show all</VSCodeButton>}
 			</div>
 
 			<div className="space-y-3 p-1">

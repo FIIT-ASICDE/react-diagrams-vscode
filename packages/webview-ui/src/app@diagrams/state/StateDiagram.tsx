@@ -4,14 +4,13 @@ import { nodeTypes } from './rendering/nodes';
 import { edgeTypes } from './rendering/edges';
 import { renderXyFlow, type StateDiagramProps } from './rendering/render';
 import StateDetailsPanel from './StateDetailsPanel';
-import { downloadDiagramImage, snapdomToPngDataUrl } from '@/app@utils/utils';
+import { downloadDiagramImage, htmlToImageToPng, snapdomToPngDataUrl } from '@/app@utils/utils';
 import { VSCodeButton } from "@vscode/webview-ui-toolkit/react";
 import { cn } from '@/app@shadcn/lib/utils';
 import { vscode } from '@/app@vscode/api';
 import type { Message } from '@react-diagrams/core/app@vscode';
 import { Camera, PanelRightClose, PanelRightOpen } from "lucide-react"
 import type { Id, StateUpdate } from '@react-diagrams/core/app@state-diagram-model';
-import { toPng } from 'html-to-image';
 
 const fitToViewOptions = { padding: 0.025, duration: 100 };
 
@@ -106,7 +105,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 		}
 
 		try {
-			const imageGenFn = useSnapdom ? snapdomToPngDataUrl : toPng;
+			const imageGenFn = useSnapdom ? snapdomToPngDataUrl : htmlToImageToPng;
 			const dataUrl = await (pendingImgRequest.current ?? (pendingImgRequest.current = downloadDiagramImage(nodes, imageGenFn)));
 			setCachedImage(dataUrl);
 			vscode.postMessage("onDiagramImage", { dataUrl, saveToDisk });

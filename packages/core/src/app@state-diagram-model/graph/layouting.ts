@@ -50,7 +50,7 @@ export const ELK_OPTIONS: LayoutOptions = {
 	'elk.edgeRouting': 'POLYLINE',
 	
 	'elk.spacing.edgeEdge': '40',
-	"elk.spacing.edgeNode": "45",
+	"elk.spacing.edgeNode": "50",
 	'elk.spacing.nodeNode': '54',
 	'elk.padding': elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad, LAYOUT.mutator.pad),
 
@@ -83,7 +83,7 @@ export async function layoutMutator(mutator: StateMutatingFunction, elkLayout: L
 		if (layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'])
 			layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] = `${+(layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] ?? 1) / 1.85}`;
 		if (layoutOptions['elk.padding'])
-			layoutOptions['elk.padding'] = elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad / 1.75, LAYOUT.mutator.pad / 1.75);
+			layoutOptions['elk.padding'] = elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad / 1.85, LAYOUT.mutator.pad / 1.5);
 	}
 
 	const graph = {
