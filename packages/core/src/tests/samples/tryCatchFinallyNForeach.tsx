@@ -9,7 +9,7 @@ export default function TryCatchFinallyNested(props: { logidyLogLog?: boolean })
 		outer: for (const item of items) {
 			if (item < 0) {
 				setMode("error");
-				break outer;
+				break;
 			}
 
 			if (item === 0) {
@@ -17,17 +17,15 @@ export default function TryCatchFinallyNested(props: { logidyLogLog?: boolean })
 				continue outer;
 			}
 
+      for (const key in lookup) {
+        if (lookup[key] > 10) {
+          setMode(key);
+          break outer;
+        }
+      }
+  
 			setMode("seen");
 		}
-
-		for (const key in lookup) {
-			if (lookup[key] > 10) {
-				setMode(key);
-				break;
-			}
-		}
-
-		setMode("done");
 	}
 
   async function loadData(shouldThrow: boolean, shouldRetry: boolean, logidyLogLog = props.logidyLogLog) {

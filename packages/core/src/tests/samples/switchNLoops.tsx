@@ -1,8 +1,13 @@
 import { useCallback, useState } from "react";
 
-export default function SwitchWithLoops() {
+export default function SwitchWithLoops(inputItems: any[]) {
   const [mode, setMode] = useState<"idle" | "scan" | "match" | "skip" | "error" | "complete">("idle");
   const [index, setIndex] = useState(0);
+
+  const dbg = (what) => {
+    console.debug("Debug", what);
+    console.debug("Items", inputItems);
+  };
 
   setIndex(1);
 
@@ -97,8 +102,10 @@ export default function SwitchWithLoops() {
 	console.debug("Processing complete");
   }
 
+  dbg("Render");
   return <>
     <button onClick={() => processItems("fast", [1, 2, 0, 4])}>Process</button>
+    {/* <button onClick={() => processItems("fast", inputItems)}>Process input</button> */}
     <button onClick={() => func12("reset")}>Rst</button>
   </>;
 }

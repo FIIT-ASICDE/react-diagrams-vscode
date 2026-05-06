@@ -83,7 +83,7 @@ export async function layoutMutator(mutator: StateMutatingFunction, elkLayout: L
 		if (layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'])
 			layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] = `${+(layoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] ?? 1) / 1.85}`;
 		if (layoutOptions['elk.padding'])
-			layoutOptions['elk.padding'] = elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad / 1.85, LAYOUT.mutator.pad / 1.5);
+			layoutOptions['elk.padding'] = elkPadd(LAYOUT.headerHeight + LAYOUT.mutator.pad / 1.85, LAYOUT.mutator.pad / 1.25);
 	}
 
 	const graph = {
