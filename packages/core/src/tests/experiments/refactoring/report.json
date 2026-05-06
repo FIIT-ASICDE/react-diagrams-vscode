@@ -1,0 +1,159 @@
+{
+  "generatedAt": "2026-05-06T23:19:16.025Z",
+  "experimentDirectory": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring",
+  "dataDirectory": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data",
+  "outputs": {
+    "json": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\report.json",
+    "html": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\report.html"
+  },
+  "metricLabels": {
+    "loc": "LLoC/ELoC",
+    "maxNesting": "Nesting level",
+    "nodeCount": "Total node count",
+    "transitionCount": "Total transition count"
+  },
+  "baselines": [
+    {
+      "baseFile": "form.jsx",
+      "fileName": "form.jsx",
+      "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\_Base\\form.jsx",
+      "relativePath": "data\\_Base\\form.jsx",
+      "validity": {
+        "compilesWithoutErrors": true,
+        "nonEmptyDiagramGenerated": true,
+        "errors": []
+      },
+      "metrics": {
+        "effectiveLoc": 52,
+        "logicalLoc": 25,
+        "loc": 38.5,
+        "maxNesting": 2,
+        "averageNesting": 0.36,
+        "stateVariableCount": 3,
+        "stateCount": 5,
+        "mutatorCount": 3,
+        "nodeCount": 15,
+        "transitionCount": 14
+      },
+      "includedInAverages": true
+    }
+  ],
+  "groups": [
+    {
+      "name": "Code",
+      "directory": "data\\Code",
+      "files": [
+        {
+          "baseFile": "form.jsx",
+          "runs": [
+            {
+              "baseFile": "form.jsx",
+              "model": "claude46",
+              "fileName": "form.claude46.refactor.jsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\form.claude46.refactor.jsx",
+              "relativePath": "data\\Code\\form.claude46.refactor.jsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "effectiveLoc": 51,
+                "logicalLoc": 24,
+                "loc": 37.5,
+                "maxNesting": 2,
+                "averageNesting": 0.375,
+                "stateVariableCount": 3,
+                "stateCount": 4,
+                "mutatorCount": 3,
+                "nodeCount": 14,
+                "transitionCount": 13
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "loc": 2.5974025974025974,
+                "maxNesting": 0,
+                "nodeCount": 6.666666666666667,
+                "transitionCount": 7.142857142857142
+              }
+            }
+          ],
+          "averageImprovementPct": {
+            "loc": 2.5974025974025974,
+            "maxNesting": 0,
+            "nodeCount": 6.666666666666667,
+            "transitionCount": 7.142857142857142
+          },
+          "validRunCount": 1,
+          "totalRunCount": 1
+        }
+      ],
+      "overallAverageImprovementPct": {
+        "loc": 2.5974025974025974,
+        "maxNesting": 0,
+        "nodeCount": 6.666666666666667,
+        "transitionCount": 7.142857142857142
+      },
+      "validRunCount": 1,
+      "totalRunCount": 1
+    },
+    {
+      "name": "CodeAndDiagram",
+      "directory": "data\\CodeAndDiagram",
+      "files": [
+        {
+          "baseFile": "form.jsx",
+          "runs": [
+            {
+              "baseFile": "form.jsx",
+              "model": "claude46",
+              "fileName": "form.claude46.refactor.jsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\CodeAndDiagram\\form.claude46.refactor.jsx",
+              "relativePath": "data\\CodeAndDiagram\\form.claude46.refactor.jsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "effectiveLoc": 50,
+                "logicalLoc": 23,
+                "loc": 36.5,
+                "maxNesting": 2,
+                "averageNesting": 0.391304347826087,
+                "stateVariableCount": 3,
+                "stateCount": 4,
+                "mutatorCount": 2,
+                "nodeCount": 12,
+                "transitionCount": 12
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "loc": 5.194805194805195,
+                "maxNesting": 0,
+                "nodeCount": 20,
+                "transitionCount": 14.285714285714285
+              }
+            }
+          ],
+          "averageImprovementPct": {
+            "loc": 5.194805194805195,
+            "maxNesting": 0,
+            "nodeCount": 20,
+            "transitionCount": 14.285714285714285
+          },
+          "validRunCount": 1,
+          "totalRunCount": 1
+        }
+      ],
+      "overallAverageImprovementPct": {
+        "loc": 5.194805194805195,
+        "maxNesting": 0,
+        "nodeCount": 20,
+        "transitionCount": 14.285714285714285
+      },
+      "validRunCount": 1,
+      "totalRunCount": 1
+    }
+  ]
+}
