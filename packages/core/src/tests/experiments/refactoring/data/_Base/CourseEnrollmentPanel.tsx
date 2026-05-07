@@ -1,3 +1,5 @@
+/* Synthetic example generated and modified from real life data (react native app semestral assignment https://github.com/SimplyProgrammer/React-Native-Express-app/tree/main/frontend) */
+
 import React, { useEffect, useRef, useState } from "react";
 
 type Course = {
@@ -11,12 +13,10 @@ type Course = {
 type EnrollmentStatus = "idle" | "loading" | "ready" | "validating" | "submitting" | "approved" | "waiting" | "rejected" | "error";
 
 async function fakeEnroll(course: Course): Promise<{ approved: boolean }> {
-  return new Promise((resolve, reject) =>
-    setTimeout(() => {
-      if (course.title.includes("Broken")) reject(new Error("Enrollment failed"));
-      else resolve({ approved: !course.requiresApproval });
-    }, 700)
-  );
+  return new Promise((resolve, reject) => setTimeout(() => {
+    if (course.title.includes("Broken")) reject(new Error("Enrollment failed"));
+    else resolve({ approved: !course.requiresApproval });
+  }, 700));
 }
 
 export default function CourseEnrollmentPanel({ courses, selectedCourseId, onCourseChange }: { courses: Course[];selectedCourseId: number; onCourseChange: (id: number) => void }) {

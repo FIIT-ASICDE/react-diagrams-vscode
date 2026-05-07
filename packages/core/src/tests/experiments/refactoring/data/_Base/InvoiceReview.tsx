@@ -1,3 +1,5 @@
+/* Synthetic example generated and modified from real life data (react native app semestral assignment https://github.com/SimplyProgrammer/React-Native-Express-app/tree/main/frontend) */
+
 import React, { useRef, useState } from "react";
 
 type Invoice = {
@@ -17,12 +19,10 @@ const initialInvoices: Invoice[] = [
 ];
 
 async function fakeSendInvoice(invoice: Invoice) {
-  return new Promise<void>((resolve, reject) => {
-    setTimeout(() => {
-      if (invoice.amount > 5000) reject(new Error("Amount too high"));
-      else resolve();
-    }, 600);
-  });
+  return new Promise<void>((resolve, reject) => setTimeout(() => {
+    if (invoice.amount > 5000) reject(new Error("Amount too high"));
+    else resolve();
+  }, 600));
 }
 
 export default function InvoiceReview() {

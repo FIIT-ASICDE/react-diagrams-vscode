@@ -1,3 +1,5 @@
+/* Generated for computerized testing and eval by Codex Extension with adequate supervision and subsequent review. */
+
 import path from 'node:path';
 
 import { buildReport, REPORT_HTML, REPORT_JSON } from './evaluator';

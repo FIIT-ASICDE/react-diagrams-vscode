@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-07T10:24:46.608Z",
+  "generatedAt": "2026-05-07T10:46:29.597Z",
   "experimentDirectory": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring",
   "dataDirectory": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data",
   "outputs": {
@@ -45,7 +45,7 @@
         "errors": []
       },
       "metrics": {
-        "logicalLoc": 87,
+        "logicalLoc": 86,
         "maxNestedFlow": 4,
         "stateVariableCount": 5,
         "stateCount": 21,

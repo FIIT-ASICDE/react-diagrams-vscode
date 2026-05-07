@@ -1,3 +1,5 @@
+/* Synthetic example generated for testing the diagram and models understanding of it */
+
 import { useRef, useState } from "react";
 
 export default function TryCatchFinallyNested(props: { logidyLogLog?: boolean }) {

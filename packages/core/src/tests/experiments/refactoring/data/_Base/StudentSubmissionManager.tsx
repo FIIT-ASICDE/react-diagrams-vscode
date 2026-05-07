@@ -1,3 +1,5 @@
+/* Synthetic example generated and modified from real life data (react native app semestral assignment https://github.com/SimplyProgrammer/React-Native-Express-app/tree/main/frontend) */
+
 import React, { useEffect, useState } from "react";
 
 type Submission = {

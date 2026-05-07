@@ -1,3 +1,5 @@
+/* Based on https://codesandbox.io/p/sandbox/qjpxys?file=%2Fsrc%2FApp.js */
+
 import { useState } from 'react';
 
 function Form() {

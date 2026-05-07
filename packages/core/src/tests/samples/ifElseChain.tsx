@@ -1,3 +1,5 @@
+/* Synthetic example generated for testing the diagram and models understanding of it */
+
 import { useState } from "react";
 
 function doSomething() {

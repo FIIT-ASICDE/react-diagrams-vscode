@@ -1,6 +1,7 @@
 import path from "path";
 import { asSrcFile, createProject } from "../../../../app@state-diagram";
 import { ts } from "ts-morph";
+import { existsSync, readdirSync } from "fs";
 
 export const REFACTORING_DIR = path.resolve(__dirname, '..');
 export const CORE_DIR = path.resolve(REFACTORING_DIR, '../../../..');
@@ -14,6 +15,25 @@ export function baseStem(filePath: string) {
 
 export function formatError(error) {
 	return error instanceof Error ? error.message : String(error);
+}
+
+export function listSourceFiles(directory: string) {
+	if (!existsSync(directory))
+		return [];
+
+	return readdirSync(directory, { withFileTypes: true })
+		.filter(en => en.isFile() && !en.name.startsWith('_') && SOURCE_EXTENSIONS.has(path.extname(en.name)))
+		.map(en => path.join(directory, en.name))
+		.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
+}
+
+export function listDisabledBaseStems(directory: string) {
+	if (!existsSync(directory))
+		return new Set<string>();
+
+	return new Set(readdirSync(directory, { withFileTypes: true })
+		.filter(en => en.isFile() && en.name.startsWith('_') && SOURCE_EXTENSIONS.has(path.extname(en.name)))
+		.map(en => baseStem(en.name).replace(/^_+/, '')));
 }
 
 export function createSourceFileForMetrics(sourceText: string, fileName?: string) {

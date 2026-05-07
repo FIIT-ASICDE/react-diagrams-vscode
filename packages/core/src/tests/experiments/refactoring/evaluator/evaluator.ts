@@ -5,7 +5,7 @@ import { Project, SyntaxKind, ts } from 'ts-morph';
 import { parseReactComponent, StateGraphOptions } from '../../../../app@state-diagram';
 import { analyzeStateDiagram, type StateDiagramGlobalMetrics } from '../../../../app@state-diagram-model/graph/analyzer';
 import { METRIC_LABELS, type CodeMetrics, type ExperimentReport, type FileEvaluation, type FileSummary, type GroupReport, type MetricKey, type Validity } from './types';
-import { baseStem, checkCompilesWithoutErrors, createSourceFileForMetrics, formatError, REFACTORING_DIR, SOURCE_EXTENSIONS } from './utils';
+import { baseStem, checkCompilesWithoutErrors, createSourceFileForMetrics, formatError, listDisabledBaseStems, listSourceFiles, REFACTORING_DIR, SOURCE_EXTENSIONS } from './utils';
 
 export const DATA_DIR = path.join(REFACTORING_DIR, 'data');
 export const BASE_DIR = path.join(DATA_DIR, '_Base');
@@ -67,7 +67,8 @@ export function buildReport(): ExperimentReport {
 	const baselineFiles = listSourceFiles(BASE_DIR);
 	const baselines = baselineFiles.map((filePath) => evaluateFile(filePath, path.basename(filePath)));
 	const baselineByStem = new Map(baselines.map((baseline) => [baseStem(baseline.filePath), baseline]));
-	const groups = listGroupDirectories().map((groupDirectory) => buildGroupReport(groupDirectory, baselineByStem));
+	const disabledBaseStems = listDisabledBaseStems(BASE_DIR);
+	const groups = listGroupDirectories().map((groupDirectory) => buildGroupReport(groupDirectory, baselineByStem, disabledBaseStems));
 
 	return {
 		generatedAt: new Date().toISOString(),
@@ -83,23 +84,13 @@ export function buildReport(): ExperimentReport {
 	};
 }
 
-function listSourceFiles(directory: string) {
-	if (!existsSync(directory))
-		return [];
-
-	return readdirSync(directory, { withFileTypes: true })
-		.filter((entry) => entry.isFile() && SOURCE_EXTENSIONS.has(path.extname(entry.name)))
-		.map((entry) => path.join(directory, entry.name))
-		.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
-}
-
 function listGroupDirectories() {
 	if (!existsSync(DATA_DIR))
 		return [];
 
 	return readdirSync(DATA_DIR, { withFileTypes: true })
-		.filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
-		.map((entry) => path.join(DATA_DIR, entry.name))
+		.filter(en => en.isDirectory() && !en.name.startsWith('_'))
+		.map(en => path.join(DATA_DIR, en.name))
 		.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
 }
 
@@ -145,13 +136,16 @@ function evaluateFile(filePath: string, baseFile: string, model?: string): FileE
 	};
 }
 
-function buildGroupReport(groupDirectory: string, baselineByStem: Map<string, FileEvaluation>): GroupReport {
+function buildGroupReport(groupDirectory: string, baselineByStem: Map<string, FileEvaluation>, disabledBaseStems: Set<string>): GroupReport {
 	const groupName = path.basename(groupDirectory);
 	const sourceFiles = listSourceFiles(groupDirectory);
 	const runsByBase = new Map<string, FileEvaluation[]>();
 
 	for (const filePath of sourceFiles) {
 		const parsedName = parseRefactorFileName(filePath);
+		if (disabledBaseStems.has(parsedName.baseStem))
+			continue;
+
 		const baseline = baselineByStem.get(parsedName.baseStem);
 		const baseFile = baseline?.baseFile ?? `${parsedName.baseStem}${path.extname(filePath)}`;
 		const run = evaluateFile(filePath, baseFile, parsedName.model);
