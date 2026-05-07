@@ -41,14 +41,14 @@ export function renderHtmlReport(report: ExperimentReport) {
 		main {
 			width: min(1250px, calc(100vw - 48px));
 			margin: 0 auto;
-			padding: 36px 0 56px;
+			padding: 26px 0 56px;
 		}
 		header {
 			display: grid;
 			grid-template-columns: 1fr auto;
 			gap: 24px;
 			align-items: end;
-			margin-bottom: 28px;
+			margin-bottom: 22px;
 		}
 		h1, h2, h3, p {
 			margin: 0;
@@ -61,7 +61,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 		h2 {
 			font-size: 22px;
 			line-height: 1.2;
-			margin-bottom: 12px;
+			margin-bottom: 10px;
 		}
 		.meta {
 			color: #626b78;
@@ -123,7 +123,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 		.overall-item {
 			border: 1px solid #e3ddd3;
 			border-radius: 6px;
-			padding: 9px 10px;
+			padding: 8px 9px;
 			background: #fbf8f1;
 		}
 		.overall-label {
@@ -137,7 +137,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 			margin-top: 3px;
 		}
 		.chart {
-			margin-top: 16px;
+			margin-top: 15px;
 			border-top: 1px solid #e7e0d5;
 		}
 		.row {
@@ -255,7 +255,7 @@ function renderGroup(group: GroupReport, maxAbs: number) {
 			<p class="meta">${group.validRunCount}/${group.totalRunCount} valid runs</p>
 		</div>
 		<div class="overall">
-			${METRIC_KEYS.map((metric) => `<div class="overall-item">
+			${METRIC_KEYS.map((metric) => `<div class="overall-item" style="border-color: ${METRIC_COLORS[metric]}">
 				<div class="overall-label">${escapeHtml(METRIC_LABELS[metric])}</div>
 				<div class="overall-value">${formatPct(group.overallAverageImprovementPct[metric])}</div>
 			</div>`).join('\n\t\t\t')}
