@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-06T23:19:16.025Z",
+  "generatedAt": "2026-05-07T08:55:57.707Z",
   "experimentDirectory": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring",
   "dataDirectory": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data",
   "outputs": {
@@ -7,7 +7,7 @@
     "html": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\report.html"
   },
   "metricLabels": {
-    "loc": "LLoC/ELoC",
+    "logicalLoc": "Logical LOC",
     "maxNesting": "Nesting level",
     "nodeCount": "Total node count",
     "transitionCount": "Total transition count"
@@ -24,16 +24,14 @@
         "errors": []
       },
       "metrics": {
-        "effectiveLoc": 52,
-        "logicalLoc": 25,
-        "loc": 38.5,
+        "logicalLoc": 27,
         "maxNesting": 2,
-        "averageNesting": 0.36,
+        "averageNesting": 0.3333333333333333,
         "stateVariableCount": 3,
         "stateCount": 5,
         "mutatorCount": 3,
-        "nodeCount": 15,
-        "transitionCount": 14
+        "nodeCount": 13,
+        "transitionCount": 12
       },
       "includedInAverages": true
     }
@@ -48,6 +46,35 @@
           "runs": [
             {
               "baseFile": "form.jsx",
+              "model": "chatGPT5_3_Codex",
+              "fileName": "form.chatGPT5_3_Codex.refactor.jsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\form.chatGPT5_3_Codex.refactor.jsx",
+              "relativePath": "data\\Code\\form.chatGPT5_3_Codex.refactor.jsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "logicalLoc": 26,
+                "maxNesting": 2,
+                "averageNesting": 0.34615384615384615,
+                "stateVariableCount": 3,
+                "stateCount": 4,
+                "mutatorCount": 3,
+                "nodeCount": 12,
+                "transitionCount": 11
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "logicalLoc": 3.7037037037037033,
+                "maxNesting": 0,
+                "nodeCount": 7.6923076923076925,
+                "transitionCount": 8.333333333333332
+              }
+            },
+            {
+              "baseFile": "form.jsx",
               "model": "claude46",
               "fileName": "form.claude46.refactor.jsx",
               "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\form.claude46.refactor.jsx",
@@ -58,44 +85,42 @@
                 "errors": []
               },
               "metrics": {
-                "effectiveLoc": 51,
-                "logicalLoc": 24,
-                "loc": 37.5,
+                "logicalLoc": 26,
                 "maxNesting": 2,
-                "averageNesting": 0.375,
+                "averageNesting": 0.34615384615384615,
                 "stateVariableCount": 3,
                 "stateCount": 4,
                 "mutatorCount": 3,
-                "nodeCount": 14,
-                "transitionCount": 13
+                "nodeCount": 12,
+                "transitionCount": 11
               },
               "includedInAverages": true,
               "improvementPct": {
-                "loc": 2.5974025974025974,
+                "logicalLoc": 3.7037037037037033,
                 "maxNesting": 0,
-                "nodeCount": 6.666666666666667,
-                "transitionCount": 7.142857142857142
+                "nodeCount": 7.6923076923076925,
+                "transitionCount": 8.333333333333332
               }
             }
           ],
           "averageImprovementPct": {
-            "loc": 2.5974025974025974,
+            "logicalLoc": 3.7037037037037033,
             "maxNesting": 0,
-            "nodeCount": 6.666666666666667,
-            "transitionCount": 7.142857142857142
+            "nodeCount": 7.6923076923076925,
+            "transitionCount": 8.333333333333332
           },
-          "validRunCount": 1,
-          "totalRunCount": 1
+          "validRunCount": 2,
+          "totalRunCount": 2
         }
       ],
       "overallAverageImprovementPct": {
-        "loc": 2.5974025974025974,
+        "logicalLoc": 3.7037037037037033,
         "maxNesting": 0,
-        "nodeCount": 6.666666666666667,
-        "transitionCount": 7.142857142857142
+        "nodeCount": 7.6923076923076925,
+        "transitionCount": 8.333333333333332
       },
-      "validRunCount": 1,
-      "totalRunCount": 1
+      "validRunCount": 2,
+      "totalRunCount": 2
     },
     {
       "name": "CodeAndDiagram",
@@ -116,41 +141,39 @@
                 "errors": []
               },
               "metrics": {
-                "effectiveLoc": 50,
-                "logicalLoc": 23,
-                "loc": 36.5,
+                "logicalLoc": 25,
                 "maxNesting": 2,
-                "averageNesting": 0.391304347826087,
+                "averageNesting": 0.36,
                 "stateVariableCount": 3,
                 "stateCount": 4,
                 "mutatorCount": 2,
-                "nodeCount": 12,
-                "transitionCount": 12
+                "nodeCount": 10,
+                "transitionCount": 10
               },
               "includedInAverages": true,
               "improvementPct": {
-                "loc": 5.194805194805195,
+                "logicalLoc": 7.4074074074074066,
                 "maxNesting": 0,
-                "nodeCount": 20,
-                "transitionCount": 14.285714285714285
+                "nodeCount": 23.076923076923077,
+                "transitionCount": 16.666666666666664
               }
             }
           ],
           "averageImprovementPct": {
-            "loc": 5.194805194805195,
+            "logicalLoc": 7.4074074074074066,
             "maxNesting": 0,
-            "nodeCount": 20,
-            "transitionCount": 14.285714285714285
+            "nodeCount": 23.076923076923077,
+            "transitionCount": 16.666666666666664
           },
           "validRunCount": 1,
           "totalRunCount": 1
         }
       ],
       "overallAverageImprovementPct": {
-        "loc": 5.194805194805195,
+        "logicalLoc": 7.4074074074074066,
         "maxNesting": 0,
-        "nodeCount": 20,
-        "transitionCount": 14.285714285714285
+        "nodeCount": 23.076923076923077,
+        "transitionCount": 16.666666666666664
       },
       "validRunCount": 1,
       "totalRunCount": 1

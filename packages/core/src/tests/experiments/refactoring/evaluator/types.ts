@@ -1,9 +1,8 @@
-export type MetricKey = 'loc' | 'maxNesting' | 'nodeCount' | 'transitionCount';
+export type MetricKey = 'logicalLoc' | 'maxNesting' | 'nodeCount' | 'transitionCount';
 
 export interface CodeMetrics {
-	effectiveLoc: number;
+	// effectiveLoc: number;
 	logicalLoc: number;
-	loc: number;
 	maxNesting: number;
 	averageNesting: number;
 }
@@ -65,17 +64,17 @@ export interface ExperimentReport {
 }
 
 export const METRIC_LABELS: Record<MetricKey, string> = {
-	loc: 'LLoC/ELoC',
+	logicalLoc: 'Logical LOC',
 	maxNesting: 'Nesting level',
 	nodeCount: 'Total node count',
 	transitionCount: 'Total transition count',
 };
 
 export const METRIC_COLORS: Record<MetricKey, string> = {
-	loc: '#3b82ff',
-	maxNesting: '#ef6f78',
+	logicalLoc: '#3b82f6',
+	maxNesting: '#df75fb',
 	nodeCount: '#ffb66a',
 	transitionCount: '#86c779',
 };
 
-export const METRIC_KEYS: MetricKey[] = ['loc', 'maxNesting', 'nodeCount', 'transitionCount'];
+export const METRIC_KEYS: MetricKey[] = ['logicalLoc', 'maxNesting', 'nodeCount', 'transitionCount'];

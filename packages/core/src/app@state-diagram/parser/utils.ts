@@ -1,4 +1,4 @@
-import { Project, Node, SyntaxKind, SourceFile, VariableDeclaration, CallExpression, Statement, BinaryExpression } from 'ts-morph';
+import { Project, Node, SyntaxKind, SourceFile, VariableDeclaration, CallExpression, Statement, BinaryExpression, CompilerOptions, ProjectOptions } from 'ts-morph';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { CodePos, StateVariable } from '../../app@state-diagram-model/types';
@@ -21,14 +21,16 @@ export function findTsConfig(rootDir: string) {
 	return undefined;
 }
 
-export function createProject(rootDir: string) {
+export function createProject(rootDir: string, compilerOptions: CompilerOptions = {}, projectOptions: ProjectOptions = {}) {
 	const tsConfigPath = findTsConfig(rootDir);
 	return new Project({
 		tsConfigFilePath: tsConfigPath,
 		skipAddingFilesFromTsConfig: true,
+		...projectOptions,
 		compilerOptions: {
 			allowJs: true,
-		},
+			...compilerOptions,
+		}
 	});
 }
 

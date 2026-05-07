@@ -2,20 +2,17 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Project, SyntaxKind, ts } from 'ts-morph';
 
-import { parseReactComponent } from '../../../../app@state-diagram';
+import { parseReactComponent, StateGraphOptions } from '../../../../app@state-diagram';
 import { analyzeStateDiagram, type StateDiagramGlobalMetrics } from '../../../../app@state-diagram-model/graph/analyzer';
 import { METRIC_LABELS, type CodeMetrics, type ExperimentReport, type FileEvaluation, type FileSummary, type GroupReport, type MetricKey, type Validity } from './types';
+import { baseStem, checkCompilesWithoutErrors, createSourceFileForMetrics, formatError, REFACTORING_DIR, SOURCE_EXTENSIONS } from './utils';
 
-export const REFACTORING_DIR = path.resolve(__dirname, '..');
-export const CORE_DIR = path.resolve(REFACTORING_DIR, '../../../..');
 export const DATA_DIR = path.join(REFACTORING_DIR, 'data');
 export const BASE_DIR = path.join(DATA_DIR, '_Base');
 export const REPORT_JSON = path.join(REFACTORING_DIR, 'report.json');
 export const REPORT_HTML = path.join(REFACTORING_DIR, 'report.html');
 
-const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);
-
-const LOGICAL_STATEMENT_KINDS = new Set<SyntaxKind>([
+const LOGICAL_STATEMENT_KINDS = new Set([
 	SyntaxKind.VariableStatement,
 	SyntaxKind.ExpressionStatement,
 	SyntaxKind.ReturnStatement,
@@ -36,9 +33,10 @@ const LOGICAL_STATEMENT_KINDS = new Set<SyntaxKind>([
 	SyntaxKind.FunctionDeclaration,
 	SyntaxKind.MethodDeclaration,
 	SyntaxKind.PropertyDeclaration,
+	SyntaxKind.ArrowFunction
 ]);
 
-const NESTING_KINDS = new Set<SyntaxKind>([
+const NESTING_KINDS = new Set([
 	SyntaxKind.IfStatement,
 	SyntaxKind.ForStatement,
 	SyntaxKind.ForInStatement,
@@ -53,7 +51,15 @@ const NESTING_KINDS = new Set<SyntaxKind>([
 	SyntaxKind.ConditionalExpression,
 ]);
 
+const parserOptions: StateGraphOptions = { // mirror the extensions defaults...
+	useGuardsWhenPossible: true,
+	considerEarlyExits: true,
+	mergeSquashing: ['merge->merge', 'merge->decision', 'merge->exit']
+}
+
 export function buildReport(): ExperimentReport {
+	// console.log(path.join(REFACTORING_DIR, '../..'))
+
 	mkdirSync(REFACTORING_DIR, { recursive: true });
 	const baselineFiles = listSourceFiles(BASE_DIR);
 	const baselines = baselineFiles.map((filePath) => evaluateFile(filePath, path.basename(filePath)));
@@ -92,10 +98,6 @@ function listGroupDirectories() {
 		.filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
 		.map((entry) => path.join(DATA_DIR, entry.name))
 		.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));
-}
-
-function baseStem(filePath: string) {
-	return path.basename(filePath, path.extname(filePath));
 }
 
 function parseRefactorFileName(filePath: string) {
@@ -188,7 +190,7 @@ function withImprovements(evaluation: FileEvaluation, baseline: FileEvaluation):
 	return {
 		...evaluation,
 		improvementPct: {
-			loc: improvementPct(baseline.metrics.loc, evaluation.metrics.loc),
+			logicalLoc: improvementPct(baseline.metrics.logicalLoc, evaluation.metrics.logicalLoc),
 			maxNesting: improvementPct(baseline.metrics.maxNesting, evaluation.metrics.maxNesting),
 			nodeCount: improvementPct(baseline.metrics.nodeCount, evaluation.metrics.nodeCount),
 			transitionCount: improvementPct(baseline.metrics.transitionCount, evaluation.metrics.transitionCount),
@@ -205,7 +207,7 @@ function improvementPct(base: number, after: number) {
 
 function averageMetricMap(items: Array<Record<MetricKey, number | null> | undefined>): Record<MetricKey, number | null> {
 	return {
-		loc: average(items.map((item) => item?.loc)),
+		logicalLoc: average(items.map((item) => item?.logicalLoc)),
 		maxNesting: average(items.map((item) => item?.maxNesting)),
 		nodeCount: average(items.map((item) => item?.nodeCount)),
 		transitionCount: average(items.map((item) => item?.transitionCount)),
@@ -221,7 +223,7 @@ function average(values: Array<number | null | undefined>) {
 }
 
 function getCodeMetrics(sourceText: string, fileName: string): CodeMetrics {
-	const effectiveLoc = getEffectiveLoc(sourceText);
+	// const effectiveLoc = getEffectiveLoc(sourceText);
 	const sourceFile = createSourceFileForMetrics(sourceText, fileName);
 	let logicalLoc = 0;
 	let maxNesting = 0;
@@ -232,7 +234,7 @@ function getCodeMetrics(sourceText: string, fileName: string): CodeMetrics {
 	sourceFile.forEachDescendant((node) => {
 		const parent = node.getParent();
 		const parentDepth = parent ? nestingByNode.get(parent) ?? 0 : 0;
-		const depth = parentDepth + (NESTING_KINDS.has(node.getKind()) ? 1 : 0);
+		const depth = parentDepth + +NESTING_KINDS.has(node.getKind());
 		nestingByNode.set(node, depth);
 		maxNesting = Math.max(maxNesting, depth);
 
@@ -244,95 +246,39 @@ function getCodeMetrics(sourceText: string, fileName: string): CodeMetrics {
 		nestedStatementCount += 1;
 	});
 
-	const loc = Math.round(((effectiveLoc + logicalLoc) / 2) * 100) / 100;
-
 	return {
-		effectiveLoc,
+		// effectiveLoc,
 		logicalLoc,
-		loc,
 		maxNesting,
 		averageNesting: nestedStatementCount ? nestingSum / nestedStatementCount : 0,
 	};
 }
 
-function getEffectiveLoc(sourceText: string) {
-	const text = stripCommentsPreservingLines(sourceText);
-	return text
-		.split(/\r?\n/)
-		.map((line) => line.trim())
-		.filter((line) => line && !/^[{}()[\];,]+$/.test(line))
-		.length;
-}
+// function getEffectiveLoc(sourceText: string) {
+// 	const text = stripCommentsPreservingLines(sourceText);
+// 	return text.split(/\r?\n/).map(ln => ln.trim()).filter((line) => line && !/^[{}()[\];,]+$/.test(line)).length;
+// }
 
-function stripCommentsPreservingLines(text: string) {
-	const withoutBlockComments = text.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ''));
-	return withoutBlockComments.replace(/(^|[^:])\/\/.*$/gm, '$1');
-}
+// function stripCommentsPreservingLines(text: string) {
+// 	const withoutBlockComments = text.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ''));
+// 	return withoutBlockComments.replace(/(^|[^:])\/\/.*$/gm, '$1');
+// }
 
-function createSourceFileForMetrics(sourceText: string, fileName: string) {
-	const project = new Project({
-		compilerOptions: {
-			allowJs: true,
-			jsx: ts.JsxEmit.ReactJSX,
-			module: ts.ModuleKind.Node16,
-			moduleResolution: ts.ModuleResolutionKind.Node16,
-			skipLibCheck: true,
-			target: ts.ScriptTarget.ES2022,
-		},
-		skipFileDependencyResolution: true,
-		skipLoadingLibFiles: true,
-	});
+const isNonEmptyDiagram = (metrics: StateDiagramGlobalMetrics) => metrics.mutatorCount > 0 && metrics.nodeCount > 0
 
-	return project.createSourceFile(fileName, sourceText, { overwrite: true });
-}
-
-type BunLike = {
-	Transpiler?: new (options: { loader: 'js' | 'jsx' | 'ts' | 'tsx' }) => {
-		transformSync(sourceText: string): string;
+function emptyDiagramMetrics(): StateDiagramGlobalMetrics {
+	return {
+		stateVariableCount: 0,
+		stateCount: 0,
+		mutatorCount: 0,
+		nodeCount: 0,
+		transitionCount: 0,
 	};
-};
-
-function checkCompilesWithoutErrors(sourceText: string, filePath: string) {
-	const bun = (globalThis as typeof globalThis & { Bun?: BunLike }).Bun;
-
-	if (bun?.Transpiler) {
-		try {
-			new bun.Transpiler({ loader: getLoader(filePath) }).transformSync(sourceText);
-			return { ok: true, errors: [] as string[] };
-		}
-		catch (error) {
-			return { ok: false, errors: [formatError(error)] };
-		}
-	}
-
-	try {
-		const sourceFile = createSourceFileForMetrics(sourceText, path.basename(filePath));
-		const diagnostics = sourceFile.getProject().getPreEmitDiagnostics()
-			.filter((diagnostic) => diagnostic.getCategory() == ts.DiagnosticCategory.Error && diagnostic.getCode() < 2000);
-		return {
-			ok: diagnostics.length == 0,
-			errors: diagnostics.map((diagnostic) => diagnostic.getMessageText().toString()),
-		};
-	}
-	catch (error) {
-		return { ok: false, errors: [formatError(error)] };
-	}
-}
-
-function getLoader(filePath: string): 'js' | 'jsx' | 'ts' | 'tsx' {
-	const ext = path.extname(filePath).toLowerCase();
-	if (ext == '.jsx')
-		return 'jsx';
-	if (ext == '.ts')
-		return 'ts';
-	if (ext == '.js')
-		return 'js';
-	return 'tsx';
 }
 
 function getDiagramMetrics(filePath: string) {
 	try {
-		const diagram = parseReactComponent(filePath, { rootPath: CORE_DIR });
+		const diagram = parseReactComponent(filePath, { rootPath: path.join(REFACTORING_DIR, '../..'), ...parserOptions });
 		const analytics = analyzeStateDiagram(diagram);
 		return {
 			metrics: analytics.metrics,
@@ -347,25 +293,4 @@ function getDiagramMetrics(filePath: string) {
 			errors: [formatError(error)],
 		};
 	}
-}
-
-function emptyDiagramMetrics(): StateDiagramGlobalMetrics {
-	return {
-		stateVariableCount: 0,
-		stateCount: 0,
-		mutatorCount: 0,
-		nodeCount: 0,
-		transitionCount: 0,
-	};
-}
-
-function isNonEmptyDiagram(metrics: StateDiagramGlobalMetrics) {
-	return metrics.stateVariableCount > 0 && metrics.mutatorCount > 0 && metrics.nodeCount > 0;
-}
-
-function formatError(error: unknown) {
-	if (error instanceof Error)
-		return error.message;
-
-	return String(error);
 }

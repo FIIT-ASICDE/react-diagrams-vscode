@@ -129,6 +129,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 		.overall-label {
 			color: #626b78;
 			font-size: 12px;
+			font-weight: 600;
 		}
 		.overall-value {
 			font-size: 18px;
