@@ -16,7 +16,7 @@
 			background: #f6f3ee;
 		}
 		main {
-			width: min(1180px, calc(100vw - 48px));
+			width: min(1250px, calc(100vw - 48px));
 			margin: 0 auto;
 			padding: 36px 0 56px;
 		}
@@ -43,7 +43,7 @@
 		.meta {
 			color: #626b78;
 			font-size: 13px;
-			margin-top: 8px;
+			margin-top: 4px;
 		}
 		.summary {
 			display: flex;
@@ -63,7 +63,7 @@
 			display: flex;
 			gap: 16px;
 			flex-wrap: wrap;
-			margin: 12px 0 22px;
+			margin: 4px 0 8px;
 		}
 		.legend-item {
 			display: inline-flex;
@@ -182,7 +182,7 @@
 		}
 		@media (max-width: 840px) {
 			main {
-				width: min(100vw - 28px, 1180px);
+				width: min(100vw - 28px, 1250px);
 				padding-top: 24px;
 			}
 			header, .group-head, .row {
@@ -206,17 +206,17 @@
 		<header>
 			<div>
 				<h1>Refactoring Experiment Report</h1>
-				<p class="meta">Generated 5/7/2026, 10:55:57 AM</p>
+				<p class="meta">Generated 5/7/2026, 12:24:46 PM</p>
 			</div>
 			<div class="summary">
-				<span class="pill">1 baseline files</span>
+				<span class="pill">3 baseline files</span>
 				<span class="pill">2 test groups</span>
 				<span class="pill">Scale +/-25.0%</span>
 			</div>
 		</header>
 		<div class="legend">
 			<span class="legend-item"><span class="swatch" style="background:#3b82f6"></span>Logical LOC</span>
-			<span class="legend-item"><span class="swatch" style="background:#df75fb"></span>Nesting level</span>
+			<span class="legend-item"><span class="swatch" style="background:#df75fb"></span>Max nested flow</span>
 			<span class="legend-item"><span class="swatch" style="background:#ffb66a"></span>Total node count</span>
 			<span class="legend-item"><span class="swatch" style="background:#86c779"></span>Total transition count</span>
 		</div>
@@ -224,44 +224,66 @@
 	<div class="group-head">
 		<div>
 			<h2>Code</h2>
-			<p class="meta">2/2 valid runs included in averages</p>
+			<p class="meta">0/0 valid runs</p>
 		</div>
 		<div class="overall">
 			<div class="overall-item">
 				<div class="overall-label">Logical LOC</div>
-				<div class="overall-value">3.7%</div>
+				<div class="overall-value">N/A</div>
 			</div>
 			<div class="overall-item">
-				<div class="overall-label">Nesting level</div>
-				<div class="overall-value">0.0%</div>
+				<div class="overall-label">Max nested flow</div>
+				<div class="overall-value">N/A</div>
 			</div>
 			<div class="overall-item">
 				<div class="overall-label">Total node count</div>
-				<div class="overall-value">7.7%</div>
+				<div class="overall-value">N/A</div>
 			</div>
 			<div class="overall-item">
 				<div class="overall-label">Total transition count</div>
-				<div class="overall-value">8.3%</div>
+				<div class="overall-value">N/A</div>
 			</div>
 		</div>
 	</div>
 	<div class="chart">
 		<div class="row">
 	<div>
-		<div class="file-label">form.jsx</div>
-		<div class="run-count">2 runs</div>
+		<div class="file-label">CourseEnrollmentPanel.tsx</div>
+		<div class="run-count">0 runs</div>
 	</div>
-	<div class="bar-area" aria-label="form.jsx improvement chart">
-		<span class="bar" title="Logical LOC: 3.7%" style="--top:9px;--left:50%;--width:7.4074074074074066%;--color:#3b82f6"></span>
-		<span class="value" style="--top:9px;--value-left:59.007407407407406%;--value-transform:translateX(0)">3.7%</span>
-		<span class="bar" title="Nesting level: 0.0%" style="--top:23px;--left:50%;--width:0%;--color:#df75fb"></span>
-		<span class="value" style="--top:23px;--value-left:51.6%;--value-transform:translateX(0)">0.0%</span>
-		<span class="bar" title="Total node count: 7.7%" style="--top:37px;--left:50%;--width:15.384615384615385%;--color:#ffb66a"></span>
-		<span class="value" style="--top:37px;--value-left:66.98461538461538%;--value-transform:translateX(0)">7.7%</span>
-		<span class="bar" title="Total transition count: 8.3%" style="--top:51px;--left:50%;--width:16.666666666666664%;--color:#86c779"></span>
-		<span class="value" style="--top:51px;--value-left:68.26666666666665%;--value-transform:translateX(0)">8.3%</span>
+	<div class="bar-area" aria-label="CourseEnrollmentPanel.tsx improvement chart">
+		
+		
+		
+		
 	</div>
-	<div class="validity"><strong>valid</strong></div>
+	<div class="validity"><span class="warn">0/0 valid</span></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">InvoiceReview.tsx</div>
+		<div class="run-count">0 runs</div>
+	</div>
+	<div class="bar-area" aria-label="InvoiceReview.tsx improvement chart">
+		
+		
+		
+		
+	</div>
+	<div class="validity"><span class="warn">0/0 valid</span></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">StudentSubmissionManager.tsx</div>
+		<div class="run-count">0 runs</div>
+	</div>
+	<div class="bar-area" aria-label="StudentSubmissionManager.tsx improvement chart">
+		
+		
+		
+		
+	</div>
+	<div class="validity"><span class="warn">0/0 valid</span></div>
 </div>
 	</div>
 </section>
@@ -269,44 +291,66 @@
 	<div class="group-head">
 		<div>
 			<h2>CodeAndDiagram</h2>
-			<p class="meta">1/1 valid runs included in averages</p>
+			<p class="meta">0/0 valid runs</p>
 		</div>
 		<div class="overall">
 			<div class="overall-item">
 				<div class="overall-label">Logical LOC</div>
-				<div class="overall-value">7.4%</div>
+				<div class="overall-value">N/A</div>
 			</div>
 			<div class="overall-item">
-				<div class="overall-label">Nesting level</div>
-				<div class="overall-value">0.0%</div>
+				<div class="overall-label">Max nested flow</div>
+				<div class="overall-value">N/A</div>
 			</div>
 			<div class="overall-item">
 				<div class="overall-label">Total node count</div>
-				<div class="overall-value">23.1%</div>
+				<div class="overall-value">N/A</div>
 			</div>
 			<div class="overall-item">
 				<div class="overall-label">Total transition count</div>
-				<div class="overall-value">16.7%</div>
+				<div class="overall-value">N/A</div>
 			</div>
 		</div>
 	</div>
 	<div class="chart">
 		<div class="row">
 	<div>
-		<div class="file-label">form.jsx</div>
-		<div class="run-count">1 run</div>
+		<div class="file-label">CourseEnrollmentPanel.tsx</div>
+		<div class="run-count">0 runs</div>
 	</div>
-	<div class="bar-area" aria-label="form.jsx improvement chart">
-		<span class="bar" title="Logical LOC: 7.4%" style="--top:9px;--left:50%;--width:14.814814814814813%;--color:#3b82f6"></span>
-		<span class="value" style="--top:9px;--value-left:66.4148148148148%;--value-transform:translateX(0)">7.4%</span>
-		<span class="bar" title="Nesting level: 0.0%" style="--top:23px;--left:50%;--width:0%;--color:#df75fb"></span>
-		<span class="value" style="--top:23px;--value-left:51.6%;--value-transform:translateX(0)">0.0%</span>
-		<span class="bar" title="Total node count: 23.1%" style="--top:37px;--left:50%;--width:46.15384615384615%;--color:#ffb66a"></span>
-		<span class="value" style="--top:37px;--value-left:97.75384615384615%;--value-transform:translateX(0)">23.1%</span>
-		<span class="bar" title="Total transition count: 16.7%" style="--top:51px;--left:50%;--width:33.33333333333333%;--color:#86c779"></span>
-		<span class="value" style="--top:51px;--value-left:84.93333333333332%;--value-transform:translateX(0)">16.7%</span>
+	<div class="bar-area" aria-label="CourseEnrollmentPanel.tsx improvement chart">
+		
+		
+		
+		
 	</div>
-	<div class="validity"><strong>valid</strong></div>
+	<div class="validity"><span class="warn">0/0 valid</span></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">InvoiceReview.tsx</div>
+		<div class="run-count">0 runs</div>
+	</div>
+	<div class="bar-area" aria-label="InvoiceReview.tsx improvement chart">
+		
+		
+		
+		
+	</div>
+	<div class="validity"><span class="warn">0/0 valid</span></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">StudentSubmissionManager.tsx</div>
+		<div class="run-count">0 runs</div>
+	</div>
+	<div class="bar-area" aria-label="StudentSubmissionManager.tsx improvement chart">
+		
+		
+		
+		
+	</div>
+	<div class="validity"><span class="warn">0/0 valid</span></div>
 </div>
 	</div>
 </section>

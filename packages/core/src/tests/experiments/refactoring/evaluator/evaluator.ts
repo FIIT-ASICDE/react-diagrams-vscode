@@ -12,6 +12,8 @@ export const BASE_DIR = path.join(DATA_DIR, '_Base');
 export const REPORT_JSON = path.join(REFACTORING_DIR, 'report.json');
 export const REPORT_HTML = path.join(REFACTORING_DIR, 'report.html');
 
+const INVALID_REFACTOR_PENALTY = -0.25;
+
 const LOGICAL_STATEMENT_KINDS = new Set([
 	SyntaxKind.VariableStatement,
 	SyntaxKind.ExpressionStatement,
@@ -47,8 +49,9 @@ const NESTING_KINDS = new Set([
 	SyntaxKind.CaseClause,
 	SyntaxKind.DefaultClause,
 	SyntaxKind.TryStatement,
-	SyntaxKind.CatchClause,
+	// SyntaxKind.CatchClause,
 	SyntaxKind.ConditionalExpression,
+	// SyntaxKind.ExpressionStatement,
 ]);
 
 const parserOptions: StateGraphOptions = { // mirror the extensions defaults...
@@ -166,12 +169,13 @@ function buildGroupReport(groupDirectory: string, baselineByStem: Map<string, Fi
 	const files: FileSummary[] = [...runsByBase.entries()]
 		.sort(([a], [b]) => a.localeCompare(b))
 		.map(([baseFile, runs]) => {
-			const includedRuns = runs.filter((run) => run.includedInAverages);
+			const averageableRuns = runs.filter((run) => run.includedInAverages || Boolean(run.improvementPct));
+			const validRuns = runs.filter((run) => run.includedInAverages);
 			return {
 				baseFile,
 				runs,
-				averageImprovementPct: averageMetricMap(includedRuns.map((run) => run.improvementPct)),
-				validRunCount: includedRuns.length,
+				averageImprovementPct: averageMetricMap(averageableRuns.map((run) => run.improvementPct)),
+				validRunCount: validRuns.length,
 				totalRunCount: runs.length,
 			};
 		});
@@ -187,14 +191,33 @@ function buildGroupReport(groupDirectory: string, baselineByStem: Map<string, Fi
 }
 
 function withImprovements(evaluation: FileEvaluation, baseline: FileEvaluation): FileEvaluation {
+	const improvementPct = getImprovementPct(evaluation, baseline);
+
 	return {
 		...evaluation,
-		improvementPct: {
-			logicalLoc: improvementPct(baseline.metrics.logicalLoc, evaluation.metrics.logicalLoc),
-			maxNesting: improvementPct(baseline.metrics.maxNesting, evaluation.metrics.maxNesting),
-			nodeCount: improvementPct(baseline.metrics.nodeCount, evaluation.metrics.nodeCount),
-			transitionCount: improvementPct(baseline.metrics.transitionCount, evaluation.metrics.transitionCount),
-		},
+		improvementPct,
+	};
+}
+
+function getImprovementPct(evaluation: FileEvaluation, baseline: FileEvaluation): Record<MetricKey, number | null> | undefined {
+	if (!evaluation.includedInAverages) {
+		if (!Number.isFinite(INVALID_REFACTOR_PENALTY))
+			return undefined;
+
+		const penaltyPct = INVALID_REFACTOR_PENALTY * 100;
+		return {
+			logicalLoc: penaltyPct,
+			maxNestedFlow: penaltyPct,
+			nodeCount: penaltyPct,
+			transitionCount: penaltyPct,
+		};
+	}
+
+	return {
+		logicalLoc: improvementPct(baseline.metrics.logicalLoc, evaluation.metrics.logicalLoc),
+		maxNestedFlow: improvementPct(baseline.metrics.maxNestedFlow, evaluation.metrics.maxNestedFlow),
+		nodeCount: improvementPct(baseline.metrics.nodeCount, evaluation.metrics.nodeCount),
+		transitionCount: improvementPct(baseline.metrics.transitionCount, evaluation.metrics.transitionCount),
 	};
 }
 
@@ -208,7 +231,7 @@ function improvementPct(base: number, after: number) {
 function averageMetricMap(items: Array<Record<MetricKey, number | null> | undefined>): Record<MetricKey, number | null> {
 	return {
 		logicalLoc: average(items.map((item) => item?.logicalLoc)),
-		maxNesting: average(items.map((item) => item?.maxNesting)),
+		maxNestedFlow: average(items.map((item) => item?.maxNestedFlow)),
 		nodeCount: average(items.map((item) => item?.nodeCount)),
 		transitionCount: average(items.map((item) => item?.transitionCount)),
 	};
@@ -226,9 +249,9 @@ function getCodeMetrics(sourceText: string, fileName: string): CodeMetrics {
 	// const effectiveLoc = getEffectiveLoc(sourceText);
 	const sourceFile = createSourceFileForMetrics(sourceText, fileName);
 	let logicalLoc = 0;
-	let maxNesting = 0;
-	let nestingSum = 0;
-	let nestedStatementCount = 0;
+	let maxNestedFlow = 0;
+	// let nestingSum = 0;
+	// let nestedStatementCount = 0; // lloc basically...
 	const nestingByNode = new Map<unknown, number>();
 
 	sourceFile.forEachDescendant((node) => {
@@ -236,21 +259,21 @@ function getCodeMetrics(sourceText: string, fileName: string): CodeMetrics {
 		const parentDepth = parent ? nestingByNode.get(parent) ?? 0 : 0;
 		const depth = parentDepth + +NESTING_KINDS.has(node.getKind());
 		nestingByNode.set(node, depth);
-		maxNesting = Math.max(maxNesting, depth);
+		maxNestedFlow = Math.max(maxNestedFlow, depth);
 
 		if (!LOGICAL_STATEMENT_KINDS.has(node.getKind()))
 			return;
 
 		logicalLoc += 1;
-		nestingSum += parentDepth;
-		nestedStatementCount += 1;
+		// nestingSum += parentDepth;
+		// nestedStatementCount += 1;
 	});
 
 	return {
 		// effectiveLoc,
 		logicalLoc,
-		maxNesting,
-		averageNesting: nestedStatementCount ? nestingSum / nestedStatementCount : 0,
+		maxNestedFlow,
+		// averageNesting: nestedStatementCount ? nestingSum / nestedStatementCount : 0,
 	};
 }
 

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-07T08:55:57.707Z",
+  "generatedAt": "2026-05-07T10:24:46.608Z",
   "experimentDirectory": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring",
   "dataDirectory": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data",
   "outputs": {
@@ -8,30 +8,71 @@
   },
   "metricLabels": {
     "logicalLoc": "Logical LOC",
-    "maxNesting": "Nesting level",
+    "maxNestedFlow": "Max nested flow",
     "nodeCount": "Total node count",
     "transitionCount": "Total transition count"
   },
   "baselines": [
     {
-      "baseFile": "form.jsx",
-      "fileName": "form.jsx",
-      "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\_Base\\form.jsx",
-      "relativePath": "data\\_Base\\form.jsx",
+      "baseFile": "CourseEnrollmentPanel.tsx",
+      "fileName": "CourseEnrollmentPanel.tsx",
+      "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\_Base\\CourseEnrollmentPanel.tsx",
+      "relativePath": "data\\_Base\\CourseEnrollmentPanel.tsx",
       "validity": {
         "compilesWithoutErrors": true,
         "nonEmptyDiagramGenerated": true,
         "errors": []
       },
       "metrics": {
-        "logicalLoc": 27,
-        "maxNesting": 2,
-        "averageNesting": 0.3333333333333333,
+        "logicalLoc": 85,
+        "maxNestedFlow": 3,
         "stateVariableCount": 3,
-        "stateCount": 5,
-        "mutatorCount": 3,
-        "nodeCount": 13,
-        "transitionCount": 12
+        "stateCount": 21,
+        "mutatorCount": 8,
+        "nodeCount": 84,
+        "transitionCount": 87
+      },
+      "includedInAverages": true
+    },
+    {
+      "baseFile": "InvoiceReview.tsx",
+      "fileName": "InvoiceReview.tsx",
+      "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\_Base\\InvoiceReview.tsx",
+      "relativePath": "data\\_Base\\InvoiceReview.tsx",
+      "validity": {
+        "compilesWithoutErrors": true,
+        "nonEmptyDiagramGenerated": true,
+        "errors": []
+      },
+      "metrics": {
+        "logicalLoc": 87,
+        "maxNestedFlow": 4,
+        "stateVariableCount": 5,
+        "stateCount": 21,
+        "mutatorCount": 10,
+        "nodeCount": 83,
+        "transitionCount": 94
+      },
+      "includedInAverages": true
+    },
+    {
+      "baseFile": "StudentSubmissionManager.tsx",
+      "fileName": "StudentSubmissionManager.tsx",
+      "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\_Base\\StudentSubmissionManager.tsx",
+      "relativePath": "data\\_Base\\StudentSubmissionManager.tsx",
+      "validity": {
+        "compilesWithoutErrors": true,
+        "nonEmptyDiagramGenerated": true,
+        "errors": []
+      },
+      "metrics": {
+        "logicalLoc": 111,
+        "maxNestedFlow": 4,
+        "stateVariableCount": 4,
+        "stateCount": 27,
+        "mutatorCount": 12,
+        "nodeCount": 124,
+        "transitionCount": 133
       },
       "includedInAverages": true
     }
@@ -42,141 +83,100 @@
       "directory": "data\\Code",
       "files": [
         {
-          "baseFile": "form.jsx",
-          "runs": [
-            {
-              "baseFile": "form.jsx",
-              "model": "chatGPT5_3_Codex",
-              "fileName": "form.chatGPT5_3_Codex.refactor.jsx",
-              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\form.chatGPT5_3_Codex.refactor.jsx",
-              "relativePath": "data\\Code\\form.chatGPT5_3_Codex.refactor.jsx",
-              "validity": {
-                "compilesWithoutErrors": true,
-                "nonEmptyDiagramGenerated": true,
-                "errors": []
-              },
-              "metrics": {
-                "logicalLoc": 26,
-                "maxNesting": 2,
-                "averageNesting": 0.34615384615384615,
-                "stateVariableCount": 3,
-                "stateCount": 4,
-                "mutatorCount": 3,
-                "nodeCount": 12,
-                "transitionCount": 11
-              },
-              "includedInAverages": true,
-              "improvementPct": {
-                "logicalLoc": 3.7037037037037033,
-                "maxNesting": 0,
-                "nodeCount": 7.6923076923076925,
-                "transitionCount": 8.333333333333332
-              }
-            },
-            {
-              "baseFile": "form.jsx",
-              "model": "claude46",
-              "fileName": "form.claude46.refactor.jsx",
-              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\form.claude46.refactor.jsx",
-              "relativePath": "data\\Code\\form.claude46.refactor.jsx",
-              "validity": {
-                "compilesWithoutErrors": true,
-                "nonEmptyDiagramGenerated": true,
-                "errors": []
-              },
-              "metrics": {
-                "logicalLoc": 26,
-                "maxNesting": 2,
-                "averageNesting": 0.34615384615384615,
-                "stateVariableCount": 3,
-                "stateCount": 4,
-                "mutatorCount": 3,
-                "nodeCount": 12,
-                "transitionCount": 11
-              },
-              "includedInAverages": true,
-              "improvementPct": {
-                "logicalLoc": 3.7037037037037033,
-                "maxNesting": 0,
-                "nodeCount": 7.6923076923076925,
-                "transitionCount": 8.333333333333332
-              }
-            }
-          ],
+          "baseFile": "CourseEnrollmentPanel.tsx",
+          "runs": [],
           "averageImprovementPct": {
-            "logicalLoc": 3.7037037037037033,
-            "maxNesting": 0,
-            "nodeCount": 7.6923076923076925,
-            "transitionCount": 8.333333333333332
+            "logicalLoc": null,
+            "maxNestedFlow": null,
+            "nodeCount": null,
+            "transitionCount": null
           },
-          "validRunCount": 2,
-          "totalRunCount": 2
+          "validRunCount": 0,
+          "totalRunCount": 0
+        },
+        {
+          "baseFile": "InvoiceReview.tsx",
+          "runs": [],
+          "averageImprovementPct": {
+            "logicalLoc": null,
+            "maxNestedFlow": null,
+            "nodeCount": null,
+            "transitionCount": null
+          },
+          "validRunCount": 0,
+          "totalRunCount": 0
+        },
+        {
+          "baseFile": "StudentSubmissionManager.tsx",
+          "runs": [],
+          "averageImprovementPct": {
+            "logicalLoc": null,
+            "maxNestedFlow": null,
+            "nodeCount": null,
+            "transitionCount": null
+          },
+          "validRunCount": 0,
+          "totalRunCount": 0
         }
       ],
       "overallAverageImprovementPct": {
-        "logicalLoc": 3.7037037037037033,
-        "maxNesting": 0,
-        "nodeCount": 7.6923076923076925,
-        "transitionCount": 8.333333333333332
+        "logicalLoc": null,
+        "maxNestedFlow": null,
+        "nodeCount": null,
+        "transitionCount": null
       },
-      "validRunCount": 2,
-      "totalRunCount": 2
+      "validRunCount": 0,
+      "totalRunCount": 0
     },
     {
       "name": "CodeAndDiagram",
       "directory": "data\\CodeAndDiagram",
       "files": [
         {
-          "baseFile": "form.jsx",
-          "runs": [
-            {
-              "baseFile": "form.jsx",
-              "model": "claude46",
-              "fileName": "form.claude46.refactor.jsx",
-              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\CodeAndDiagram\\form.claude46.refactor.jsx",
-              "relativePath": "data\\CodeAndDiagram\\form.claude46.refactor.jsx",
-              "validity": {
-                "compilesWithoutErrors": true,
-                "nonEmptyDiagramGenerated": true,
-                "errors": []
-              },
-              "metrics": {
-                "logicalLoc": 25,
-                "maxNesting": 2,
-                "averageNesting": 0.36,
-                "stateVariableCount": 3,
-                "stateCount": 4,
-                "mutatorCount": 2,
-                "nodeCount": 10,
-                "transitionCount": 10
-              },
-              "includedInAverages": true,
-              "improvementPct": {
-                "logicalLoc": 7.4074074074074066,
-                "maxNesting": 0,
-                "nodeCount": 23.076923076923077,
-                "transitionCount": 16.666666666666664
-              }
-            }
-          ],
+          "baseFile": "CourseEnrollmentPanel.tsx",
+          "runs": [],
           "averageImprovementPct": {
-            "logicalLoc": 7.4074074074074066,
-            "maxNesting": 0,
-            "nodeCount": 23.076923076923077,
-            "transitionCount": 16.666666666666664
+            "logicalLoc": null,
+            "maxNestedFlow": null,
+            "nodeCount": null,
+            "transitionCount": null
           },
-          "validRunCount": 1,
-          "totalRunCount": 1
+          "validRunCount": 0,
+          "totalRunCount": 0
+        },
+        {
+          "baseFile": "InvoiceReview.tsx",
+          "runs": [],
+          "averageImprovementPct": {
+            "logicalLoc": null,
+            "maxNestedFlow": null,
+            "nodeCount": null,
+            "transitionCount": null
+          },
+          "validRunCount": 0,
+          "totalRunCount": 0
+        },
+        {
+          "baseFile": "StudentSubmissionManager.tsx",
+          "runs": [],
+          "averageImprovementPct": {
+            "logicalLoc": null,
+            "maxNestedFlow": null,
+            "nodeCount": null,
+            "transitionCount": null
+          },
+          "validRunCount": 0,
+          "totalRunCount": 0
         }
       ],
       "overallAverageImprovementPct": {
-        "logicalLoc": 7.4074074074074066,
-        "maxNesting": 0,
-        "nodeCount": 23.076923076923077,
-        "transitionCount": 16.666666666666664
+        "logicalLoc": null,
+        "maxNestedFlow": null,
+        "nodeCount": null,
+        "transitionCount": null
       },
-      "validRunCount": 1,
-      "totalRunCount": 1
+      "validRunCount": 0,
+      "totalRunCount": 0
     }
   ]
 }

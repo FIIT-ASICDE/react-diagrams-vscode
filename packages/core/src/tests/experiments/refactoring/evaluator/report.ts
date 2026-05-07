@@ -39,7 +39,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 			background: #f6f3ee;
 		}
 		main {
-			width: min(1180px, calc(100vw - 48px));
+			width: min(1250px, calc(100vw - 48px));
 			margin: 0 auto;
 			padding: 36px 0 56px;
 		}
@@ -66,7 +66,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 		.meta {
 			color: #626b78;
 			font-size: 13px;
-			margin-top: 8px;
+			margin-top: 4px;
 		}
 		.summary {
 			display: flex;
@@ -86,7 +86,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 			display: flex;
 			gap: 16px;
 			flex-wrap: wrap;
-			margin: 12px 0 22px;
+			margin: 4px 0 8px;
 		}
 		.legend-item {
 			display: inline-flex;
@@ -205,7 +205,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 		}
 		@media (max-width: 840px) {
 			main {
-				width: min(100vw - 28px, 1180px);
+				width: min(100vw - 28px, 1250px);
 				padding-top: 24px;
 			}
 			header, .group-head, .row {
@@ -252,7 +252,7 @@ function renderGroup(group: GroupReport, maxAbs: number) {
 	<div class="group-head">
 		<div>
 			<h2>${escapeHtml(group.name)}</h2>
-			<p class="meta">${group.validRunCount}/${group.totalRunCount} valid runs included in averages</p>
+			<p class="meta">${group.validRunCount}/${group.totalRunCount} valid runs</p>
 		</div>
 		<div class="overall">
 			${METRIC_KEYS.map((metric) => `<div class="overall-item">
