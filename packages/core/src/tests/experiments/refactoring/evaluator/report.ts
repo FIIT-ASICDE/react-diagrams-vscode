@@ -61,7 +61,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 		h2 {
 			font-size: 22px;
 			line-height: 1.2;
-			margin-bottom: 16px;
+			margin-bottom: 12px;
 		}
 		.meta {
 			color: #626b78;
@@ -86,7 +86,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 			display: flex;
 			gap: 16px;
 			flex-wrap: wrap;
-			margin: 4px 0 8px;
+			margin: 4px 2px 8px;
 		}
 		.legend-item {
 			display: inline-flex;
@@ -105,7 +105,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 			border: 1px solid #ddd5c9;
 			border-radius: 8px;
 			padding: 22px;
-			margin-top: 18px;
+			margin-top: 10px;
 			box-shadow: 0 1px 2px rgba(31, 35, 40, 0.06);
 		}
 		.group-head {
@@ -137,7 +137,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 			margin-top: 3px;
 		}
 		.chart {
-			margin-top: 18px;
+			margin-top: 16px;
 			border-top: 1px solid #e7e0d5;
 		}
 		.row {
