@@ -96,7 +96,7 @@ function listGroupDirectories() {
 
 function parseRefactorFileName(filePath: string) {
 	const fileName = path.basename(filePath);
-	const match = /^(.+)\.([^.]+)\.refactor\.(tsx?|jsx?)$/i.exec(fileName);
+	const match = /^(.+)\.([^.]+)\.refactore?d?\.(tsx?|jsx?)$/i.exec(fileName);
 	if (!match)
 		return { baseStem: baseStem(filePath), model: undefined };
 

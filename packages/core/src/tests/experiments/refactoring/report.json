@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-07T10:55:29.027Z",
+  "generatedAt": "2026-05-07T20:52:57.813Z",
   "experimentDirectory": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring",
   "dataDirectory": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data",
   "outputs": {
@@ -75,6 +75,27 @@
         "transitionCount": 133
       },
       "includedInAverages": true
+    },
+    {
+      "baseFile": "UploadWiz.tsx",
+      "fileName": "UploadWiz.tsx",
+      "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\_Base\\UploadWiz.tsx",
+      "relativePath": "data\\_Base\\UploadWiz.tsx",
+      "validity": {
+        "compilesWithoutErrors": true,
+        "nonEmptyDiagramGenerated": true,
+        "errors": []
+      },
+      "metrics": {
+        "logicalLoc": 90,
+        "maxNestedFlow": 3,
+        "stateVariableCount": 6,
+        "stateCount": 25,
+        "mutatorCount": 16,
+        "nodeCount": 139,
+        "transitionCount": 137
+      },
+      "includedInAverages": true
     }
   ],
   "groups": [
@@ -84,49 +105,289 @@
       "files": [
         {
           "baseFile": "CourseEnrollmentPanel.tsx",
-          "runs": [],
+          "runs": [
+            {
+              "baseFile": "CourseEnrollmentPanel.tsx",
+              "model": "gpt53cdx",
+              "fileName": "CourseEnrollmentPanel.gpt53cdx.refactor.tsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\CourseEnrollmentPanel.gpt53cdx.refactor.tsx",
+              "relativePath": "data\\Code\\CourseEnrollmentPanel.gpt53cdx.refactor.tsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "logicalLoc": 70,
+                "maxNestedFlow": 3,
+                "stateVariableCount": 3,
+                "stateCount": 9,
+                "mutatorCount": 10,
+                "nodeCount": 49,
+                "transitionCount": 43
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "logicalLoc": 17.647058823529413,
+                "maxNestedFlow": 0,
+                "nodeCount": 41.66666666666667,
+                "transitionCount": 50.57471264367817
+              }
+            },
+            {
+              "baseFile": "CourseEnrollmentPanel.tsx",
+              "model": "sonnet46",
+              "fileName": "CourseEnrollmentPanel.sonnet46.refactor.tsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\CourseEnrollmentPanel.sonnet46.refactor.tsx",
+              "relativePath": "data\\Code\\CourseEnrollmentPanel.sonnet46.refactor.tsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "logicalLoc": 59,
+                "maxNestedFlow": 2,
+                "stateVariableCount": 3,
+                "stateCount": 18,
+                "mutatorCount": 8,
+                "nodeCount": 60,
+                "transitionCount": 58
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "logicalLoc": 30.58823529411765,
+                "maxNestedFlow": 33.33333333333333,
+                "nodeCount": 28.57142857142857,
+                "transitionCount": 33.33333333333333
+              }
+            }
+          ],
           "averageImprovementPct": {
-            "logicalLoc": null,
-            "maxNestedFlow": null,
-            "nodeCount": null,
-            "transitionCount": null
+            "logicalLoc": 24.11764705882353,
+            "maxNestedFlow": 16.666666666666664,
+            "nodeCount": 35.11904761904762,
+            "transitionCount": 41.95402298850575
           },
-          "validRunCount": 0,
-          "totalRunCount": 0
+          "validRunCount": 2,
+          "totalRunCount": 2
         },
         {
           "baseFile": "InvoiceReview.tsx",
-          "runs": [],
+          "runs": [
+            {
+              "baseFile": "InvoiceReview.tsx",
+              "model": "gpt53cdx",
+              "fileName": "InvoiceReview.gpt53cdx.refactor.tsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\InvoiceReview.gpt53cdx.refactor.tsx",
+              "relativePath": "data\\Code\\InvoiceReview.gpt53cdx.refactor.tsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "logicalLoc": 83,
+                "maxNestedFlow": 3,
+                "stateVariableCount": 5,
+                "stateCount": 20,
+                "mutatorCount": 10,
+                "nodeCount": 73,
+                "transitionCount": 77
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "logicalLoc": 3.488372093023256,
+                "maxNestedFlow": 25,
+                "nodeCount": 12.048192771084338,
+                "transitionCount": 18.085106382978726
+              }
+            },
+            {
+              "baseFile": "InvoiceReview.tsx",
+              "model": "sonnet46",
+              "fileName": "InvoiceReview.sonnet46.refactor.tsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\InvoiceReview.sonnet46.refactor.tsx",
+              "relativePath": "data\\Code\\InvoiceReview.sonnet46.refactor.tsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "logicalLoc": 71,
+                "maxNestedFlow": 3,
+                "stateVariableCount": 5,
+                "stateCount": 20,
+                "mutatorCount": 10,
+                "nodeCount": 73,
+                "transitionCount": 77
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "logicalLoc": 17.441860465116278,
+                "maxNestedFlow": 25,
+                "nodeCount": 12.048192771084338,
+                "transitionCount": 18.085106382978726
+              }
+            }
+          ],
           "averageImprovementPct": {
-            "logicalLoc": null,
-            "maxNestedFlow": null,
-            "nodeCount": null,
-            "transitionCount": null
+            "logicalLoc": 10.465116279069766,
+            "maxNestedFlow": 25,
+            "nodeCount": 12.048192771084338,
+            "transitionCount": 18.085106382978726
           },
-          "validRunCount": 0,
-          "totalRunCount": 0
+          "validRunCount": 2,
+          "totalRunCount": 2
         },
         {
           "baseFile": "StudentSubmissionManager.tsx",
-          "runs": [],
+          "runs": [
+            {
+              "baseFile": "StudentSubmissionManager.tsx",
+              "model": "gpt53cdx",
+              "fileName": "StudentSubmissionManager.gpt53cdx.refactor.tsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\StudentSubmissionManager.gpt53cdx.refactor.tsx",
+              "relativePath": "data\\Code\\StudentSubmissionManager.gpt53cdx.refactor.tsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "logicalLoc": 105,
+                "maxNestedFlow": 3,
+                "stateVariableCount": 4,
+                "stateCount": 17,
+                "mutatorCount": 13,
+                "nodeCount": 66,
+                "transitionCount": 59
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "logicalLoc": 5.405405405405405,
+                "maxNestedFlow": 25,
+                "nodeCount": 46.774193548387096,
+                "transitionCount": 55.639097744360896
+              }
+            },
+            {
+              "baseFile": "StudentSubmissionManager.tsx",
+              "model": "sonnet46",
+              "fileName": "StudentSubmissionManager.sonnet46.refactor.tsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\StudentSubmissionManager.sonnet46.refactor.tsx",
+              "relativePath": "data\\Code\\StudentSubmissionManager.sonnet46.refactor.tsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "logicalLoc": 94,
+                "maxNestedFlow": 3,
+                "stateVariableCount": 4,
+                "stateCount": 23,
+                "mutatorCount": 11,
+                "nodeCount": 94,
+                "transitionCount": 93
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "logicalLoc": 15.315315315315313,
+                "maxNestedFlow": 25,
+                "nodeCount": 24.193548387096776,
+                "transitionCount": 30.075187969924812
+              }
+            }
+          ],
           "averageImprovementPct": {
-            "logicalLoc": null,
-            "maxNestedFlow": null,
-            "nodeCount": null,
-            "transitionCount": null
+            "logicalLoc": 10.36036036036036,
+            "maxNestedFlow": 25,
+            "nodeCount": 35.483870967741936,
+            "transitionCount": 42.857142857142854
           },
-          "validRunCount": 0,
-          "totalRunCount": 0
+          "validRunCount": 2,
+          "totalRunCount": 2
+        },
+        {
+          "baseFile": "UploadWiz.tsx",
+          "runs": [
+            {
+              "baseFile": "UploadWiz.tsx",
+              "model": "gpt53cdx",
+              "fileName": "UploadWiz.gpt53cdx.refactor.tsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\UploadWiz.gpt53cdx.refactor.tsx",
+              "relativePath": "data\\Code\\UploadWiz.gpt53cdx.refactor.tsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "logicalLoc": 92,
+                "maxNestedFlow": 3,
+                "stateVariableCount": 6,
+                "stateCount": 18,
+                "mutatorCount": 18,
+                "nodeCount": 108,
+                "transitionCount": 99
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "logicalLoc": -2.2222222222222223,
+                "maxNestedFlow": 0,
+                "nodeCount": 22.302158273381295,
+                "transitionCount": 27.73722627737226
+              }
+            },
+            {
+              "baseFile": "UploadWiz.tsx",
+              "model": "sonnet46",
+              "fileName": "UploadWiz.sonnet46.refactor.tsx",
+              "filePath": "C:\\Users\\PETO\\Desktop\\Workspaces\\HTML\\VsCodeIDEs\\react-diagrams-vscode\\packages\\core\\src\\tests\\experiments\\refactoring\\data\\Code\\UploadWiz.sonnet46.refactor.tsx",
+              "relativePath": "data\\Code\\UploadWiz.sonnet46.refactor.tsx",
+              "validity": {
+                "compilesWithoutErrors": true,
+                "nonEmptyDiagramGenerated": true,
+                "errors": []
+              },
+              "metrics": {
+                "logicalLoc": 81,
+                "maxNestedFlow": 3,
+                "stateVariableCount": 6,
+                "stateCount": 18,
+                "mutatorCount": 18,
+                "nodeCount": 108,
+                "transitionCount": 99
+              },
+              "includedInAverages": true,
+              "improvementPct": {
+                "logicalLoc": 10,
+                "maxNestedFlow": 0,
+                "nodeCount": 22.302158273381295,
+                "transitionCount": 27.73722627737226
+              }
+            }
+          ],
+          "averageImprovementPct": {
+            "logicalLoc": 3.888888888888889,
+            "maxNestedFlow": 0,
+            "nodeCount": 22.302158273381295,
+            "transitionCount": 27.73722627737226
+          },
+          "validRunCount": 2,
+          "totalRunCount": 2
         }
       ],
       "overallAverageImprovementPct": {
-        "logicalLoc": null,
-        "maxNestedFlow": null,
-        "nodeCount": null,
-        "transitionCount": null
+        "logicalLoc": 12.208003146785636,
+        "maxNestedFlow": 16.666666666666664,
+        "nodeCount": 26.2383174078138,
+        "transitionCount": 32.6583746264999
       },
-      "validRunCount": 0,
-      "totalRunCount": 0
+      "validRunCount": 8,
+      "totalRunCount": 8
     },
     {
       "name": "CodeAndDiagram",
@@ -158,6 +419,18 @@
         },
         {
           "baseFile": "StudentSubmissionManager.tsx",
+          "runs": [],
+          "averageImprovementPct": {
+            "logicalLoc": null,
+            "maxNestedFlow": null,
+            "nodeCount": null,
+            "transitionCount": null
+          },
+          "validRunCount": 0,
+          "totalRunCount": 0
+        },
+        {
+          "baseFile": "UploadWiz.tsx",
           "runs": [],
           "averageImprovementPct": {
             "logicalLoc": null,

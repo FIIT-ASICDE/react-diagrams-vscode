@@ -29,7 +29,7 @@
     "build:esm": "tsc -p tsconfig.esm.json",
     "watch": "concurrently \"tsc -p . -w\" \"tsc -p tsconfig.esm.json -w\"",
     "lint": "echo \"No lint task configured for @react-diagrams/core\"",
-    "test": "npm run build && node --test dist/tests/**/*.test.js"
+    "evals": "nodemon --watch src/tests --ext ts,tsx,js,jsx --exec \"bun src/tests/experiments/refactoring/evaluator/index.ts\""
   },
   "dependencies": {
     "elkjs": "^0.11.1",
