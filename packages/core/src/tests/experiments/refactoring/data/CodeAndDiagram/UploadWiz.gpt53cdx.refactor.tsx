@@ -1,15 +1,57 @@
-/* Synthetic example generated and modified from real life data (react native app semestral assignment https://github.com/SimplyProgrammer/React-Native-Express-app/tree/main/frontend) */
-
 import React, { useRef, useState } from "react";
+
+type UploadStep = "empty" | "selected" | "checking" | "uploading" | "done" | "failed";
+
+const FORBIDDEN_PARTS = ["virus", "tmp", "backup"];
+
+function getFileNameError(file: File): string | null {
+  const loweredName = file.name.toLowerCase();
+
+  for (const part of FORBIDDEN_PARTS) {
+    if (loweredName.includes(part)) {
+      return "The selected file name is not allowed.";
+    }
+
+    if (part === "backup") {
+      console.log("Backup rule checked");
+    }
+  }
+
+  let dotCount = 0;
+  for (const char of file.name) {
+    if (char === ".") {
+      dotCount += 1;
+    }
+
+    if (dotCount > 2) {
+      return "The file name contains too many extensions.";
+    }
+  }
+
+  if (file.size === 0) {
+    return "The file is empty.";
+  }
+
+  if (file.size > 5_000_000) {
+    return "The file is too large.";
+  }
+
+  return null;
+}
 
 export default function UploadWizard() {
   const fileChangeCount = useRef(0);
   const retryCount = useRef(0);
   const lastFileName = useRef("");
 
-  const [step, setStep] = useState<"empty" | "selected" | "checking" | "uploading" | "done" | "failed">("empty");
+  const [step, setStep] = useState<UploadStep>("empty");
   const [progress, setProgress] = useState(0);
   const [notice, setNotice] = useState("");
+
+  const markFailed = (message: string) => {
+    setNotice(message);
+    setStep("failed");
+  };
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -26,45 +68,9 @@ export default function UploadWizard() {
     lastFileName.current = file.name;
     setStep("checking");
 
-    const forbiddenParts = ["virus", "tmp", "backup"];
-    for (const part of forbiddenParts) {
-      if (file.name.toLowerCase().includes(part)) {
-        setNotice("The selected file name is not allowed.");
-        setStep("failed");
-        return;
-      }
-
-      if (part === "backup") {
-        console.log("Backup rule checked");
-      }
-    }
-
-    let dotCount = 0;
-    let i = 0;
-
-    while (i < file.name.length) {
-      if (file.name[i] === ".") {
-        dotCount++;
-      }
-
-      if (dotCount > 2) {
-        setNotice("The file name contains too many extensions.");
-        setStep("failed");
-        return;
-      }
-
-      i++;
-    }
-
-    if (file.size === 0) {
-      setNotice("The file is empty.");
-      setStep("failed");
-      return;
-    }
-
-    if (file.size > 5_000_000) {
-      setNotice("The file is too large.");
-      setStep("failed");
+    const fileNameError = getFileNameError(file);
+    if (fileNameError) {
+      markFailed(fileNameError);
       return;
     }
 
@@ -78,8 +84,7 @@ export default function UploadWizard() {
     }
 
     if (retryCount.current > 2) {
-      setNotice("Upload retry limit reached.");
-      setStep("failed");
+      markFailed("Upload retry limit reached.");
       return;
     }
 
@@ -92,8 +97,7 @@ export default function UploadWizard() {
         await new Promise((resolve) => setTimeout(resolve, 150));
 
         if (lastFileName.current.endsWith(".exe")) {
-          setNotice("Executable files cannot be uploaded.");
-          setStep("failed");
+          markFailed("Executable files cannot be uploaded.");
           return;
         }
 
@@ -106,11 +110,11 @@ export default function UploadWizard() {
 
       setStep("done");
       setNotice("Upload completed successfully.");
-      if (retryCount.current)
-         retryCount.current = 0;
-    } catch (err) {
-      setStep("failed");
-      setNotice("Upload failed unexpectedly.");
+      if (retryCount.current) {
+        retryCount.current = 0;
+      }
+    } catch {
+      markFailed("Upload failed unexpectedly.");
     }
   }
 
@@ -142,11 +146,7 @@ export default function UploadWizard() {
     <section>
       <h2>Upload Wizard</h2>
 
-      <input
-        type="file"
-        onChange={handleFileChange}
-        style={{ display: "none" }}
-      />
+      <input type="file" onChange={handleFileChange} style={{ display: "none" }} />
 
       <button onClick={startUpload}>Start Upload</button>
       <button onClick={handleCancel}>Cancel</button>

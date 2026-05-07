@@ -1,9 +1,6 @@
-/* Synthetic example generated and modified from real life data (react native app semestral assignment https://github.com/SimplyProgrammer/React-Native-Express-app/tree/main/frontend) */
-
 import React, { useRef, useState } from "react";
 
 export default function UploadWizard() {
-  const fileChangeCount = useRef(0);
   const retryCount = useRef(0);
   const lastFileName = useRef("");
 
@@ -13,7 +10,6 @@ export default function UploadWizard() {
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    fileChangeCount.current += 1;
 
     setNotice("");
     setProgress(0);
@@ -26,34 +22,17 @@ export default function UploadWizard() {
     lastFileName.current = file.name;
     setStep("checking");
 
-    const forbiddenParts = ["virus", "tmp", "backup"];
-    for (const part of forbiddenParts) {
-      if (file.name.toLowerCase().includes(part)) {
-        setNotice("The selected file name is not allowed.");
-        setStep("failed");
-        return;
-      }
-
-      if (part === "backup") {
-        console.log("Backup rule checked");
-      }
+    const lowerName = file.name.toLowerCase();
+    if (["virus", "tmp", "backup"].some((part) => lowerName.includes(part))) {
+      setNotice("The selected file name is not allowed.");
+      setStep("failed");
+      return;
     }
 
-    let dotCount = 0;
-    let i = 0;
-
-    while (i < file.name.length) {
-      if (file.name[i] === ".") {
-        dotCount++;
-      }
-
-      if (dotCount > 2) {
-        setNotice("The file name contains too many extensions.");
-        setStep("failed");
-        return;
-      }
-
-      i++;
+    if ((file.name.match(/\./g)?.length ?? 0) > 2) {
+      setNotice("The file name contains too many extensions.");
+      setStep("failed");
+      return;
     }
 
     if (file.size === 0) {
@@ -106,8 +85,7 @@ export default function UploadWizard() {
 
       setStep("done");
       setNotice("Upload completed successfully.");
-      if (retryCount.current)
-         retryCount.current = 0;
+      retryCount.current = 0;
     } catch (err) {
       setStep("failed");
       setNotice("Upload failed unexpectedly.");
