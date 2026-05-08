@@ -36,9 +36,7 @@ const PLAYGROUND_EDGE_TYPES = {
 	default: DynamicPathEdge,
 	back: DynamicPathEdge,
 };
-
-
-// Manages activity playground.
+// Manages editable playground state and switching between viewer/playground.
 export function useActivityPlayground({
 	visibleNodes,
 	visibleEdges,
@@ -99,6 +97,7 @@ export function useActivityPlayground({
 			return;
 		}
 
+		// Mark synthetic source to keep navigation history entry stable.
 		const sourceFile = 'shapshot';
 
 		void upsertDiagramPayloadBySourceFile({

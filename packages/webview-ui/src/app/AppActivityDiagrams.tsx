@@ -28,18 +28,14 @@ const DEFAULT_CHAT_SETTINGS: ChatSettingsConfig = {
 	maxToolIterations: 3,
 	diagramImageTimeoutMs: 15000,
 };
-
-
-
-// Handles app.
+// Root view for activity/state tabs and extension-driven settings.
 function App() {
 	const [diagramType, setDiagramType] = useState<DiagramType>('state');
 	const [activeTabId, setActiveTabId] = useState('diagram');
 	const [settingsConfig, setSettingsConfig] = useState<ChatSettingsConfig>(DEFAULT_CHAT_SETTINGS);
 
 	useEffect(() => {
-		
-		// Handles on message.
+		// Sync diagram mode and settings from extension messages.
 		const onMessage = (event: MessageEvent) => {
 			const message = event.data as ActivityExtensionToWebviewMessage | { type?: string; data?: unknown };
 			if (message.type === 'diagram/type' && message.data && (message.data as { diagramType?: string }).diagramType === 'activity') {
@@ -49,8 +45,6 @@ function App() {
 			if (message.type === 'settings/config' && message.data && typeof message.data === 'object') {
 				setSettingsConfig(message.data as ChatSettingsConfig);
 			}
-			
-			
 		};
 
 		window.addEventListener('message', onMessage);
@@ -60,8 +54,7 @@ function App() {
 		return () => window.removeEventListener('message', onMessage);
 	}, []);
 
-	
-	// Handles on panels change.
+	// Keep selected VS Code tab in React state.
 	const onPanelsChange = (event) => {
 		const nextActiveTabId = event?.currentTarget?.activeid ?? event?.target?.activeid;
 		if (typeof nextActiveTabId == 'string') {
@@ -69,8 +62,7 @@ function App() {
 		}
 	};
 
-	
-	// Handles on apply settings.
+	// Persist settings in both webview state and extension workspace config.
 	const onApplySettings = (value: unknown) => {
 		if (!value || typeof value != 'object')
 			return;

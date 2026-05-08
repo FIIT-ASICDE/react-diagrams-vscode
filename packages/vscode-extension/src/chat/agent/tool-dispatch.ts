@@ -35,9 +35,11 @@ function buildDiagramToolInput(
   context: ChatContext,
   modelProposedInput: unknown,
 ): Record<string, unknown> {
+  // Prefer explicit model input when it already provides valid sourceText.
   const fromModel = buildInputFromModelProposal(modelProposedInput);
   if (fromModel) return fromModel;
 
+  // Fallback to currently collected editor code.
   if (context.code && context.code.trim()) {
     return {
       sourceText: context.code,

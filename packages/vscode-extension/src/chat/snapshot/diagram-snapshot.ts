@@ -9,6 +9,7 @@ export async function readCurrentDiagramContext(): Promise<DiagramContext> {
   let visibleGraph = ComponentActivityPanel.getCurrentVisibleActivityGraph();
   if (panel && !visibleGraph) {
     try {
+      // Ask webview for the graph currently rendered on screen.
       const refreshed = await panel.refreshVisibleGraph(2500);
       if (refreshed) {
         visibleGraph = { nodes: [...refreshed.nodes], edges: [...refreshed.edges] };
@@ -50,6 +51,7 @@ function buildDiagramContext(
 }
 
 function compactDiagramGraph(nodes: unknown[], edges: unknown[]): { nodes: CompactNode[]; edges: CompactEdge[] } {
+  // Keep only stable fields so prompt payload stays small and deterministic.
   return {
     nodes: nodes.map(compactNode),
     edges: edges.map(compactEdge).filter((e): e is CompactEdge => e !== undefined),
@@ -246,7 +248,7 @@ export interface CaptureResult {
 }
 
 export async function captureDiagramImageWithDiagnostics(): Promise<CaptureResult> {
-    const config = getConfig();
+  const config = getConfig();
   const panel = ComponentActivityPanel.currentPanel;
   if (!panel) {
     return { reason: "diagram panel is not open" };

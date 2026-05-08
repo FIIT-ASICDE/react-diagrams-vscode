@@ -16,15 +16,11 @@ type Params = {
 	handleImageRequest: () => void;
 	postMessage: (type: string, data?: unknown) => void;
 };
-
-
-// Handles truncate.
+// Trim long errors for small in-canvas fallback graph labels.
 function truncate(text: string, maxLength: number) {
 	return text.length <= maxLength ? text : `${text.slice(0, maxLength - 3)}...`;
 }
-
-
-// Builds error graph.
+// Build a minimal graph so users still see feedback inside the canvas.
 function buildErrorGraph(message: string): { nodes: Node[]; edges: Edge[] } {
 	return {
 		nodes: [
@@ -34,9 +30,7 @@ function buildErrorGraph(message: string): { nodes: Node[]; edges: Edge[] } {
 		edges: [{ id: 'n1-n2', source: 'n1', target: 'n2' }],
 	};
 }
-
-
-// Manages activity messages.
+// Adapter between extension messages and local diagram state handlers.
 export function useActivityMessages({
 	applyIncomingDiagramPayload,
 	setRootError,

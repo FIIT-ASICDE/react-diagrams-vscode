@@ -51,7 +51,7 @@ const HOOK_NAMES = new Set([
 ]);
 
 
-// Checks whether is visible graph message.
+// Type guard for the graph currently visible in the webview.
 function isVisibleGraphMessage(
 	message: unknown
 ): message is { type: "diagram/visibleGraph"; data: ActivityGraphPayload } {
@@ -59,7 +59,7 @@ function isVisibleGraphMessage(
 }
 
 
-// Checks whether is graph snapshot message.
+// Type guard for explicit graph snapshot responses.
 function isGraphSnapshotMessage(
 	message: unknown
 ): message is { type: "diagram/graphSnapshot"; data: ActivityGraphPayload } {
@@ -67,13 +67,13 @@ function isGraphSnapshotMessage(
 }
 
 
-// Checks whether is webview ready message.
+// Type guard for the webview ready handshake.
 function isWebviewReadyMessage(message: unknown): message is { type: "webview/ready" } {
 	return !!message && typeof message === "object" && (message as { type?: unknown }).type === "webview/ready";
 }
 
 
-// Checks whether is diagram image message.
+// Type guard for diagram image capture responses.
 function isDiagramImageMessage(
 	message: unknown
 ): message is { type: "diagram/imageData"; data: { dataUrl?: string; error?: string } } {
@@ -344,7 +344,7 @@ export class ComponentActivityPanel {
 	}
 
 	
-	// Handles run pending intent.
+	// Execute delayed action once the webview is ready.
 	private async runPendingIntent() {
 		const intent = this.pendingIntent;
 		this.pendingIntent = { kind: "none" };
@@ -453,7 +453,7 @@ export class ComponentActivityPanel {
 	}
 
 	
-	// Parses and send diagram.
+	// Parse source text and push graph data into the webview.
 	private async parseAndSendDiagram(sourceText: string, sourceFile?: string) {
 		const rootDir = sourceFile ? path.dirname(sourceFile) : ".";
 
@@ -466,7 +466,7 @@ export class ComponentActivityPanel {
 			};
 
 			
-			
+			// Keep latest parsed graph as fallback when visible graph is unavailable.
 			this.lastKnownActivityGraph = parsedGraph;
 			this.lastVisibleActivityGraph = {
 				nodes: [...parsedGraph.nodes],
@@ -611,8 +611,7 @@ export class ComponentActivityPanel {
 		const first = sourceFile.statements[0];
 		if (!first) return trimmed;
 
-		
-		// Checks whether is supported function like.
+		// Narrow to function-like nodes whose body can be extracted.
 		const isSupportedFunctionLike = (
 			node: ts.Node
 		): node is
@@ -631,8 +630,7 @@ export class ComponentActivityPanel {
 			ts.isGetAccessorDeclaration(node) ||
 			ts.isSetAccessorDeclaration(node);
 
-		
-		// Returns node name.
+		// Best-effort display name for extracted function-like nodes.
 		const getNodeName = (node: ts.Node): string => {
 			if (ts.isConstructorDeclaration(node)) return "constructor";
 			if (
@@ -648,8 +646,7 @@ export class ComponentActivityPanel {
 			return "anonymous";
 		};
 
-		
-		// Returns block statements.
+		// Normalize function body into statement strings.
 		const getBlockStatements = (
 			node:
 				| ts.FunctionDeclaration
@@ -668,9 +665,7 @@ export class ComponentActivityPanel {
 			return [`return ${body.getText(sourceFile)};`];
 		};
 
-		
-		
-		// Returns hook call name.
+		// Recognize hook calls where first argument is a callback.
 		const getHookCallName = (call: ts.CallExpression): string | undefined => {
 			const callee = call.expression;
 			if (ts.isIdentifier(callee)) {
@@ -684,9 +679,7 @@ export class ComponentActivityPanel {
 			return undefined;
 		};
 
-		
-		
-		// Handles extract hook callback body.
+		// Extract callback body from known hooks like useEffect/useMemo.
 		const extractHookCallbackBody = (call: ts.CallExpression): string | null => {
 			if (!getHookCallName(call)) return null;
 
@@ -709,8 +702,7 @@ export class ComponentActivityPanel {
 			statements: string[];
 		}
 
-		
-		// Handles collect functions.
+		// Collect function-like bodies from many syntactic wrapper forms.
 		const collectFunctions = (node: ts.Node): ExtractedFn[] => {
 			
 			if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression)) {

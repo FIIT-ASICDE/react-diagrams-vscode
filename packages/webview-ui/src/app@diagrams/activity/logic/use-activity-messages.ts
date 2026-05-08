@@ -8,13 +8,10 @@ type Handlers = {
 	onImageRequest: () => void;
 	onGraphRequest: () => void;
 };
-
-
-// Manages activity messages.
+// Subscribe to extension->webview messages and dispatch typed handlers.
 export function useActivityMessages(handlers: Handlers): void {
 	useEffect(() => {
-		
-		// Handles listener.
+		// Single gateway for all runtime messages sent by the extension host.
 		function listener(event: MessageEvent<ActivityMessage>) {
 			const message = event.data;
 			if (!message || typeof message !== 'object') return;

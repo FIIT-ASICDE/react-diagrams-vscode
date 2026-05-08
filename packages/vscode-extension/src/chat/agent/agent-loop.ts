@@ -34,6 +34,7 @@ export interface ToolCallEvent {
 export async function runAgenticLoop(args: AgenticLoopArgs): Promise<string | undefined> {
   const config = getConfig();
 
+  // Each iteration sends updated context and optional previous tool results.
   for (let iteration = 0; iteration < config.maxToolIterations + 1; iteration++) {
     const messages: vscode.LanguageModelChatMessage[] = [
       vscode.LanguageModelChatMessage.User(buildSystemPrompt()),
@@ -75,6 +76,7 @@ function buildRequestOptions(
   tools: vscode.LanguageModelChatTool[],
   isLastIteration: boolean,
 ): vscode.LanguageModelChatRequestOptions {
+  // Force plain-text answer on the last pass to avoid infinite tool loops.
   const hasTools = tools.length > 0;
   if (!hasTools || isLastIteration) return {};
   return { tools, toolMode: vscode.LanguageModelChatToolMode.Auto };

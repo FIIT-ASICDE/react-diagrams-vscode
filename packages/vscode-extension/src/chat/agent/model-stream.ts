@@ -42,9 +42,11 @@ async function consumeStream(
 
   try {
     for await (const part of response.stream) {
+      // Model streams text and tool-call parts interleaved.
       if (part instanceof vscode.LanguageModelTextPart) {
         textParts.push(part.value);
       } else if (part instanceof vscode.LanguageModelToolCallPart) {
+        // Keep the latest tool call from this pass.
         toolCall = part;
       }
     }

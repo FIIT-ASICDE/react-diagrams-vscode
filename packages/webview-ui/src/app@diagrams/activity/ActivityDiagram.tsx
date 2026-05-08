@@ -18,10 +18,7 @@ import { useActivityMessages } from './hooks/useActivityMessages';
 import { useActivityModals } from './hooks/useActivityModals';
 import { useActivityPlayground } from './hooks/useActivityPlayground';
 
-
-
-
-// Handles activity diagram.
+// Main activity diagram container coordinating viewer/playground/message flows.
 export default function ActivityDiagram() {
 	const stack = useDiagramNavigationStore((s) => s.stack);
 	const currentIndex = useDiagramNavigationStore((s) => s.currentIndex);
@@ -99,13 +96,12 @@ export default function ActivityDiagram() {
 		getActiveGraph,
 	});
 
-	
 	useEffect(() => {
+		// Notify extension that the webview is ready to receive initial payload.
 		postMessage('webview/ready');
 	}, [postMessage]);
 
-	
-
+	// Open nested diagram preview only for expandable nodes in viewer mode.
 	const openNodeDiagram = useCallback(
 		(node: Node) => {
 			if (viewMode !== 'viewer') return;
@@ -124,8 +120,7 @@ export default function ActivityDiagram() {
 		[markPendingPreview, postMessage, viewMode],
 	);
 
-	
-
+	// Click-through to preview for expandable nodes.
 	const onNodeClick = useCallback(
 		(_event: MouseEvent, node: Node) => {
 			if (viewMode !== 'viewer') return;
@@ -151,8 +146,7 @@ export default function ActivityDiagram() {
 		clearPlayground();
 	}, [clearPlayground, closeModal]);
 
-	
-
+	// Trigger auto-fit when mode changes or a new viewer revision is displayed.
 	const focusTrigger = `${viewMode}:${viewMode === 'viewer' ? visibleRevision : 'mode'}`;
 
 	return (

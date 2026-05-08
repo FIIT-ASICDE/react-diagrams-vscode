@@ -123,6 +123,7 @@ async function collectDiagramContext(config: ParticipantConfig): Promise<{
 }
 
 function pickPreferredDocument(): vscode.TextDocument | undefined {
+  // Prefer active editor, then visible editors, then any open matching file.
   const active = vscode.window.activeTextEditor?.document;
   if (active && isSupportedCodeFile(active)) return active;
 

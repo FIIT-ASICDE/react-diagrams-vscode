@@ -2,19 +2,15 @@ import { useEffect } from 'react';
 import { useReactFlow } from '@xyflow/react';
 
 type Props = {
-	
+	// Changing this value re-runs fit/center after diagram updates.
 	focusTrigger: string;
 };
 
-
-
-// Handles auto fit on snapshot change.
+// Keep the visible diagram centered after navigation or mode changes.
 export function AutoFitOnSnapshotChange({ focusTrigger }: Props) {
 	const { fitView, getNodes, setCenter } = useReactFlow();
 
 	useEffect(() => {
-		
-
 		const handle = window.requestAnimationFrame(() => {
 			void fitView({ padding: 0.2 });
 

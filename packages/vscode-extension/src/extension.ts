@@ -51,6 +51,7 @@ function setupAutoRestartInDevelopment(context: ExtensionContext) {
 		if (restartTimer)
 			clearTimeout(restartTimer);
 
+		// Debounce rebuild bursts so we restart the extension host only once.
 		restartTimer = setTimeout(() => {
 			restartTimer = undefined;
 			void commands.executeCommand("workbench.action.restartExtensionHost");

@@ -25,9 +25,7 @@ const DEFAULT_LABEL_BY_TYPE: Record<ActivityNodeType, string> = {
 };
 
 const EXPANDABLE_DEFAULT_SOURCE = 'function name() {\n  // TODO\n}';
-
-
-// Creates activity node.
+// Create a new node with defaults that match activity diagram semantics.
 export function createActivityNode(
 	type: ActivityNodeType,
 	currentIndex: number,
@@ -51,10 +49,7 @@ export function createActivityNode(
 		},
 	};
 }
-
-
-
-// Handles center node in viewport.
+// Place new node near the current viewport center.
 export function centerNodeInViewport(
 	node: Node,
 	reactFlow: ReactFlowInstance<Node, Edge> | null,
@@ -73,27 +68,21 @@ export function centerNodeInViewport(
 		position: { x: center.x - 100, y: center.y - 30 },
 	};
 }
-
-
-// Handles append node.
+// Immutable append helper for node arrays.
 export function appendNode(nodes: Node[], node: Node): Node[] {
 	return [...nodes, node];
 }
-
-
-// Handles apply node changes to nodes.
+// Apply React Flow node delta events.
 export function applyNodeChangesToNodes(nodes: Node[], changes: NodeChange<Node>[]): Node[] {
 	return applyNodeChanges(changes, nodes);
 }
 
-
-// Handles apply edge changes to edges.
+// Apply React Flow edge delta events.
 export function applyEdgeChangesToEdges(edges: Edge[], changes: EdgeChange<Edge>[]): Edge[] {
 	return applyEdgeChanges(changes, edges);
 }
 
-
-// Handles connect edges.
+// Connect two nodes using default edge styling for playground mode.
 export function connectEdges(edges: Edge[], params: Connection): Edge[] {
 	return addEdge(
 		{

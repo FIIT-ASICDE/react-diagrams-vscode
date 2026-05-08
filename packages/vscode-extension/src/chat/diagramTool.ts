@@ -15,6 +15,7 @@ function getBestEditorCode(): {
 	filePath?: string;
 	codeContextKind: "selected" | "full-file" | "none";
 } {
+	// Prefer active editor; fallback to first visible file-backed editor.
 	const editor =
 		vscode.window.activeTextEditor ??
 		vscode.window.visibleTextEditors.find((e) => e.document.uri.scheme === "file");
@@ -53,6 +54,7 @@ export function registerCreateActivityDiagramTool(
 					typeof input.sourceText === "string" &&
 					input.sourceText.trim().length > 0;
 
+				// Use explicit snippet from model when present, otherwise editor code.
 				const sourceText = hasSnippet
 					? input.sourceText!.trim()
 					: editorState.code;

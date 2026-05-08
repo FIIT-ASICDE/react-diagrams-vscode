@@ -22,6 +22,7 @@ export class ParsingCache<T = any> {
 		this.currentDocument = document;
 
 		const cached = this.entries.get(cacheKey);
+		// Reuse parse result while document version is unchanged.
 		if (!forceUpdate && cached && cached.documentVersion == document.version)
 		{
 			console.debug("Cache hit");
