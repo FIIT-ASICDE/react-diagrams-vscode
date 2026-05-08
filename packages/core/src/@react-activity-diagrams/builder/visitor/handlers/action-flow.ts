@@ -14,8 +14,7 @@ import type { BuildResult, HookMeta } from '../types';
 import { compactLabel } from '../utils';
 import type { StatementVisitorHost } from './host-context';
 
-// ── Hook ───────────────────────────────────────────────────────────────────
-
+// Visits a hook statement and creates an expandable hook node.
 export function visitHook(host: StatementVisitorHost, hookMeta: HookMeta): BuildResult {
   const bodyId = host.writer.addFlowNode('expandable', compactLabel(hookMeta.label), {
     sourceText: hookMeta.sourceText,
@@ -26,8 +25,7 @@ export function visitHook(host: StatementVisitorHost, hookMeta: HookMeta): Build
   return { entry: bodyId, exits: [bodyId], returnExits: [], throwExits: [] };
 }
 
-// ── Expression statements (incl. forEach detection) ───────────────────────
-
+// Visits an expression statement and handles forEach-like calls.
 export function visitExpressionStatement(host: StatementVisitorHost, stmt: ExpressionStatement): BuildResult {
   const expression = stmt.getExpression();
 
@@ -38,8 +36,7 @@ export function visitExpressionStatement(host: StatementVisitorHost, stmt: Expre
   return visitAction(host, expression.getText(), stmt.getText());
 }
 
-// ── ForEach-like calls ─────────────────────────────────────────────────────
-
+// Extracts iterable and callback metadata from a forEach-like call.
 function extractForEachMeta(callExpression: CallExpression): {
   iterable: string;
   callee: string;
@@ -71,11 +68,13 @@ function extractForEachMeta(callExpression: CallExpression): {
   return { iterable, callee, params };
 }
 
+// Formats callback parameters into a compact tuple string.
 function formatParams(fn: ArrowFunction | FunctionExpression): string {
   const parts = fn.getParameters().map((p) => p.getText());
   return `(${parts.join(', ')})`;
 }
 
+// Visits a forEach-like call and renders it as a loop.
 export function visitForEachLike(host: StatementVisitorHost, callExpression: CallExpression): BuildResult {
   const meta = extractForEachMeta(callExpression);
 
@@ -100,13 +99,9 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
       host.writer.addEdge(loopId, body.entry, 'next', false);
       host.connectLoopBackEdges(body.exits, loopId);
     } else {
-
       host.writer.addEdge(loopId, loopId, 'next', true);
     }
 
-    // Continue statements inside the body loop back to the loop node.
-    // (When body.entry is missing there can be no continues — but the
-    // loop is harmless either way: the unique-set is empty.)
     for (const continueId of [...new Set(ctx.pendingContinues)].filter(Boolean)) {
       host.writer.addEdge(continueId, loopId, '', true);
     }
@@ -125,8 +120,7 @@ export function visitForEachLike(host: StatementVisitorHost, callExpression: Cal
   }
 }
 
-// ── Plain action / return / throw ─────────────────────────────────────────
-
+// Visits a generic statement as an action node.
 export function visitAction(host: StatementVisitorHost, label: string, sourceText?: string): BuildResult {
   const id = host.writer.addFlowNode('action', compactLabel(label), {
     sourceText,
@@ -134,6 +128,7 @@ export function visitAction(host: StatementVisitorHost, label: string, sourceTex
   return { entry: id, exits: [id], returnExits: [], throwExits: [] };
 }
 
+// Visits a return statement and marks it as a return exit.
 export function visitReturn(host: StatementVisitorHost, stmt: ReturnStatement): BuildResult {
   const expressionText = stmt.getExpression()?.getText();
   const label = expressionText ? `return ${expressionText}` : 'return';
@@ -145,6 +140,7 @@ export function visitReturn(host: StatementVisitorHost, stmt: ReturnStatement): 
   return { entry: id, exits: [], returnExits: [id], throwExits: [] };
 }
 
+// Visits a throw statement and marks it as a throw exit.
 export function visitThrow(host: StatementVisitorHost, stmt: ThrowStatement): BuildResult {
   const expressionText = stmt.getExpression()?.getText();
   const label = expressionText ? `throw ${expressionText}` : 'throw';

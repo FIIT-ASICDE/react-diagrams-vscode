@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
 import { registerRefactorCommands } from "./commands";
-import { DEBUG, DIAGRAM_CHAT_PARTICIPANT_ID, MODEL_TYPE, getConfig } from "./config";
+import { DIAGRAM_CHAT_PARTICIPANT_ID, getConfig } from "./config";
 import { collectAvailableTools } from "./agent/tool-dispatch";
 import { runAgenticLoop, ToolCallEvent } from "./agent/agent-loop";
-import { buildHelpText, isHelpPrompt, printDebug } from "./debug";
-import { selectModelByType } from "./utils";
+import { printDebug } from "./debug";
+import { buildHelpText, isHelpPrompt } from "./help";
 import { appendExperiment, buildExperimentEntry } from "./experiment-writer";
 import { ChatContext, collectContext, refreshContext } from "./context/chat-context";
 
@@ -48,10 +48,9 @@ async function handleChatRequest(
       return;
     }
 
-    model = request.model ?? (await selectModelByType(MODEL_TYPE));
+    model = request.model;
     if (!model) {
-      const noModelMsg =
-        `No chat model is available for MODEL_TYPE='${MODEL_TYPE}'. Ensure Copilot Chat is enabled.`;
+      const noModelMsg = "No chat model is available. Ensure Copilot Chat is enabled.";
       stream.markdown(noModelMsg);
       answer = noModelMsg;
       status = "error";
@@ -59,7 +58,7 @@ async function handleChatRequest(
       return;
     }
 
-    if (DEBUG) {
+    if (config.debug) {
       printDebug(stream, context);
     }
 

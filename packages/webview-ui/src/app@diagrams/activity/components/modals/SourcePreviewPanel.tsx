@@ -7,18 +7,19 @@ type Props = {
 	onClose: () => void;
 };
 
-/**
- * Read-only side panel shown in viewer mode when the user right-clicks a
- * node. Displays the node's full sourceText with a Copy button.
- */
+
+
+// Handles source preview panel.
 export function SourcePreviewPanel({ node, sourceText, onClose }: Props) {
 	const label = String((node.data as { label?: unknown } | undefined)?.label ?? node.id);
 	const construct = String((node.data as { construct?: unknown } | undefined)?.construct ?? 'unknown');
+	
+	// Handles copy.
 	const handleCopy = () => {
 		try {
 			void navigator.clipboard?.writeText(sourceText);
 		} catch {
-			// Clipboard API unavailable in this webview host.
+			
 		}
 	};
 

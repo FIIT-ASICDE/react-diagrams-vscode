@@ -48,10 +48,12 @@ export class StatementVisitor implements StatementVisitorHost {
 	private readonly contextStack: ControlContext[] = [];
 	private pendingLabel: string | undefined;
 
+	// Creates a statement visitor with a graph writer host.
 	constructor(public writer: GraphWriter) {}
 
-	// ── Merge / exit helpers ───────────────────────────────────────────
+	
 
+	// Creates a merge node for multiple incoming sources.
 	private createMergeForSources(
 		sources: string[],
 		sourceLabels?: Record<string, string>,
@@ -67,6 +69,7 @@ export class StatementVisitor implements StatementVisitorHost {
 		return mergeId;
 	}
 
+	// Resolves statement exits to a single source when needed.
 	resolveExitSources(sources: string[], sourceLabels?: Record<string, string>): string[] {
 		const uniqueSources = [...new Set(sources)].filter(Boolean);
 		if (uniqueSources.length <= 1) return uniqueSources;
@@ -75,8 +78,9 @@ export class StatementVisitor implements StatementVisitorHost {
 		return mergeId ? [mergeId] : uniqueSources;
 	}
 
-	// ── Context stack API ──────────────────────────────────────────────
+	
 
+	// Pushes loop context for break and continue handling.
 	pushLoopContext(loopId: string): LoopContext {
 		const label = this.pendingLabel;
 		this.pendingLabel = undefined;
@@ -93,6 +97,7 @@ export class StatementVisitor implements StatementVisitorHost {
 		return ctx;
 	}
 
+	// Pushes switch context for break handling.
 	pushSwitchContext(breakTarget: string): SwitchContext {
 		const label = this.pendingLabel;
 		this.pendingLabel = undefined;
@@ -107,10 +112,12 @@ export class StatementVisitor implements StatementVisitorHost {
 		return ctx;
 	}
 
+	// Pops the current control-flow context.
 	popContext(): void {
 		this.contextStack.pop();
 	}
 
+	// Finds the nearest matching loop or switch context.
 	findNearestContext(kinds: Array<'loop' | 'switch'>, label?: string): ControlContext | undefined {
 		for (let i = this.contextStack.length - 1; i >= 0; i -= 1) {
 			const ctx = this.contextStack[i];
@@ -124,24 +131,19 @@ export class StatementVisitor implements StatementVisitorHost {
 		return undefined;
 	}
 
+	// Stores a pending label for the next labeled control node.
 	setPendingLabel(label: string): void {
 		this.pendingLabel = label;
 	}
 
+	// Returns the current control context stack.
 	getContextStack(): readonly ControlContext[] {
 		return this.contextStack;
 	}
 
-	// ── Statement traversal ────────────────────────────────────────────
+	
 
-	/**
-	 * Visit a sequence of statements in source order.
-	 *
-	 * Aggregates return / throw exits across all statements (they all
-	 * flow to function-level End / ErrorEnd respectively, so they're
-	 * additive). Normal `exits` are pipelined: each statement's exits
-	 * become the next statement's incoming edges.
-	 */
+	// Visits and connects a linear list of statements.
 	visitStatements(statements: Statement[]): BuildResult {
 	let entry: string | undefined;
 	let entryEdgeLabel: string | undefined;
@@ -156,17 +158,12 @@ export class StatementVisitor implements StatementVisitorHost {
 			continue;
 		}
 
-		// If the previous rendered statement has no normal fallthrough exits,
-		// everything after it in this statement sequence is unreachable.
-		// Do not visit/render the next statement at all.
 		if (hasRenderedStatement && pendingExits.length === 0) {
 			break;
 		}
 
 		const result = this.visitStatement(statements[index]);
 
-		// Return/throw exits are additive even if this statement has no
-		// normal fallthrough.
 		returnExits.push(...result.returnExits);
 		throwExits.push(...result.throwExits);
 
@@ -209,10 +206,12 @@ export class StatementVisitor implements StatementVisitorHost {
 	};
 }
 
+	// Visits statements in inline branch context.
 	visitStatementsInline(statements: Statement[]): BuildResult {
 		return this.visitStatements(statements);
 	}
 
+	// Visits a single statement and dispatches by syntax kind.
 	visitStatement(stmt: Statement): BuildResult {
 		const hookMeta = getHookMeta(stmt);
 		if (hookMeta) {
@@ -286,8 +285,9 @@ export class StatementVisitor implements StatementVisitorHost {
 		}
 	}
 
-	// ── Labeled statement ──────────────────────────────────────────────
+	
 
+	// Visits a labeled statement and applies loop label metadata.
 	private visitLabeled(stmt: LabeledStatement): BuildResult {
 		const labelName = stmt.getLabel().getText();
 		this.pendingLabel = labelName;
@@ -304,22 +304,15 @@ export class StatementVisitor implements StatementVisitorHost {
 		return result;
 	}
 
+	// Tags a loop node with its source label when applicable.
 	private tagLoopLabelIfPossible(nodeId: string, labelName: string): void {
 		if (this.writer.getNodeType(nodeId) !== 'loop') return;
 		this.writer.updateNodeData(nodeId, { loopLabel: labelName });
 	}
 
-	// ── Break / continue ───────────────────────────────────────────────
+	
 
-	/**
-	 * Render `break [label]` as a regular action node tagged with
-	 * `construct: 'break'`. Register on the matching control context;
-	 * the surrounding loop / switch wires it to the right post-construct
-	 * target when popping its context.
-	 *
-	 * Outside any loop / switch (malformed source), fall back to
-	 * returnExits so the action at least terminates flow at End.
-	 */
+	// Visits a break statement and routes it through context.
 	private visitBreak(stmt: BreakStatement): BuildResult {
 		const id = this.writer.addFlowNode('action', compactLabel(stmt.getText()), {
 			sourceText: stmt.getText(),
@@ -337,6 +330,7 @@ export class StatementVisitor implements StatementVisitorHost {
 		return { entry: id, exits: [], returnExits: [], throwExits: [] };
 	}
 
+	// Visits a continue statement and routes it through loop context.
 	private visitContinue(stmt: ContinueStatement): BuildResult {
 		const id = this.writer.addFlowNode('action', compactLabel(stmt.getText()), {
 			sourceText: stmt.getText(),
@@ -354,8 +348,9 @@ export class StatementVisitor implements StatementVisitorHost {
 		return { entry: id, exits: [], returnExits: [], throwExits: [] };
 	}
 
-	// ── Branch entry ───────────────────────────────────────────────────
+	
 
+	// Visits a branch node as block, statement, or action fallback.
 	visitBranch(node: MorphNode): BuildResult {
 		if (MorphNode.isBlock(node)) {
 			return this.visitStatements(node.getStatements());
@@ -368,16 +363,19 @@ export class StatementVisitor implements StatementVisitorHost {
 		return visitAction(this, node.getText());
 	}
 
-	// ── Node creation primitives ───────────────────────────────────────
+	
 
+	// Creates a decision node in the graph.
 	createDecisionNode(label: string, sourceText: string): string {
 		return this.writer.addFlowNode('decision', label, { sourceText });
 	}
 
+	// Creates a loop node in the graph.
 	createLoopNode(label: string, sourceText: string): string {
 		return this.writer.addFlowNode('loop', label, { sourceText });
 	}
 
+	// Connects loop body exits back to the loop header.
 	connectLoopBackEdges(exits: string[], loopId: string): void {
 		const uniqueExits = [...new Set(exits)].filter((exit) => exit && exit !== loopId);
 		for (const exit of uniqueExits) {

@@ -5,6 +5,8 @@ import { DiagramBuilder } from "../../../@react-activity-diagrams";
 import { Edge, Node as Nds } from "@xyflow/react";
 import { getPreviewStatements } from "./preview-source";
 
+
+// Finds config file.
 function findConfigFile(rootDir: string): string | undefined {
 	const candidates = [
 		path.join(rootDir, "tsconfig.json"),
@@ -20,6 +22,8 @@ function findConfigFile(rootDir: string): string | undefined {
 	return undefined;
 }
 
+
+// Creates project.
 function createProject(rootDir: string): Project {
 	const configFile = findConfigFile(rootDir);
 
@@ -37,6 +41,8 @@ function createProject(rootDir: string): Project {
 	});
 }
 
+
+// Handles class members to synthetic source.
 function classMembersToSyntheticSource(classDeclaration: ClassDeclaration): string | undefined {
 	const chunks: string[] = [];
 
@@ -94,6 +100,8 @@ function classMembersToSyntheticSource(classDeclaration: ClassDeclaration): stri
 	return chunks.join("\n\n");
 }
 
+
+// Handles safe delete source file.
 function safeDeleteSourceFile(sourceFile: SourceFile) {
 	try {
 		if (!sourceFile.wasForgotten()) {
@@ -101,10 +109,12 @@ function safeDeleteSourceFile(sourceFile: SourceFile) {
 		}
 	}
 	catch {
-		// Ignore cleanup failures to avoid turning successful preview parsing into an error.
+		
 	}
 }
 
+
+// Parses activity preview.
 export async function parseActivityPreview(sourceText: string, rootDir = ".", tempFileName = "__activity_preview__.tsx"): Promise<{nodes: Nds[], edges: Edge[]}> {
 	const project = createProject(rootDir);
 	const sourceFile = project.createSourceFile(tempFileName, sourceText, { overwrite: true });

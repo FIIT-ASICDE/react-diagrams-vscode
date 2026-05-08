@@ -18,6 +18,10 @@ type RenderedGroup = {
 
 const EXIT_SWITCH_LABEL = 'exit switch';
 
+
+
+
+// Visits a switch statement and renders grouped case flows.
 export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): BuildResult {
 	const expressionText = stmt.getExpression().getText();
 	const decisionId = host.createDecisionNode(compactLabel(expressionText), expressionText);
@@ -38,9 +42,9 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
 		};
 	}
 
-	// Important:
-	// Do NOT create merge here. A switch with a single break/fallthrough exit
-	// should connect directly to the next statement with label "exit switch".
+	
+	
+	
 	const ctx = host.pushSwitchContext(decisionId);
 
 	try {
@@ -79,8 +83,8 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
 				if (nextEntry) {
 					host.writer.addEdge(decisionId, nextEntry, edgeLabel, false);
 				} else {
-					// Empty last case/default falls out of switch.
-					// Do not create merge yet; this may be the only switch exit.
+					
+					
 					switchExitSources.push(decisionId);
 				}
 
@@ -95,7 +99,7 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
 						host.writer.addEdge(exit, nextEntry, getFallthroughEdgeLabel(host, exit));
 					}
 				} else {
-					// Last case falls out of switch.
+					
 					switchExitSources.push(...group.fallthrough);
 				}
 			}
@@ -120,6 +124,10 @@ export function visitSwitch(host: StatementVisitorHost, stmt: SwitchStatement): 
 	}
 }
 
+
+
+
+// Resolves switch exits into one or many terminal sources.
 function resolveSwitchExits(
 	host: StatementVisitorHost,
 	sources: string[],
@@ -153,6 +161,10 @@ function resolveSwitchExits(
 	};
 }
 
+
+
+
+// Collects case/default clauses into render groups.
 function collectSwitchGroups(stmt: SwitchStatement): SwitchCaseGroup[] {
 	const clauses = stmt.getCaseBlock().getClauses();
 	const groups: SwitchCaseGroup[] = [];
@@ -187,6 +199,10 @@ function collectSwitchGroups(stmt: SwitchStatement): SwitchCaseGroup[] {
 	return groups;
 }
 
+
+
+
+// Formats an edge label from one or more case labels.
 function formatEdgeLabel(labels: string[]): string {
 	if (labels.length === 1) return labels[0];
 
@@ -198,6 +214,10 @@ function formatEdgeLabel(labels: string[]): string {
 		.join(', ');
 }
 
+
+
+
+// Finds the next rendered switch group entry node.
 function findNextGroupEntry(groups: { entry?: string }[], fromIndex: number): string | undefined {
 	for (let index = fromIndex + 1; index < groups.length; index += 1) {
 		if (groups[index].entry) return groups[index].entry;
@@ -206,10 +226,18 @@ function findNextGroupEntry(groups: { entry?: string }[], fromIndex: number): st
 	return undefined;
 }
 
+
+
+
+// Checks whether statements contain a switch-scoped break.
 function containsSwitchScopedBreak(statements: Statement[]): boolean {
 	return statements.some((statement) => containsBreakForCurrentSwitch(statement));
 }
 
+
+
+
+// Checks whether a node tree contains a break for current switch.
 function containsBreakForCurrentSwitch(node: MorphNode): boolean {
 	if (node.getKind() === SyntaxKind.BreakStatement) {
 		return true;
@@ -232,6 +260,10 @@ function containsBreakForCurrentSwitch(node: MorphNode): boolean {
 	return found;
 }
 
+
+
+
+// Checks whether a node starts a nested break boundary.
 function isNestedBreakBoundary(node: MorphNode): boolean {
 	switch (node.getKind()) {
 		case SyntaxKind.SwitchStatement:

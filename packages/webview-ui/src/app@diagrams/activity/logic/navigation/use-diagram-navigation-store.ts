@@ -3,12 +3,7 @@ import type { Edge, Node } from '@xyflow/react';
 import type { ActivityGraphPayload } from '@react-diagrams/core/app@vscode';
 import { applyActivityElkLayout } from '../../diagram-rendering/elk-layout';
 
-/**
- * One entry in the diagram navigation stack.
- *
- *   - root: the diagram for the file the user is looking at
- *   - children: diagrams produced by drilling into an expandable node
- */
+
 export type DiagramViewItem = {
 	title: string;
 	sourceFile?: string;
@@ -17,13 +12,17 @@ export type DiagramViewItem = {
 	edges: Edge[];
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
+
+
+// Handles file name from path.
 function fileNameFromPath(sourceFile?: string): string | undefined {
 	if (!sourceFile) return undefined;
 	return sourceFile.replace(/\\/g, '/').split('/').pop();
 }
 
+
+// Handles pick title.
 function pickTitle(
 	payload: ActivityGraphPayload,
 	pendingTitle: string | undefined,
@@ -41,6 +40,8 @@ function pickTitle(
 	return fileName ?? `Expanded ${stackDepth}`;
 }
 
+
+// Handles layout or pass through.
 async function layoutOrPassThrough(
 	nodes: Node[],
 	edges: Edge[],
@@ -53,11 +54,11 @@ async function layoutOrPassThrough(
 	}
 }
 
-// ─── Store ────────────────────────────────────────────────────────────────────
+
 
 type DiagramNavigationState = {
 	stack: DiagramViewItem[];
-	/** 0-based index into stack; -1 when stack is empty. */
+	
 	currentIndex: number;
 	pendingPreviewTitle?: string;
 	visibleRevision: number;
@@ -89,11 +90,11 @@ export const useDiagramNavigationStore = create<DiagramNavigationState>((set, ge
 
 		const payloadWithSource = payload as ActivityGraphPayload & { sourceText?: unknown };
 
-		// Read state after the async ELK call so it is always fresh.
+		
 		const { stack, currentIndex, pendingPreviewTitle, visibleRevision } = get();
 
-		// Truncate any "forward" entries that exist past the current position
-		// (can occur after goBack() followed by a new push).
+		
+		
 		const base = stack.slice(0, currentIndex + 1);
 
 		const entry: DiagramViewItem = {
@@ -128,7 +129,7 @@ export const useDiagramNavigationStore = create<DiagramNavigationState>((set, ge
 		const payloadWithSource = payload as ActivityGraphPayload & { sourceText?: unknown };
 		const normalizedSourceFile = sourceFile.trim();
 
-		// Read state after the async ELK call so it is always fresh.
+		
 		const { stack, currentIndex, pendingPreviewTitle, visibleRevision } = get();
 
 		const base = stack.slice(0, currentIndex + 1);
@@ -179,7 +180,7 @@ export const useDiagramNavigationStore = create<DiagramNavigationState>((set, ge
 
 		const payloadWithSource = payload as ActivityGraphPayload & { sourceText?: unknown };
 
-		// Read state after the async ELK call so it is always fresh.
+		
 		const { stack, currentIndex, pendingPreviewTitle, visibleRevision } = get();
 
 		if (stack.length === 0) {

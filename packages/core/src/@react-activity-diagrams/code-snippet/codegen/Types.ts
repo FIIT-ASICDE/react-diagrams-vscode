@@ -1,11 +1,4 @@
-/**
- * What a construct's emit ended with:
- *
- *   fall      – control falls out the bottom; sequence continues with `next`.
- *   return    – `return` or `throw` happened; sequence STOPS.
- *   break     – `break` happened. Surrounding loop / switch absorbs.
- *   continue  – `continue` happened. Surrounding loop absorbs.
- */
+
 export type Outcome =
 	| { kind: "fall" }
 	| { kind: "return" }
@@ -41,6 +34,8 @@ export type AnyNodeData = {
 export const FALL: Outcome = { kind: "fall" };
 export const RETURN: Outcome = { kind: "return" };
 
+
+// Handles choose dominant.
 export function chooseDominant(a: Outcome, b: Outcome): Outcome {
 	if (a.kind === "return" || b.kind === "return") return RETURN;
 	if (a.kind === "fall") return b;

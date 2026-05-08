@@ -12,6 +12,7 @@ type SettingsForm = {
 	diagramJson: boolean;
 	diagramMermaid: boolean;
 	diagramImage: boolean;
+	debug: boolean;
 	allowToolCall: boolean;
 	maxToolIterations: number;
 	diagramImageTimeoutMs: number;
@@ -22,6 +23,7 @@ const DEFAULT_SETTINGS: SettingsForm = {
 	diagramJson: true,
 	diagramMermaid: true,
 	diagramImage: true,
+	debug: true,
 	allowToolCall: true,
 	maxToolIterations: 3,
 	diagramImageTimeoutMs: 15000,
@@ -39,6 +41,7 @@ function toSettingsForm(value: unknown): SettingsForm {
 		diagramJson: typeof candidate.diagramJson == 'boolean' ? candidate.diagramJson : DEFAULT_SETTINGS.diagramJson,
 		diagramMermaid: typeof candidate.diagramMermaid == 'boolean' ? candidate.diagramMermaid : DEFAULT_SETTINGS.diagramMermaid,
 		diagramImage: typeof candidate.diagramImage == 'boolean' ? candidate.diagramImage : DEFAULT_SETTINGS.diagramImage,
+		debug: typeof candidate.debug == 'boolean' ? candidate.debug : DEFAULT_SETTINGS.debug,
 		allowToolCall: typeof candidate.allowToolCall == 'boolean' ? candidate.allowToolCall : DEFAULT_SETTINGS.allowToolCall,
 		maxToolIterations: typeof candidate.maxToolIterations == 'number' ? candidate.maxToolIterations : DEFAULT_SETTINGS.maxToolIterations,
 		diagramImageTimeoutMs: typeof candidate.diagramImageTimeoutMs == 'number' ? candidate.diagramImageTimeoutMs : DEFAULT_SETTINGS.diagramImageTimeoutMs,
@@ -92,6 +95,11 @@ export default function Debug({ value, onApply }: DebugProps) {
 			<label className="flex items-center gap-2">
 				<input type="checkbox" checked={form.diagramImage} onChange={onChangeBool('diagramImage')} />
 				<span>Include diagram image</span>
+			</label>
+
+			<label className="flex items-center gap-2">
+				<input type="checkbox" checked={form.debug} onChange={onChangeBool('debug')} />
+				<span>Show agent debug output</span>
 			</label>
 
 			<label className="flex items-center gap-2">

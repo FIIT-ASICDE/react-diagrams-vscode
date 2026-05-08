@@ -6,6 +6,8 @@ import { hasElkPoints, pointBackFromEnd, pointsToRoundedPath, type Point } from 
 const LABEL_OFFSET_FROM_END = 44;
 const CORNER_RADIUS = 8;
 
+
+// Handles fallback points.
 function fallbackPoints(props: EdgeProps): Point[] {
 	const { sourceX, sourceY, targetX, targetY } = props;
 	const midY = sourceY + (targetY - sourceY) / 2;
@@ -18,6 +20,8 @@ function fallbackPoints(props: EdgeProps): Point[] {
 	];
 }
 
+
+// Handles elk path edge.
 export default function ElkPathEdge(props: EdgeProps) {
 	const { id, style, label, data, markerEnd } = props;
 

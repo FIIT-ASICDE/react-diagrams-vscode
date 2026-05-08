@@ -9,16 +9,12 @@ type Handlers = {
 	onGraphRequest: () => void;
 };
 
-/**
- * Subscribe to messages from the extension host and route each known
- * message type to its handler. Splits what used to be one ~60-line
- * dispatch in ActivityDiagram.tsx into a small hook so the main file
- * stays focused on rendering.
- *
- * Unknown message types are ignored.
- */
+
+// Manages activity messages.
 export function useActivityMessages(handlers: Handlers): void {
 	useEffect(() => {
+		
+		// Handles listener.
 		function listener(event: MessageEvent<ActivityMessage>) {
 			const message = event.data;
 			if (!message || typeof message !== 'object') return;

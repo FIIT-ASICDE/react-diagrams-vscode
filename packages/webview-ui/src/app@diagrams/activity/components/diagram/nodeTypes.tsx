@@ -24,6 +24,8 @@ type NodeData = {
 
 const MAX_NODE_LABEL_LENGTH = 20;
 
+
+// Returns rendered node label.
 function getRenderedNodeLabel(data: NodeData, fallback: string): string {
 	const rawLabel = String(data.label ?? fallback).trim();
 	if (!rawLabel) return fallback;
@@ -37,6 +39,8 @@ type NodeProps = {
 	isConnectable: boolean;
 };
 
+
+// Checks whether is danger action.
 function isDangerAction(data: NodeData): boolean {
 	const construct = String(data.construct ?? '').toLowerCase();
 	if (isTerminatorConstruct(construct)) {
@@ -48,13 +52,15 @@ function isDangerAction(data: NodeData): boolean {
 		|| /^catch\b/.test(statement);
 }
 
-// ─── Reusable shell ─────────────────────────────────────────────────────────
 
+
+
+// Handles node shell.
 function NodeShell({ children }: { children: React.ReactNode }) {
 	return <div style={nodeStyles.shell}>{children}</div>;
 }
 
-// ─── Stadium-shape nodes (action / expandable) ──────────────────────────────
+
 
 const ActionNode = memo(({ data, isConnectable }: NodeProps) => {
 	const danger = isDangerAction(data);
@@ -89,13 +95,11 @@ const ExpandableNode = memo(({ data, isConnectable }: NodeProps) => (
 	</NodeShell>
 ));
 
-// ─── Diamond-shape nodes (decision / loop share one component) ──────────────
 
-/**
- * Decision and loop are visually identical UML diamonds. Their only
- * difference in source code was the default fallback label, so we collapse
- * both into a single component parameterized by `defaultLabel`.
- */
+
+
+
+// Handles diamond label node.
 function DiamondLabelNode({
 	data,
 	isConnectable,
@@ -126,7 +130,7 @@ const LoopNode = memo((props: NodeProps) => (
 	<DiamondLabelNode {...props} defaultLabel="Loop" diamondStyle={nodeStyles.loopDiamond} />
 ));
 
-// ─── Small-shape nodes (merge / initial / final) ────────────────────────────
+
 
 const MergeNode = memo(({ isConnectable }: NodeProps) => (
 	<NodeShell>
@@ -162,7 +166,7 @@ const FinalNode = memo(({ isConnectable }: NodeProps) => (
 	</NodeShell>
 ));
 
-// ─── Text preview node ──────────────────────────────────────────────────────
+
 
 const TextPreviewNode = memo(({ data, isConnectable }: NodeProps) => (
 	<NodeShell>
@@ -182,7 +186,7 @@ const TextPreviewNode = memo(({ data, isConnectable }: NodeProps) => (
 	</NodeShell>
 ));
 
-// ─── Public registry ────────────────────────────────────────────────────────
+
 
 export const nodeTypes = {
 	action: ActionNode,

@@ -26,6 +26,8 @@ const DEFAULT_LABEL_BY_TYPE: Record<ActivityNodeType, string> = {
 
 const EXPANDABLE_DEFAULT_SOURCE = 'function name() {\n  // TODO\n}';
 
+
+// Creates activity node.
 export function createActivityNode(
 	type: ActivityNodeType,
 	currentIndex: number,
@@ -50,11 +52,9 @@ export function createActivityNode(
 	};
 }
 
-/**
- * Place a freshly-created node roughly in the middle of the visible
- * viewport. If we don't have a ReactFlow instance yet (very early mount,
- * tests), we leave the node at its default position.
- */
+
+
+// Handles center node in viewport.
 export function centerNodeInViewport(
 	node: Node,
 	reactFlow: ReactFlowInstance<Node, Edge> | null,
@@ -74,18 +74,26 @@ export function centerNodeInViewport(
 	};
 }
 
+
+// Handles append node.
 export function appendNode(nodes: Node[], node: Node): Node[] {
 	return [...nodes, node];
 }
 
+
+// Handles apply node changes to nodes.
 export function applyNodeChangesToNodes(nodes: Node[], changes: NodeChange<Node>[]): Node[] {
 	return applyNodeChanges(changes, nodes);
 }
 
+
+// Handles apply edge changes to edges.
 export function applyEdgeChangesToEdges(edges: Edge[], changes: EdgeChange<Edge>[]): Edge[] {
 	return applyEdgeChanges(changes, edges);
 }
 
+
+// Handles connect edges.
 export function connectEdges(edges: Edge[], params: Connection): Edge[] {
 	return addEdge(
 		{

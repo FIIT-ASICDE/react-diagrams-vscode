@@ -12,6 +12,7 @@ type ChatSettingsConfig = {
 	diagramJson: boolean;
 	diagramMermaid: boolean;
 	diagramImage: boolean;
+	debug: boolean;
 	allowToolCall: boolean;
 	maxToolIterations: number;
 	diagramImageTimeoutMs: number;
@@ -22,29 +23,34 @@ const DEFAULT_CHAT_SETTINGS: ChatSettingsConfig = {
 	diagramJson: true,
 	diagramMermaid: true,
 	diagramImage: true,
+	debug: true,
 	allowToolCall: true,
 	maxToolIterations: 3,
 	diagramImageTimeoutMs: 15000,
 };
 
 
+
+// Handles app.
 function App() {
 	const [diagramType, setDiagramType] = useState<DiagramType>('state');
 	const [activeTabId, setActiveTabId] = useState('diagram');
 	const [settingsConfig, setSettingsConfig] = useState<ChatSettingsConfig>(DEFAULT_CHAT_SETTINGS);
 
 	useEffect(() => {
+		
+		// Handles on message.
 		const onMessage = (event: MessageEvent) => {
 			const message = event.data as ActivityExtensionToWebviewMessage | { type?: string; data?: unknown };
-			if (message.type === 'diagram/type' && message.data.diagramType === 'activity') {
-				setDiagramType(message.data.diagramType);
+			if (message.type === 'diagram/type' && message.data && (message.data as { diagramType?: string }).diagramType === 'activity') {
+				setDiagramType((message.data as { diagramType: DiagramType }).diagramType);
 			}
 
 			if (message.type === 'settings/config' && message.data && typeof message.data === 'object') {
 				setSettingsConfig(message.data as ChatSettingsConfig);
 			}
-			// it recieves diagram type from panel. 
-			// activity diagram panel is sending 'activity', state diagram panel not sending anything for now, so it defaults to 'state'
+			
+			
 		};
 
 		window.addEventListener('message', onMessage);
@@ -54,6 +60,8 @@ function App() {
 		return () => window.removeEventListener('message', onMessage);
 	}, []);
 
+	
+	// Handles on panels change.
 	const onPanelsChange = (event) => {
 		const nextActiveTabId = event?.currentTarget?.activeid ?? event?.target?.activeid;
 		if (typeof nextActiveTabId == 'string') {
@@ -61,6 +69,8 @@ function App() {
 		}
 	};
 
+	
+	// Handles on apply settings.
 	const onApplySettings = (value: unknown) => {
 		if (!value || typeof value != 'object')
 			return;

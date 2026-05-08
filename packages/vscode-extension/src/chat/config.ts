@@ -5,6 +5,7 @@ export interface ParticipantConfig {
   diagramJson: boolean;
   diagramMermaid: boolean;
   diagramImage: boolean;
+  debug: boolean;
   allowToolCall: boolean;
   maxToolIterations: number;
   diagramImageTimeoutMs: number;
@@ -15,6 +16,7 @@ export const DEFAULT_CONFIG: ParticipantConfig = {
   diagramJson: true,
   diagramMermaid: true,
   diagramImage: true,
+  debug: true,
   allowToolCall: true,
   maxToolIterations: 3,
   diagramImageTimeoutMs: 15000,
@@ -28,6 +30,7 @@ export function getConfig(): ParticipantConfig {
     diagramJson: cfg.get("diagramJson", DEFAULT_CONFIG.diagramJson),
     diagramMermaid: cfg.get("diagramMermaid", DEFAULT_CONFIG.diagramMermaid),
     diagramImage: cfg.get("diagramImage", DEFAULT_CONFIG.diagramImage),
+    debug: cfg.get("debug", DEFAULT_CONFIG.debug),
     allowToolCall: cfg.get("allowToolCall", DEFAULT_CONFIG.allowToolCall),
     maxToolIterations: cfg.get("maxToolIterations", DEFAULT_CONFIG.maxToolIterations),
     diagramImageTimeoutMs: cfg.get("diagramImageTimeoutMs", DEFAULT_CONFIG.diagramImageTimeoutMs),
@@ -50,6 +53,7 @@ export function sanitizeConfig(input: unknown): ParticipantConfig {
     diagramJson: isBoolean(candidate.diagramJson) ? candidate.diagramJson : DEFAULT_CONFIG.diagramJson,
     diagramMermaid: isBoolean(candidate.diagramMermaid) ? candidate.diagramMermaid : DEFAULT_CONFIG.diagramMermaid,
     diagramImage: isBoolean(candidate.diagramImage) ? candidate.diagramImage : DEFAULT_CONFIG.diagramImage,
+    debug: isBoolean(candidate.debug) ? candidate.debug : DEFAULT_CONFIG.debug,
     allowToolCall: isBoolean(candidate.allowToolCall) ? candidate.allowToolCall : DEFAULT_CONFIG.allowToolCall,
     maxToolIterations: isNumber(candidate.maxToolIterations) ? candidate.maxToolIterations : DEFAULT_CONFIG.maxToolIterations,
     diagramImageTimeoutMs: isNumber(candidate.diagramImageTimeoutMs) ? candidate.diagramImageTimeoutMs : DEFAULT_CONFIG.diagramImageTimeoutMs,
@@ -64,6 +68,7 @@ export async function updateConfig(input: unknown): Promise<ParticipantConfig> {
   await cfg.update("diagramJson", next.diagramJson, vscode.ConfigurationTarget.Workspace);
   await cfg.update("diagramMermaid", next.diagramMermaid, vscode.ConfigurationTarget.Workspace);
   await cfg.update("diagramImage", next.diagramImage, vscode.ConfigurationTarget.Workspace);
+  await cfg.update("debug", next.debug, vscode.ConfigurationTarget.Workspace);
   await cfg.update("allowToolCall", next.allowToolCall, vscode.ConfigurationTarget.Workspace);
   await cfg.update("maxToolIterations", next.maxToolIterations, vscode.ConfigurationTarget.Workspace);
   await cfg.update("diagramImageTimeoutMs", next.diagramImageTimeoutMs, vscode.ConfigurationTarget.Workspace);
@@ -71,9 +76,7 @@ export async function updateConfig(input: unknown): Promise<ParticipantConfig> {
   return next;
 }
 
-export const MODEL_TYPE = "copilot";
 export const DIAGRAM_CHAT_PARTICIPANT_ID = "vs-code-ext.diagram";
 export const RESPONSE_LANGUAGE = "Slovak";
-export const DEBUG = true;
 export const DIAGRAM_TOOL_NAME = "create_activity_diagram";
 export const CODE_FROM_DIAGRAM_TOOL_NAME = "create_code_from_activity_diagram";

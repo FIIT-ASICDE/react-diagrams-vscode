@@ -5,6 +5,8 @@ import { CodeGenerator } from "./codegen/CodeGenerator";
 export type { FuncArg } from "./shared/types";
 export * from "./codegen/diagram-check";
 
+
+// Converts diagram to code.
 export function convertDiagramToCode(
 	nodes: Node[],
 	edges: Edge[],

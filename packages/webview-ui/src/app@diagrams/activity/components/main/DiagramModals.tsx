@@ -8,7 +8,7 @@ import {
 	type NodeEditDraft,
 } from '../modals/rename-dialog';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+
 
 export type ModalState =
 	| { type: 'preview'; node: Node }
@@ -29,16 +29,20 @@ type DiagramModalsProps = {
 	onEdgeEditSave: () => void;
 };
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
 
+
+
+// Returns node full text.
 function getNodeFullText(node: Node | null): string {
 	if (!node) return '';
 	const data = (node.data ?? {}) as Record<string, unknown>;
 	return String(data.sourceText ?? data.label ?? '').trim();
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
 
+
+
+// Handles diagram modals.
 export function DiagramModals({
 	modalState,
 	viewMode,

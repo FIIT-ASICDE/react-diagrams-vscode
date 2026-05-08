@@ -23,6 +23,8 @@ const EXPANDABLE_CONSTRUCT_OPTIONS = [...EXPANDABLE_CONSTRUCTS, 'unknown'] as co
 const ACTION_CONSTRUCT_OPTIONS = [...TERMINATOR_CONSTRUCTS, 'unknown'] as const;
 const UNKNOWN_CONSTRUCT_OPTIONS = ['unknown'] as const;
 
+
+// Returns construct options.
 function getConstructOptions(nodeType: string): readonly string[] {
 	switch (nodeType) {
 		case 'decision':
@@ -44,7 +46,7 @@ export type EdgeEditDraft = {
 	edgeType: 'default' | 'back';
 };
 
-// Labels produced by the diagram builder or recognized by code generation.
+
 const EDGE_LABEL_OPTIONS = [
 	'',
 	'yes',
@@ -64,7 +66,7 @@ const EDGE_TYPE_OPTIONS = [
 	{ value: 'default', label: 'default (normal edge)' },
 ] as const;
 
-// ─── Node edit dialog ───────────────────────────────────────────────────────
+
 
 type NodeDialogProps = {
 	draft: NodeEditDraft;
@@ -73,6 +75,8 @@ type NodeDialogProps = {
 	onCancel: () => void;
 };
 
+
+// Handles node edit dialog.
 export function NodeEditDialog({ draft, onChange, onSave, onCancel }: NodeDialogProps) {
 	const sourceTextRef = useRef<HTMLTextAreaElement | null>(null);
 	const constructOptions = getConstructOptions(draft.nodeType);
@@ -82,11 +86,13 @@ export function NodeEditDialog({ draft, onChange, onSave, onCancel }: NodeDialog
 		sourceTextRef.current?.focus();
 	}, []);
 
+	
+	// Handles copy.
 	const handleCopy = () => {
 		try {
 			void navigator.clipboard?.writeText(draft.sourceText);
 		} catch {
-			// Clipboard API unavailable in this webview host — silently degrade.
+			
 		}
 	};
 
@@ -155,7 +161,7 @@ export function NodeEditDialog({ draft, onChange, onSave, onCancel }: NodeDialog
 	);
 }
 
-// ─── Edge edit dialog ───────────────────────────────────────────────────────
+
 
 type EdgeDialogProps = {
 	draft: EdgeEditDraft;
@@ -164,6 +170,8 @@ type EdgeDialogProps = {
 	onCancel: () => void;
 };
 
+
+// Handles edge edit dialog.
 export function EdgeEditDialog({ draft, onChange, onSave, onCancel }: EdgeDialogProps) {
 	const inputRef = useRef<HTMLSelectElement | null>(null);
 

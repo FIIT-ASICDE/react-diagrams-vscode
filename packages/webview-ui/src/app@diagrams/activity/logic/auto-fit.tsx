@@ -2,21 +2,13 @@ import { useEffect } from 'react';
 import { useReactFlow } from '@xyflow/react';
 
 type Props = {
-	/** Re-frame only when this trigger changes (mode switch or navigator change). */
+	
 	focusTrigger: string;
 };
 
-/**
- * Re-frames the viewport when a new diagram becomes visible. Two-phase:
- *
- *   1. fitView to bring everything into view
- *   2. center on the start node (`initial`) at zoom 0.6, so the user
- *      always lands at the top of the flow rather than wherever fitView's
- *      bounding-box centroid happens to be
- *
- * Lives in its own file because it must be rendered INSIDE `<ReactFlow>`
- * to get access to `useReactFlow()`.
- */
+
+
+// Handles auto fit on snapshot change.
 export function AutoFitOnSnapshotChange({ focusTrigger }: Props) {
 	const { fitView, getNodes, setCenter } = useReactFlow();
 

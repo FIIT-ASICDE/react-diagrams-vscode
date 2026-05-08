@@ -1,17 +1,23 @@
-import type { HookKind, HookSpec } from "./types";
 
+// Handles normalize.
 export function normalize(value: unknown): string {
 	return String(value ?? "").trim().toLowerCase();
 }
 
+
+// Handles stringify label.
 export function stringifyLabel(value: unknown): string {
 	return String(value ?? "").trim();
 }
 
+
+// Handles indent.
 export function indent(level: number): string {
 	return "  ".repeat(Math.max(0, level));
 }
 
+
+// Handles sanitize statement.
 export function sanitizeStatement(label: string): string {
 	const trimmed = label.trim();
 
@@ -37,17 +43,4 @@ export function sanitizeStatement(label: string): string {
 	}
 
 	return trimmed;
-}
-
-export function parseHookSpec(label: string): HookSpec | null {
-	const trimmed = label.trim();
-	const match = trimmed.match(/^(useEffect|useMemo|useCallback)\s*(?:\((.*)\))?$/);
-	if (!match) return null;
-
-	const kind = match[1] as HookKind;
-	const rawDeps = (match[2] ?? "").trim();
-
-	if (!rawDeps) return { kind, deps: "[]" };
-	if (rawDeps.startsWith("[") && rawDeps.endsWith("]")) return { kind, deps: rawDeps };
-	return { kind, deps: `[${rawDeps}]` };
 }

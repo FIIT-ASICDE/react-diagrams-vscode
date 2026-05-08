@@ -35,6 +35,8 @@ const PLAYGROUND_STYLE: CSSProperties = {
 	boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
 };
 
+
+// Handles edge label.
 export function EdgeLabel({ id, label, x, y, variant = 'view' }: EdgeLabelProps) {
 	if (!label) return null;
 	const text = typeof label === 'string' ? label : '';

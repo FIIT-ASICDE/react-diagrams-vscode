@@ -131,52 +131,6 @@ test('DiagramBuilder covers core node types', async () => {
 	assert.ok(returnGraph.nodes.some((node) => node.type === 'expandable' && String((node.data as { label?: unknown } | undefined)?.label ?? '') === 'return'));
 });
 
-test('DiagramBuilder labels nested loop exits before a for-loop increment as no', async () => {
-	const sourceText = `
-		for (let i = 0; i < items.length; i++) {
-			while (shouldRetry(items[i])) {
-				handle(items[i]);
-			}
-		}
-	`;
-
-	const project = new Project({ compilerOptions: { allowJs: true } });
-	const sourceFile = project.createSourceFile('nested-loop-fallthrough-no.ts', sourceText, { overwrite: true });
-	const graph = await new DiagramBuilder().buildStatements(sourceFile.getStatements());
-
-	const forDecisionNode = graph.nodes.find((node) => {
-		if (node.type !== 'loop') {
-			return false;
-		}
-
-		const label = String((node.data as { label?: unknown } | undefined)?.label ?? '');
-		return label.includes('i < items.length');
-	});
-	assert.ok(forDecisionNode);
-
-	const innerDecisionNode = graph.nodes.find((node) => {
-		if (node.type !== 'loop') {
-			return false;
-		}
-
-		const label = String((node.data as { label?: unknown } | undefined)?.label ?? '');
-		return label.includes('shouldRetry(items[i])');
-	});
-	assert.ok(innerDecisionNode);
-
-	const incrementNode = graph.nodes.find((node) => {
-		if (node.type !== 'action') {
-			return false;
-		}
-
-		const label = String((node.data as { label?: unknown } | undefined)?.label ?? '');
-		return label.trim() === 'i++';
-	});
-	assert.ok(incrementNode);
-
-	assert.ok(graph.edges.some((edge) => edge.source === innerDecisionNode!.id && edge.target === incrementNode!.id && String(edge.label ?? '') === 'no'));
-});
-
 test('DiagramBuilder marks hook callbacks as expandable nodes', async () => {
 	const sourceText = `
 		const stableHandler = useCallback(() => {

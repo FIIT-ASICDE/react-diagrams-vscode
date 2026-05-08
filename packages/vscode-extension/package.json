@@ -96,6 +96,11 @@
         "default": true,
         "description": "Include rendered diagram image when available."
       },
+      "reactDiagrams.chat.debug": {
+        "type": "boolean",
+        "default": true,
+        "description": "Show debug information in chat responses."
+      },
       "reactDiagrams.chat.allowToolCall": {
         "type": "boolean",
         "default": true,
@@ -114,11 +119,6 @@
         "minimum": 1000,
         "maximum": 60000,
         "description": "Timeout in milliseconds for capturing the rendered diagram image."
-      },
-      "reactDiagrams.chat.debug": {
-        "type": "boolean",
-        "default": true,
-        "description": "Show debug information in chat responses."
       }
     }
   }

@@ -29,14 +29,7 @@ import {
 import { BranchResolver } from "./Branch-resolver";
 import { TryResolver } from "./try-resolver";
 
-/**
- * Skeleton-quality JS / TS generator from an activity-diagram-style
- * control-flow graph.
- *
- * Structural emission per construct (if / switch / loop / try).
- * Non-fall outcomes (return / break / continue) bubble up.
- * Break / continue are scope-guarded — emitted only inside valid contexts.
- */
+
 export class CodeGenerator {
 	private readonly nodeById: Map<string, Node>;
 	private readonly asyncMode: boolean;
@@ -45,15 +38,12 @@ export class CodeGenerator {
 
 	private code = "";
 
-	/** Loop nodes currently being emitted — back-edge termination + scope tracking. */
+	
 	private readonly activeLoops = new Set<string>();
 	private readonly activeTryEntries = new Set<string>();
 	private readonly activeDoWhileLoops = new Set<string>();
 
-	/**
-	 * Counter of break-absorbing contexts (loops + switches).
-	 * `break` is valid only when breakDepth > 0.
-	 */
+	
 	private breakDepth = 0;
 
 	private readonly maxDepth = 1500;
@@ -73,8 +63,9 @@ export class CodeGenerator {
 		this.tryRes = new TryResolver(this.nodeById, this.edges, this.branches);
 	}
 
-	// ── Public API ───────────────────────────────────────────────────────────
+	
 
+	// Generates value.
 	generate(funcName: string, funcArgs: FuncArg[]): string {
 		const startEdge = this.findStartEdge();
 		if (!startEdge) {
@@ -89,6 +80,7 @@ export class CodeGenerator {
 		return this.code;
 	}
 
+	// Generates body only.
 	generateBodyOnly(): string {
 		const startEdge = this.findStartEdge();
 		if (!startEdge) return "";
@@ -97,15 +89,10 @@ export class CodeGenerator {
 		return this.code;
 	}
 
-	// ── Sequence emission ────────────────────────────────────────────────────
+	
 
-	/**
-	 * Emit nodes from `startId` until cursor hits `stopAt`, an `end` node,
-	 * a back-edge into an active loop, a cycle, or a non-fall outcome.
-	 *
-	 * Unlabeled break/continue outside valid scope are converted to FALL
-	 * (scope gate) to keep output syntactically valid.
-	 */
+	
+	// Handles emit sequence.
 	private emitSequence(
 		startId: string,
 		level: number,
@@ -131,7 +118,7 @@ export class CodeGenerator {
 			let next: string | undefined;
 			try {
 				if (this.depth > this.maxDepth) {
-					this.code += `${indent(level)}// recursion limit\n`;
+					this.code += `${indent(level)}`
 					return FALL;
 				}
 				({ outcome, next } = this.emitNode(node, level));
@@ -140,7 +127,7 @@ export class CodeGenerator {
 			}
 
 			if (outcome.kind !== "fall") {
-				// Scope gate: invalid break/continue outside context → treat as FALL.
+				
 				if (outcome.kind === "break" && !outcome.label && !this.canBreak()) {
 					cursor = next;
 					continue;
@@ -164,13 +151,13 @@ export class CodeGenerator {
 		return stopAt.has(cursor);
 	}
 
-	// ── Node dispatch ────────────────────────────────────────────────────────
+	
 
 	private emitNode(node: Node, level: number): EmitResult {
 		const id = String(node.id);
 		const construct = getConstruct(node);
 
-		// do-while detection: if this node is a body-entry for a do-while, emit the loop.
+		
 		const doWhileRegion = this.findDoWhileForBodyEntry(id);
 		if (
 			doWhileRegion &&
@@ -180,7 +167,7 @@ export class CodeGenerator {
 			return this.emitDoWhile(doWhileRegion, level);
 		}
 
-		// try-entry detection via incoming "try" edge.
+		
 		if (!this.activeTryEntries.has(id) && this.isTryEntryNode(id)) {
 			return this.emitTryFromEntry(id, level);
 		}
@@ -235,7 +222,7 @@ export class CodeGenerator {
 		}
 	}
 
-	// ── Action / inline / terminator ─────────────────────────────────────────
+	
 
 	private emitAction(node: Node, level: number): EmitResult {
 		const text = actionText(node);
@@ -291,7 +278,7 @@ export class CodeGenerator {
 		return { outcome: FALL, next: undefined };
 	}
 
-	// ── If ───────────────────────────────────────────────────────────────────
+	
 
 	private emitIf(node: Node, level: number): EmitResult {
 		const id = String(node.id);

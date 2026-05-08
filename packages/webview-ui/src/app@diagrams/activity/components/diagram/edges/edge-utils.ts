@@ -2,6 +2,8 @@ import { Position } from '@xyflow/react';
 
 export type Point = { x: number; y: number };
 
+
+// Checks whether has point path.
 export function hasPointPath(data: unknown): data is { points: Point[] } {
 	if (!data || typeof data !== 'object') return false;
 	const points = (data as { points?: unknown }).points;
@@ -18,14 +20,20 @@ export function hasPointPath(data: unknown): data is { points: Point[] } {
 	);
 }
 
+
+// Checks whether has baked points.
 export function hasBakedPoints(data: unknown): data is { points: Point[] } {
 	return hasPointPath(data);
 }
 
+
+// Checks whether has elk points.
 export function hasElkPoints(data: unknown): data is { points: Point[] } {
 	return hasPointPath(data);
 }
 
+
+// Handles points to path.
 export function pointsToPath(points: Point[]): string {
 	if (points.length === 0) return '';
 
@@ -34,21 +42,9 @@ export function pointsToPath(points: Point[]): string {
 		.join(' ');
 }
 
-/**
- * Same routing as `pointsToPath` (visits the same points in order),
- * but with each interior bend softened by a quadratic-Bezier arc.
- * Matches the visual style of the state-diagram `RoutableEdge`:
- * orthogonal lanes with deliberate-looking rounded corners.
- *
- * Each bend at point[i] becomes:
- *   - a line from point[i-1] toward point[i], stopping `r` short
- *   - a Q-curve through point[i] continuing `r` along the next segment
- *
- * `r` is capped at half the length of either adjacent segment so
- * tight corners don't generate overlapping arcs.
- *
- * Pass `cornerRadius = 0` to fall back to hard corners.
- */
+
+
+// Handles points to rounded path.
 export function pointsToRoundedPath(points: Point[], cornerRadius = 8): string {
 	if (points.length === 0) return '';
 	if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
@@ -71,8 +67,8 @@ export function pointsToRoundedPath(points: Point[], cornerRadius = 8): string {
 
 		const r = Math.min(cornerRadius, inLen / 2, outLen / 2);
 
-		// Below this threshold the arc is barely visible AND tends to
-		// look noisy — fall back to a hard line.
+		
+		
 		if (r < 1.5) {
 			d += ` L ${curr.x} ${curr.y}`;
 			continue;
@@ -92,10 +88,14 @@ export function pointsToRoundedPath(points: Point[], cornerRadius = 8): string {
 	return d;
 }
 
+
+// Handles distance.
 export function distance(a: Point, b: Point): number {
 	return Math.hypot(b.x - a.x, b.y - a.y);
 }
 
+
+// Handles point back from end.
 export function pointBackFromEnd(points: Point[], offset: number): Point {
 	if (points.length < 2) return points[0] ?? { x: 0, y: 0 };
 
@@ -121,6 +121,8 @@ export function pointBackFromEnd(points: Point[], offset: number): Point {
 	return points[0];
 }
 
+
+// Handles offset by position.
 export function offsetByPosition(point: Point, position: Position, offset: number): Point {
 	switch (position) {
 		case Position.Top:

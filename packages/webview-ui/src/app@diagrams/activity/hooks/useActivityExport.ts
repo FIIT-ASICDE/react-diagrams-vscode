@@ -12,6 +12,8 @@ type Params = {
 const IMAGE_WIDTH = 1920;
 const IMAGE_HEIGHT = 1080;
 
+
+// Handles capture full diagram.
 async function captureFullDiagram(
 	reactFlowRef: MutableRefObject<ReactFlowInstance<Node, Edge> | null>,
 ): Promise<string> {
@@ -50,6 +52,8 @@ async function captureFullDiagram(
 	}
 }
 
+
+// Manages activity export.
 export function useActivityExport({ postMessage, reactFlowRef }: Params) {
 	const handleImageRequest = useCallback(async () => {
 		try {

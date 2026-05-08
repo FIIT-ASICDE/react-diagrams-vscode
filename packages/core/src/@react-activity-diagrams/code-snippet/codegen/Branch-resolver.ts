@@ -6,17 +6,18 @@ import {
 	outgoingForwardEdges,
 } from "./Helpers";
 
-/**
- * Resolves branch-join nodes and computes reachability distances
- * for if/switch/try constructs.
- */
+
 export class BranchResolver {
+	
+	
+	// Handles constructor.
 	constructor(
 		private readonly nodeById: Map<string, Node>,
 		private readonly edges: Edge[],
 		private readonly activeLoops: ReadonlySet<string>,
 	) {}
 
+	// Finds branch join.
 	findBranchJoin(a: string, b: string): string | undefined {
 		const aReachable = this.collectReachableDistances(a, 80);
 		const bReachable = this.collectReachableDistances(b, 80);
@@ -38,6 +39,7 @@ export class BranchResolver {
 		return candidates[0];
 	}
 
+	// Handles collect reachable distances.
 	collectReachableDistances(startId: string, limit: number): Map<string, number> {
 		const distances = new Map<string, number>();
 		const queue: Array<{ id: string; distance: number }> = [
@@ -52,7 +54,7 @@ export class BranchResolver {
 			const node = this.nodeById.get(current.id);
 			if (!node || node.type === "end") continue;
 
-			// Don't walk past terminators or active loop headers for local join detection.
+			
 			if (isTerminatorNode(node)) continue;
 			if (this.activeLoops.has(current.id)) continue;
 
@@ -64,6 +66,7 @@ export class BranchResolver {
 		return distances;
 	}
 
+	// Finds exit switch target.
 	findExitSwitchTarget(caseTargets: string[]): string | undefined {
 		const distances = new Map<string, number>();
 

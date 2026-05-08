@@ -8,10 +8,9 @@ type Props = {
 	strokeWidth?: number;
 };
 
-/**
- * SVG-drawn diamond. Crisper than CSS clip-path borders, and its bounding
- * box is exactly width × height so the layouter can size it predictably.
- */
+
+
+// Handles diamond.
 export function Diamond({
 	width,
 	height,

@@ -13,6 +13,8 @@ type Params = {
 	getActiveGraph: () => GraphSnapshot;
 };
 
+
+// Manages activity codegen.
 export function useActivityCodegen({ vscode, getActiveGraph }: Params) {
 	const generateSkeleton = useCallback(() => {
 		const { nodes, edges } = getActiveGraph();

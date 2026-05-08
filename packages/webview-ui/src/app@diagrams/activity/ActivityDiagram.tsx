@@ -18,8 +18,10 @@ import { useActivityMessages } from './hooks/useActivityMessages';
 import { useActivityModals } from './hooks/useActivityModals';
 import { useActivityPlayground } from './hooks/useActivityPlayground';
 
-// ─── Main component ─────────────────────────────────────────────────────────
 
+
+
+// Handles activity diagram.
 export default function ActivityDiagram() {
 	const stack = useDiagramNavigationStore((s) => s.stack);
 	const currentIndex = useDiagramNavigationStore((s) => s.currentIndex);
@@ -97,12 +99,12 @@ export default function ActivityDiagram() {
 		getActiveGraph,
 	});
 
-	// Ready handshake — post once on mount.
+	
 	useEffect(() => {
 		postMessage('webview/ready');
 	}, [postMessage]);
 
-	// ── Viewer-side: drilldown ───────────────────────────────────────────
+	
 
 	const openNodeDiagram = useCallback(
 		(node: Node) => {
@@ -122,7 +124,7 @@ export default function ActivityDiagram() {
 		[markPendingPreview, postMessage, viewMode],
 	);
 
-	// ── ReactFlow event handlers ─────────────────────────────────────────
+	
 
 	const onNodeClick = useCallback(
 		(_event: MouseEvent, node: Node) => {
@@ -149,7 +151,7 @@ export default function ActivityDiagram() {
 		clearPlayground();
 	}, [clearPlayground, closeModal]);
 
-	// ── Render ───────────────────────────────────────────────────────────
+	
 
 	const focusTrigger = `${viewMode}:${viewMode === 'viewer' ? visibleRevision : 'mode'}`;
 

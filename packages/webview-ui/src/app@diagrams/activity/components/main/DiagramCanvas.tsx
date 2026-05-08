@@ -34,6 +34,8 @@ type DiagramCanvasProps = {
 	onConnect?: (connection: Connection) => void;
 };
 
+
+// Handles diagram canvas.
 export function DiagramCanvas({
 	nodes,
 	edges,
@@ -54,20 +56,7 @@ export function DiagramCanvas({
 
 	return (
 		<>
-		{/* <pre
-			style={{
-				maxHeight: 240,
-				overflow: 'auto',
-				padding: '8px 10px',
-				margin: 0,
-				backgroundColor: '#f7f7f7',
-				borderBottom: '1px solid #ddd',
-				fontSize: 11,
-				lineHeight: 1.35,
-			}}
-		>
-			{debugGraphJson}
-		</pre> */}
+		{}
 		<ReactFlow
 			className="download-image"
 			nodes={nodes}

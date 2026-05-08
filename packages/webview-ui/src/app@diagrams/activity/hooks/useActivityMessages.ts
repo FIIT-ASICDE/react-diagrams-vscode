@@ -17,10 +17,14 @@ type Params = {
 	postMessage: (type: string, data?: unknown) => void;
 };
 
+
+// Handles truncate.
 function truncate(text: string, maxLength: number) {
 	return text.length <= maxLength ? text : `${text.slice(0, maxLength - 3)}...`;
 }
 
+
+// Builds error graph.
 function buildErrorGraph(message: string): { nodes: Node[]; edges: Edge[] } {
 	return {
 		nodes: [
@@ -31,6 +35,8 @@ function buildErrorGraph(message: string): { nodes: Node[]; edges: Edge[] } {
 	};
 }
 
+
+// Manages activity messages.
 export function useActivityMessages({
 	applyIncomingDiagramPayload,
 	setRootError,

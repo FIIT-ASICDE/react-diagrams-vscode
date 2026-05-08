@@ -10,10 +10,7 @@ import {
 } from "./Helpers";
 import type { BranchResolver } from "./Branch-resolver";
 
-/**
- * Resolves try/catch/finally structure targets from the control-flow graph.
- * Separated from CodeGenerator to keep try-logic self-contained and testable.
- */
+
 export class TryResolver {
 	constructor(
 		private readonly nodeById: Map<string, Node>,
@@ -21,6 +18,8 @@ export class TryResolver {
 		private readonly branches: BranchResolver,
 	) {}
 
+	
+	// Finds try after target.
 	findTryAfterTarget(
 		tryId: string,
 		tryTarget?: string,
@@ -43,6 +42,8 @@ export class TryResolver {
 		return undefined;
 	}
 
+	
+	// Finds try after target from entry.
 	findTryAfterTargetFromEntry(
 		tryEntryId: string,
 		catchTarget?: string,
@@ -62,6 +63,8 @@ export class TryResolver {
 		return this.findLinearAfterTry(tryEntryId);
 	}
 
+	
+	// Finds catch target from try entry.
 	findCatchTargetFromTryEntry(tryEntryId: string): string | undefined {
 		const reachable = this.branches.collectReachableDistances(tryEntryId, 120);
 		let lastTarget: string | undefined;
@@ -75,6 +78,8 @@ export class TryResolver {
 		return lastTarget;
 	}
 
+	
+	// Handles collect finally candidates.
 	collectFinallyCandidates(
 		tryOwnerId: string,
 		starts: Array<string | undefined>,
@@ -129,6 +134,8 @@ export class TryResolver {
 		return { allTargets, selected: lastStructural ?? lastPreferred ?? lastAny };
 	}
 
+	
+	// Handles resolve after finally target.
 	resolveAfterFinallyTarget(
 		finallyTarget: string | undefined,
 		afterTry: string | undefined,
@@ -151,6 +158,8 @@ export class TryResolver {
 		return afterTry;
 	}
 
+	
+	// Handles boundary successor.
 	private boundarySuccessor(id: string): string | undefined {
 		const out = this.edges.filter(
 			(e) => String(e.source) === id && !isExceptionEdge(e.label),
@@ -166,6 +175,8 @@ export class TryResolver {
 		return String(out[0].target);
 	}
 
+	
+	// Checks whether is synthetic try boundary node.
 	isSyntheticTryBoundaryNode(nodeId: string): boolean {
 		const node = this.nodeById.get(nodeId);
 		if (!node) return false;
@@ -174,15 +185,17 @@ export class TryResolver {
 		return !getStr(data.sourceText).trim() && !getStr(data.label).trim();
 	}
 
-	// ── Private helpers ─────────────────────────────────────────────────────
+	
 
+	
+	// Finds exit try target by labeled edges.
 	private findExitTryTargetByLabeledEdges(
 		tryId: string,
 		starts: Array<string | undefined>,
 	): string | undefined {
 		const distances = this.mergeReachable(starts);
 
-		// First pass: explicit "exit try" labelled edges.
+		
 		let lastTarget: string | undefined;
 		for (const edge of this.edges) {
 			if (!isTryExitEdge(edge)) continue;
@@ -197,7 +210,7 @@ export class TryResolver {
 		}
 		if (lastTarget) return lastTarget;
 
-		// Second pass: nodes explicitly marked as try-exit-boundary.
+		
 		for (const nodeId of distances.keys()) {
 			const node = this.nodeById.get(nodeId);
 			if (!node) continue;
@@ -211,6 +224,8 @@ export class TryResolver {
 		return lastTarget;
 	}
 
+	
+	// Finds linear after try.
 	private findLinearAfterTry(startId: string): string | undefined {
 		const reachable = this.branches.collectReachableDistances(startId, 120);
 		const mergeCandidates = [...reachable.keys()].filter(
@@ -225,6 +240,8 @@ export class TryResolver {
 		return mergeCandidates[0];
 	}
 
+	
+	// Handles merge reachable.
 	private mergeReachable(starts: Array<string | undefined>): Map<string, number> {
 		const distances = new Map<string, number>();
 		for (const start of starts) {
@@ -238,6 +255,8 @@ export class TryResolver {
 		return distances;
 	}
 
+	
+	// Returns try owner.
 	private getTryOwner(nodeId: string): string {
 		const node = this.nodeById.get(nodeId);
 		return node ? String(getData(node).tryOwner ?? "") : "";

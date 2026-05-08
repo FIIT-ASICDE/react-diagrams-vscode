@@ -17,13 +17,14 @@ export function printDebug(
 }
 
 function configLines(): string[] {
-    const config = getConfig();
+  const config = getConfig();
   return [
     "**Config:**",
     `- code: ${config.code}`,
     `- diagramJson: ${config.diagramJson}`,
     `- diagramMermaid: ${config.diagramMermaid}`,
     `- diagramImage: ${config.diagramImage}`,
+    `- debug: ${config.debug}`,
     `- diagramImageTimeoutMs: ${config.diagramImageTimeoutMs}`,
     `- allowToolCall: ${config.allowToolCall}`,
     `- maxToolIterations: ${config.maxToolIterations}`,
@@ -41,23 +42,4 @@ function contextLines(context: ChatContext): string[] {
     `- diagram image: ${context.diagramImage ? "yes" : "no"}`,
     `- tool results count: ${context.toolResults.length}`,
   ];
-}
-
-export function buildHelpText(): string {
-  return [
-    "### What you can ask",
-    "- @diagram explain this flow",
-    "- @diagram analyze diagram",
-    "- @diagram compare code and diagram",
-    "- @diagram find inconsistencies",
-    "- @diagram refactor this code",
-    "- @diagram refactor #sym:functionName",
-    "- @diagram create a diagram out of #sym:functionName",
-    "",
-  ].join("\n");
-}
-
-export function isHelpPrompt(prompt: string): boolean {
-  const n = prompt.trim().toLowerCase();
-  return ["?", "help", "", "what"].includes(n);
 }

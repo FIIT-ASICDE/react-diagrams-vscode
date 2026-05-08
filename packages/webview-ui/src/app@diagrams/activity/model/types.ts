@@ -4,7 +4,7 @@ import type {
 	ActivityExtensionToWebviewMessage,
 } from '@react-diagrams/core/app@vscode';
 
-/** Node "types" the user can add via the toolbar. */
+
 export type ActivityNodeType =
 	| 'start'
 	| 'action'
@@ -14,11 +14,7 @@ export type ActivityNodeType =
 	| 'merge'
 	| 'end';
 
-/**
- * In-flight rename for a node. `value` is what the user is typing.
- * `fullText` is the original sourceText (or label, if no sourceText) —
- * used to seed the textarea when the user opens the dialog.
- */
+
 export type RenameDraft = {
 	nodeId: string;
 	value: string;

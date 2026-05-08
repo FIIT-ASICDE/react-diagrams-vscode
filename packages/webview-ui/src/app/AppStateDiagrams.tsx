@@ -10,6 +10,7 @@ type ChatSettingsConfig = {
 	diagramJson: boolean;
 	diagramMermaid: boolean;
 	diagramImage: boolean;
+	debug: boolean;
 	allowToolCall: boolean;
 	maxToolIterations: number;
 	diagramImageTimeoutMs: number;
@@ -20,6 +21,7 @@ const DEFAULT_CHAT_SETTINGS: ChatSettingsConfig = {
 	diagramJson: true,
 	diagramMermaid: true,
 	diagramImage: true,
+	debug: true,
 	allowToolCall: true,
 	maxToolIterations: 3,
 	diagramImageTimeoutMs: 15000,

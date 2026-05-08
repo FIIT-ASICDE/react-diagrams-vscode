@@ -24,6 +24,7 @@ export type DiagramStructureIssue = {
 };
 
 export class DiagramStructureError extends Error {
+	// Handles constructor.
 	constructor(public readonly issues: DiagramStructureIssue[]) {
 		super(formatDiagramStructureIssues(issues));
 		this.name = 'DiagramStructureError';
@@ -99,77 +100,111 @@ const DO_WHILE_EXIT_LABELS = new Set<string>([
 	'exit',
 ]);
 
+
+// Returns data.
 function getData(node: Node): AnyNodeData {
 	return (node.data as AnyNodeData | undefined) ?? {};
 }
 
+
+// Returns str.
 function getStr(value: unknown): string {
 	return typeof value === 'string' ? value : '';
 }
 
+
+// Returns construct.
 function getConstruct(node: Node): string {
 	return getStr(getData(node).construct).trim();
 }
 
+
+// Handles normalize label.
 function normalizeLabel(label: unknown): string {
 	if (label === undefined || label === null) return '';
 	return String(label).trim().toLowerCase();
 }
 
+
+// Checks whether is back edge.
 function isBackEdge(edge: Edge): boolean {
 	return edge.type === 'back';
 }
 
+
+// Checks whether is initial node.
 function isInitialNode(node: Node): boolean {
 	return node.type === 'initial' || node.type === 'start';
 }
 
+
+// Checks whether is end node.
 function isEndNode(node: Node): boolean {
 	return node.type === 'end';
 }
 
+
+// Checks whether is merge node.
 function isMergeNode(node: Node): boolean {
 	return node.type === 'merge';
 }
 
+
+// Checks whether is action like node.
 function isActionLikeNode(node: Node): boolean {
 	return node.type === 'action' || node.type === 'expandable';
 }
 
+
+// Checks whether is decision like node.
 function isDecisionLikeNode(node: Node): boolean {
 	return node.type === 'decision';
 }
 
+
+// Checks whether is loop node.
 function isLoopNode(node: Node): boolean {
 	const construct = getConstruct(node);
 	return node.type === 'loop' || isLoopConstruct(construct);
 }
 
+
+// Checks whether is do while node.
 function isDoWhileNode(node: Node): boolean {
 	const construct = getConstruct(node) || getStr(getData(node).loopKind);
 	return construct === 'do-while';
 }
 
+
+// Checks whether is switch node.
 function isSwitchNode(node: Node): boolean {
 	return getConstruct(node) === 'switch';
 }
 
+
+// Checks whether is try node.
 function isTryNode(node: Node): boolean {
-	// Legacy compatibility: new diagrams encode try structurally on edges.
-	// Old saved diagrams may still carry construct:'try' on a decision node.
+	
+	
 	return getConstruct(node) === 'try';
 }
 
+
+// Checks whether has incoming try edge.
 function hasIncomingTryEdge(nodeId: string, groups: EdgeGroups): boolean {
 	const incoming = list(groups.forwardIncoming, nodeId);
 	return incoming.some((edge) => normalizeLabel(edge.label) === 'try');
 }
 
+
+// Checks whether is if node.
 function isIfNode(node: Node): boolean {
 	const construct = getConstruct(node);
 	return node.type === 'decision' && (!construct || construct === 'if');
 }
 
+
+// Checks whether is terminator node.
 function isTerminatorNode(node: Node): boolean {
 	const construct = getConstruct(node);
 	if (isTerminatorConstruct(construct)) return true;
@@ -181,6 +216,8 @@ function isTerminatorNode(node: Node): boolean {
 	return /^(return|throw|break|continue)\b/.test(text);
 }
 
+
+// Checks whether is return like node.
 function isReturnLikeNode(node: Node): boolean {
 	const construct = getConstruct(node);
 	if (construct === 'return' || construct === 'throw') return true;
@@ -192,6 +229,8 @@ function isReturnLikeNode(node: Node): boolean {
 	return /^(return|throw)\b/.test(text);
 }
 
+
+// Checks whether is break like node.
 function isBreakLikeNode(node: Node): boolean {
 	const construct = getConstruct(node);
 	if (construct === 'break') return true;
@@ -203,6 +242,8 @@ function isBreakLikeNode(node: Node): boolean {
 	return /^break\b/.test(text);
 }
 
+
+// Checks whether is continue like node.
 function isContinueLikeNode(node: Node): boolean {
 	const construct = getConstruct(node);
 	if (construct === 'continue') return true;
@@ -214,6 +255,8 @@ function isContinueLikeNode(node: Node): boolean {
 	return /^continue\b/.test(text);
 }
 
+
+// Checks whether is switch case label.
 function isSwitchCaseLabel(label: unknown): boolean {
 	const normalized = normalizeLabel(label);
 	if (!normalized) return false;
@@ -225,6 +268,8 @@ function isSwitchCaseLabel(label: unknown): boolean {
 	);
 }
 
+
+// Handles group edges.
 function groupEdges(nodes: Node[], edges: Edge[]): EdgeGroups {
 	const incoming = new Map<string, Edge[]>();
 	const outgoing = new Map<string, Edge[]>();
@@ -269,6 +314,8 @@ function groupEdges(nodes: Node[], edges: Edge[]): EdgeGroups {
 	};
 }
 
+
+// Adds issue.
 function addIssue(
 	issues: DiagramStructureIssue[],
 	severity: DiagramStructureIssueSeverity,
@@ -282,14 +329,20 @@ function addIssue(
 	});
 }
 
+
+// Handles count.
 function count(map: Map<string, Edge[]>, id: string): number {
 	return map.get(id)?.length ?? 0;
 }
 
+
+// Handles list.
 function list(map: Map<string, Edge[]>, id: string): Edge[] {
 	return map.get(id) ?? [];
 }
 
+
+// Checks whether has edge to node type.
 function hasEdgeToNodeType(
 	edges: Edge[],
 	nodesById: Map<string, Node>,
@@ -298,6 +351,8 @@ function hasEdgeToNodeType(
 	return edges.some((edge) => nodesById.get(String(edge.target))?.type === type);
 }
 
+
+// Handles validate graph basics.
 function validateGraphBasics(
 	nodes: Node[],
 	edges: Edge[],
@@ -388,6 +443,8 @@ function validateGraphBasics(
 	}
 }
 
+
+// Handles validate initial node.
 function validateInitialNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -423,6 +480,8 @@ function validateInitialNode(
 	}
 }
 
+
+// Handles validate end node.
 function validateEndNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -449,6 +508,8 @@ function validateEndNode(
 	}
 }
 
+
+// Handles validate action node.
 function validateActionNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -528,6 +589,8 @@ function validateActionNode(
 	}
 }
 
+
+// Handles validate do while node.
 function validateDoWhileNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -535,11 +598,11 @@ function validateDoWhileNode(
 ): void {
 	const id = String(node.id);
 
-	// Correct do-while shape:
-	//
-	// body entry -> ...body exits... -> condition node
-	// condition --yes/back--> body entry
-	// condition --no/forward--> post-loop continuation
+	
+	
+	
+	
+	
 
 	const incoming = count(groups.incoming, id);
 	const forwardIncoming = count(groups.forwardIncoming, id);
@@ -628,6 +691,8 @@ function validateDoWhileNode(
 	}
 }
 
+
+// Handles validate merge node.
 function validateMergeNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -656,6 +721,8 @@ function validateMergeNode(
 	}
 }
 
+
+// Handles validate if node.
 function validateIfNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -711,6 +778,8 @@ function validateIfNode(
 	}
 }
 
+
+// Handles validate loop node.
 function validateLoopNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -784,6 +853,8 @@ function validateLoopNode(
 	}
 }
 
+
+// Handles validate switch node.
 function validateSwitchNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -855,6 +926,8 @@ function validateSwitchNode(
 	}
 }
 
+
+// Handles validate try node.
 function validateTryNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -931,6 +1004,8 @@ function validateTryNode(
 	}
 }
 
+
+// Handles validate edge labeled try entry.
 function validateEdgeLabeledTryEntry(
 	node: Node,
 	groups: EdgeGroups,
@@ -951,6 +1026,8 @@ function validateEdgeLabeledTryEntry(
 	}
 }
 
+
+// Handles validate unknown decision node.
 function validateUnknownDecisionNode(
 	node: Node,
 	groups: EdgeGroups,
@@ -969,6 +1046,8 @@ function validateUnknownDecisionNode(
 	validateIfNode(node, groups, issues);
 }
 
+
+// Handles validate reachability.
 function validateReachability(
 	nodes: Node[],
 	edges: Edge[],
@@ -1016,6 +1095,8 @@ function validateReachability(
 	}
 }
 
+
+// Handles validate diagram structure.
 export function validateDiagramStructure(
 	nodes: Node[],
 	edges: Edge[],
@@ -1103,6 +1184,8 @@ export function validateDiagramStructure(
 	return issues;
 }
 
+
+// Handles check structure.
 export function checkStructure(nodes: Node[], edges: Edge[]): void {
 	const issues = validateDiagramStructure(nodes, edges);
 	const errors = issues.filter((issue) => issue.severity === 'error');
@@ -1112,6 +1195,8 @@ export function checkStructure(nodes: Node[], edges: Edge[]): void {
 	}
 }
 
+
+// Handles check structure strict.
 export function checkStructureStrict(nodes: Node[], edges: Edge[]): void {
 	const issues = validateDiagramStructure(nodes, edges);
 
@@ -1120,6 +1205,8 @@ export function checkStructureStrict(nodes: Node[], edges: Edge[]): void {
 	}
 }
 
+
+// Handles format diagram structure issues.
 export function formatDiagramStructureIssues(
 	issues: DiagramStructureIssue[],
 ): string {
@@ -1142,12 +1229,16 @@ export function formatDiagramStructureIssues(
 	].join('\n');
 }
 
+
+// Checks whether has structure errors.
 export function hasStructureErrors(nodes: Node[], edges: Edge[]): boolean {
 	return validateDiagramStructure(nodes, edges).some(
 		(issue) => issue.severity === 'error',
 	);
 }
 
+
+// Returns structure errors.
 export function getStructureErrors(
 	nodes: Node[],
 	edges: Edge[],
@@ -1157,6 +1248,8 @@ export function getStructureErrors(
 	);
 }
 
+
+// Returns structure warnings.
 export function getStructureWarnings(
 	nodes: Node[],
 	edges: Edge[],

@@ -12,22 +12,38 @@ import type { BuildResult } from '../types';
 import { compactLabel, getFallthroughEdgeLabel } from '../utils';
 import type { ControlContext, LoopContext, StatementVisitorHost } from './host-context';
 
-// ── Helpers ────────────────────────────────────────────────────────────────
 
+
+
+
+
+// Returns unique items while preserving order.
 function unique<T>(items: T[]): T[] {
 	return [...new Set(items)];
 }
 
+
+
+
+// Returns unique non-empty node ids.
 function uniqueIds(ids: string[]): string[] {
 	return unique(ids).filter(Boolean);
 }
 
+
+
+
+// Returns labels only when the map contains entries.
 function nonEmptyLabels(
 	labels?: Record<string, string>,
 ): Record<string, string> | undefined {
 	return labels && Object.keys(labels).length > 0 ? labels : undefined;
 }
 
+
+
+
+// Merges exit labels into a target map.
 function mergeExitLabels(
 	target: Record<string, string>,
 	labels?: Record<string, string>,
@@ -36,6 +52,10 @@ function mergeExitLabels(
 	Object.assign(target, labels);
 }
 
+
+
+
+// Marks a return node as pending before finally handling.
 function markReturnAsPending(host: StatementVisitorHost, returnNodeId: string): string {
 	const data = host.writer.getNodeData(returnNodeId) ?? {};
 	const sourceText =
@@ -55,6 +75,10 @@ function markReturnAsPending(host: StatementVisitorHost, returnNodeId: string): 
 	return sourceText;
 }
 
+
+
+
+// Creates deferred return node.
 function createDeferredReturnNode(
 	host: StatementVisitorHost,
 	returnSourceText: string,
@@ -67,6 +91,10 @@ function createDeferredReturnNode(
 	});
 }
 
+
+
+
+// Creates try exit boundary.
 function createTryExitBoundary(
 	host: StatementVisitorHost,
 	tryOwnerId: string,
@@ -97,11 +125,11 @@ function createTryExitBoundary(
 	return [boundaryId];
 }
 
-/**
- * After a loop body has been visited, wire up the break / continue
- * actions registered on its context. Returns break exits to be combined
- * with the natural loop exit by the caller.
- */
+
+
+
+
+// Wires pending continue edges and returns pending breaks.
 function wirePendingBreaksAndContinues(
 	host: StatementVisitorHost,
 	ctx: LoopContext,
@@ -114,6 +142,10 @@ function wirePendingBreaksAndContinues(
 }
 
 
+
+
+
+// Preserves exit labels when converting break exits.
 function preserveExitLabelsForPendingBreaks(
 	host: StatementVisitorHost,
 	exits: string[],
@@ -131,12 +163,11 @@ function preserveExitLabelsForPendingBreaks(
 		return mergeId;
 	});
 }
-/**
- * Merge loop exits and break exits with an explicit merge node if needed.
- *
- * When a loop has both normal exit(s) and break exit(s), they must converge
- * into an explicit merge node before reaching the post-loop continuation.
- */
+
+
+
+
+// Merges loop exits with collected break exits.
 function mergeLoopExitsWithBreaks(
 	host: StatementVisitorHost,
 	loopExits: string[],
@@ -173,6 +204,10 @@ function mergeLoopExitsWithBreaks(
 	return { exits: [mergeId] };
 }
 
+
+
+
+// Resolves exit sources while preserving surviving labels.
 function resolveExitSourcesWithLabels(
 	host: StatementVisitorHost,
 	sources: string[],
@@ -199,8 +234,12 @@ function resolveExitSourcesWithLabels(
 	};
 }
 
-// ── Visitors ───────────────────────────────────────────────────────────────
 
+
+
+
+
+// Visits an if statement and merges branch exits.
 export function visitIf(host: StatementVisitorHost, stmt: IfStatement): BuildResult {
 	const elseStmt = stmt.getElseStatement();
 	const conditionText = stmt.getExpression().getText();
@@ -251,6 +290,10 @@ export function visitIf(host: StatementVisitorHost, stmt: IfStatement): BuildRes
 	};
 }
 
+
+
+
+// Visits a while loop statement.
 export function visitWhile(host: StatementVisitorHost, stmt: WhileStatement): BuildResult {
 	const condText = stmt.getExpression().getText();
 	const loopId = host.createLoopNode(compactLabel(condText), condText);
@@ -262,6 +305,10 @@ export function visitWhile(host: StatementVisitorHost, stmt: WhileStatement): Bu
 	);
 }
 
+
+
+
+// Visits a do-while loop statement.
 export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): BuildResult {
 	const condText = stmt.getExpression().getText();
 	const loopId = host.createLoopNode(compactLabel(condText), condText);
@@ -274,15 +321,15 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
 		const body = host.visitBranch(stmt.getStatement());
 
 		if (body.entry) {
-			// do-while executes body first.
-			// Body fallthrough reaches the condition node.
+			
+			
 			for (const exit of body.exits) {
 				host.writer.addEdge(exit, loopId, getFallthroughEdgeLabel(host, exit), false);
 			}
 
 			host.writer.addEdge(loopId, body.entry, 'yes', true);
 		} else {
-			// Empty body: condition is the only visible loop node.
+			
 			host.writer.addEdge(loopId, loopId, 'yes', true);
 		}
 
@@ -295,8 +342,8 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
 			entry: body.entry ?? loopId,
 			exits: mergedExits.exits,
 
-			// Important: this tells the next statement / parent loop that
-			// leaving the do-while condition is the "no" branch.
+			
+			
 			exitLabels: mergedExits.exitLabels,
 
 			returnExits: unique(body.returnExits),
@@ -307,6 +354,10 @@ export function visitDoWhile(host: StatementVisitorHost, stmt: DoStatement): Bui
 	}
 }
 
+
+
+
+// Visits a for loop statement.
 export function visitFor(host: StatementVisitorHost, stmt: ForStatement): BuildResult {
 	const initText = stmt.getInitializer()?.getText() ?? '';
 	const condText = stmt.getCondition()?.getText() ?? '';
@@ -328,21 +379,33 @@ export function visitFor(host: StatementVisitorHost, stmt: ForStatement): BuildR
 	);
 }
 
+
+
+
+// Visits a for-of loop statement.
 export function visitForOf(host: StatementVisitorHost, stmt: ForOfStatement): BuildResult {
 	return visitIteratorLoop(host, stmt, 'for-of');
 }
 
+
+
+
+// Visits a for-in loop statement.
 export function visitForIn(host: StatementVisitorHost, stmt: ForInStatement): BuildResult {
 	return visitIteratorLoop(host, stmt, 'for-in');
 }
 
-// ── Try / catch / finally ─────────────────────────────────────────────────
+
 
 type ContextSnapshot = Map<
 	ControlContext,
 	{ breaks: Set<string>; continues: Set<string> }
 >;
 
+
+
+
+// Takes a snapshot of pending breaks and continues.
 function snapshotPending(host: StatementVisitorHost): ContextSnapshot {
 	const snap: ContextSnapshot = new Map();
 
@@ -362,6 +425,10 @@ type RedirectEntry = {
 	kind: 'break' | 'continue';
 };
 
+
+
+
+// Computes pending control-flow changes against a snapshot.
 function diffPending(host: StatementVisitorHost, before: ContextSnapshot): RedirectEntry[] {
 	const entries: RedirectEntry[] = [];
 
@@ -389,6 +456,10 @@ function diffPending(host: StatementVisitorHost, before: ContextSnapshot): Redir
 	return entries;
 }
 
+
+
+
+// Removes a redirected node from a context queue.
 function removeFromContext(
 	ctx: ControlContext,
 	kind: 'break' | 'continue',
@@ -406,16 +477,11 @@ function removeFromContext(
 	}
 }
 
-/**
- * Splice a fresh copy of `finallyBlock` between source nodes and a
- * downstream target. Each kind of upstream flow gets its own copy via
- * this helper, so the post-finally destination correctly matches the
- * "intent" of the path.
- *
- * Returns the finally copy's normal exits, plus any returnExits / throwExits
- * produced by the finally body itself. Per JS semantics, return / throw
- * inside finally dominates and overrides the upstream intent.
- */
+
+
+
+
+// Splices a finally-block copy into outgoing sources.
 function spliceFinallyCopy(
 	host: StatementVisitorHost,
 	finallyBlock: MorphNode,
@@ -466,32 +532,11 @@ function spliceFinallyCopy(
 	};
 }
 
-/**
- * `try` / `catch` / `finally` — strict JS semantics.
- *
- * Current diagram representation:
- *   - no explicit try node is created;
- *   - the try body entry is returned as this BuildResult's `entry`;
- *   - `entryEdgeLabel: 'try'` marks the edge entering the try body;
- *   - explicit throw exits from the try body are routed to the catch body
- *     via an `exception` edge when a catch branch is materialized.
- *
- * Catch materialization:
- *   - catch is emitted only when there is an explicit modeled throw path
- *     from the try body.
- *
- * Finally is duplicated once per kind of upstream flow, because each kind
- * has a different post-finally destination:
- *
- *   NORMAL    → finally → surrounding flow
- *   RETURN    → finally → function End
- *   THROW     → finally → ErrorEnd / outer catch
- *   CONTINUE  → finally → back-edge to enclosing loop
- *   BREAK     → finally → enclosing loop / switch break target
- *
- * If finally itself returns or throws, that completion dominates and
- * overrides the upstream intent.
- */
+
+
+
+
+// Visits a try statement including catch and finally flow.
 export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildResult {
 	const finallyBlock = stmt.getFinallyBlock();
 	const beforeTrySnapshot = snapshotPending(host);
@@ -568,7 +613,7 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
 		aggregateReturnExits.push(...sliced.returnExits);
 		aggregateThrowExits.push(...sliced.throwExits);
 	} else if (!tryEntryId && returnSources.length === 0 && throwSources.length === 0) {
-		// Empty try with finally still executes finally on normal entry.
+		
 		const directFinally = host.visitBranch(finallyBlock);
 
 		if (directFinally.entry) {
@@ -681,8 +726,12 @@ export function visitTry(host: StatementVisitorHost, stmt: TryStatement): BuildR
 	};
 }
 
-// ── Loop helpers ───────────────────────────────────────────────────────────
 
+
+
+
+
+// Visits a loop with temporary loop context management.
 function visitLoopWithContext(
 	host: StatementVisitorHost,
 	loopId: string,
@@ -712,6 +761,10 @@ function visitLoopWithContext(
 	}
 }
 
+
+
+
+// Visits a standard loop body and wires loop-back edges.
 function visitStandardLoop(
 	host: StatementVisitorHost,
 	loopId: string,
@@ -737,6 +790,10 @@ function visitStandardLoop(
 	};
 }
 
+
+
+
+// Visits a for-of or for-in iterator loop.
 function visitIteratorLoop(
 	host: StatementVisitorHost,
 	stmt: ForOfStatement | ForInStatement,

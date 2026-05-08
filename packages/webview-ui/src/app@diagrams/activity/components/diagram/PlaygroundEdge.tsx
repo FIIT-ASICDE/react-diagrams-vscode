@@ -1,8 +1,8 @@
+import { useMemo } from 'react';
 import type { EdgeProps } from '@xyflow/react';
 import { BaseEdge, Position } from '@xyflow/react';
 import { EdgeLabel } from './edges/EdgeLabel';
 import {
-	distance,
 	hasBakedPoints,
 	offsetByPosition,
 	pointBackFromEnd,
@@ -16,6 +16,8 @@ const POINTS_FRESHNESS_TOLERANCE = 10;
 const MIN_SEGMENT = 6;
 const CORNER_RADIUS = 8;
 
+
+// Handles self route.
 function selfRoute(args: {
 	sourceX: number;
 	sourceY: number;
@@ -89,6 +91,8 @@ function selfRoute(args: {
 	]);
 }
 
+
+// Handles are points fresh.
 function arePointsFresh(
 	points: Point[],
 	sourceX: number,
@@ -109,6 +113,8 @@ function arePointsFresh(
 	);
 }
 
+
+// Checks whether is back edge props.
 function isBackEdgeProps(props: EdgeProps): boolean {
 	const data = props.data as { semanticKind?: string } | undefined;
 
@@ -117,6 +123,8 @@ function isBackEdgeProps(props: EdgeProps): boolean {
 	return props.targetY < props.sourceY - 50;
 }
 
+
+// Handles clean points.
 function cleanPoints(points: Point[]): Point[] {
 	const withoutTinySegments: Point[] = [];
 
@@ -163,6 +171,8 @@ function cleanPoints(points: Point[]): Point[] {
 	return simplified;
 }
 
+
+// Handles snap back edge endpoints.
 function snapBackEdgeEndpoints(
 	points: Point[],
 	sourceX: number,
@@ -185,6 +195,8 @@ function snapBackEdgeEndpoints(
 	return cleanPoints(patched);
 }
 
+
+// Handles dynamic path edge.
 export default function DynamicPathEdge(props: EdgeProps) {
 	const {
 		id,
@@ -202,24 +214,27 @@ export default function DynamicPathEdge(props: EdgeProps) {
 
 	const haveBaked = hasBakedPoints(data);
 	const isBackEdge = isBackEdgeProps(props);
+ 	const bakedPoints = haveBaked ? data.points : undefined;
 
-	let points: Point[];
+	const points = useMemo(() => {
+		if (
+			bakedPoints &&
+			arePointsFresh(bakedPoints, sourceX, sourceY, targetX, targetY)
+		) {
+			return cleanPoints(bakedPoints);
+		}
 
-	if (
-		haveBaked &&
-		arePointsFresh(data.points, sourceX, sourceY, targetX, targetY)
-	) {
-		points = cleanPoints(data.points);
-	} else if (haveBaked && isBackEdge) {
-		points = snapBackEdgeEndpoints(
-			data.points,
-			sourceX,
-			sourceY,
-			targetX,
-			targetY,
-		);
-	} else {
-		points = selfRoute({
+		if (bakedPoints && isBackEdge) {
+			return snapBackEdgeEndpoints(
+				bakedPoints,
+				sourceX,
+				sourceY,
+				targetX,
+				targetY,
+			);
+		}
+
+		return selfRoute({
 			sourceX,
 			sourceY,
 			targetX,
@@ -227,10 +242,26 @@ export default function DynamicPathEdge(props: EdgeProps) {
 			sourcePosition,
 			targetPosition,
 		});
-	}
+	}, [
+		bakedPoints,
+		isBackEdge,
+		sourceX,
+		sourceY,
+		targetX,
+		targetY,
+		sourcePosition,
+		targetPosition,
+	]);
 
-	const path = pointsToRoundedPath(points, CORNER_RADIUS);
-	const labelPos = pointBackFromEnd(points, LABEL_OFFSET_FROM_END);
+	const path = useMemo(
+		() => pointsToRoundedPath(points, CORNER_RADIUS),
+		[points],
+	);
+
+	const labelPos = useMemo(
+		() => pointBackFromEnd(points, LABEL_OFFSET_FROM_END),
+		[points],
+	);
 
 	return (
 		<>

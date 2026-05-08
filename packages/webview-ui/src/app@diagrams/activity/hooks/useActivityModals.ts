@@ -13,6 +13,8 @@ type Params = {
 	setPlaygroundEdges: Dispatch<SetStateAction<Edge[]>>;
 };
 
+
+// Returns node data.
 function getNodeData(node: Node) {
 	const data = (node.data ?? {}) as Record<string, unknown>;
 
@@ -23,6 +25,8 @@ function getNodeData(node: Node) {
 	};
 }
 
+
+// Creates node edit draft.
 function createNodeEditDraft(node: Node) {
 	const data = (node.data ?? {}) as Record<string, unknown>;
 	const nodeData = getNodeData(node);
@@ -39,6 +43,8 @@ function createNodeEditDraft(node: Node) {
 	};
 }
 
+
+// Handles apply edge visual by type.
 function applyEdgeVisualByType(edge: Edge, edgeType: 'default' | 'back'): Edge {
 	const previousData = (edge.data ?? {}) as Record<string, unknown>;
 
@@ -85,6 +91,8 @@ function applyEdgeVisualByType(edge: Edge, edgeType: 'default' | 'back'): Edge {
 	};
 }
 
+
+// Manages activity modals.
 export function useActivityModals({
 	viewMode,
 	playgroundEdges,
@@ -98,6 +106,8 @@ export function useActivityModals({
 	}, []);
 
 	useEffect(() => {
+		
+		// Handles handler.
 		function handler(event: Event) {
 			const detail = (event as CustomEvent<{ edgeId?: unknown; label?: unknown }>).detail;
 			if (!detail || typeof detail.edgeId !== 'string') return;

@@ -10,10 +10,14 @@ type LayoutResult = {
 
 type Box = { x: number; y: number; width: number; height: number };
 
+
+// Checks whether is back edge.
 function isBackEdge(edge: Edge): boolean {
 	return edge.type === 'back';
 }
 
+
+// Handles estimate node size.
 function estimateNodeSize(_node: Node): { width: number; height: number } {
 
 	if (_node.type === 'decision' || _node.type === 'loop') {
@@ -24,8 +28,10 @@ function estimateNodeSize(_node: Node): { width: number; height: number } {
 
 const elk = new ELK();
 
-// ── Activity (read-only) layout — UNCHANGED ────────────────────────────────
 
+
+
+// Handles apply activity elk layout.
 export async function applyActivityElkLayout(
 	nodes: Node[],
 	edges: Edge[],
@@ -51,13 +57,13 @@ export async function applyActivityElkLayout(
 			'elk.spacing.edgeNode': '60',
 			'elk.spacing.edgeEdge': '20',
 			'elk.padding': '[top=20,left=20,bottom=20,right=20]',
-			// POLYLINE matches the state-diagram routing. Compared to
-			// ORTHOGONAL, it allows mid-segment diagonals which makes
-			// flowcharts with many decisions feel less mechanical and
-			// keeps lanes shorter (less wraparound on busy graphs).
-			// Bend-point geometry is still mostly orthogonal — the
-			// rounded-corner renderer (`pointsToRoundedPath`) softens
-			// any remaining sharp angles.
+			
+			
+			
+			
+			
+			
+			
 			'elk.edgeRouting': 'ORTHOGONAL',
 			'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
 			'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',

@@ -39,8 +39,8 @@ type PendingIntent =
 	| { kind: "showSnippet"; text: string; sourceFile?: string }
 	| { kind: "none" };
 
-// Hook names whose first-argument callback should be drilled INTO, not the
-// hook call itself. Must match the parser's set in metadata.ts.
+
+
 const HOOK_NAMES = new Set([
 	"useEffect",
 	"useLayoutEffect",
@@ -50,22 +50,30 @@ const HOOK_NAMES = new Set([
 	"useState",
 ]);
 
+
+// Checks whether is visible graph message.
 function isVisibleGraphMessage(
 	message: unknown
 ): message is { type: "diagram/visibleGraph"; data: ActivityGraphPayload } {
 	return !!message && typeof message === "object" && (message as { type?: unknown }).type === "diagram/visibleGraph";
 }
 
+
+// Checks whether is graph snapshot message.
 function isGraphSnapshotMessage(
 	message: unknown
 ): message is { type: "diagram/graphSnapshot"; data: ActivityGraphPayload } {
 	return !!message && typeof message === "object" && (message as { type?: unknown }).type === "diagram/graphSnapshot";
 }
 
+
+// Checks whether is webview ready message.
 function isWebviewReadyMessage(message: unknown): message is { type: "webview/ready" } {
 	return !!message && typeof message === "object" && (message as { type?: unknown }).type === "webview/ready";
 }
 
+
+// Checks whether is diagram image message.
 function isDiagramImageMessage(
 	message: unknown
 ): message is { type: "diagram/imageData"; data: { dataUrl?: string; error?: string } } {
@@ -99,24 +107,32 @@ export class ComponentActivityPanel {
 	private isWebviewReady = false;
 	private readyWaiters: Array<() => void> = [];
 
-	// ───────────────────────── Public static API ─────────────────────────
+	
 
+	
+	// Returns current activity graph.
 	public static getCurrentActivityGraph(): ActivityGraph | undefined {
 		const current = ComponentActivityPanel.currentPanel?.lastKnownActivityGraph;
 		if (!current) return undefined;
 		return { nodes: [...current.nodes], edges: [...current.edges] };
 	}
 
+	
+	// Returns current visible activity graph.
 	public static getCurrentVisibleActivityGraph(): ActivityGraph | undefined {
 		const current = ComponentActivityPanel.currentPanel?.lastVisibleActivityGraph;
 		if (!current) return undefined;
 		return { nodes: [...current.nodes], edges: [...current.edges] };
 	}
 
+	
+	// Returns current diagram image data url.
 	public static getCurrentDiagramImageDataUrl(): string | undefined {
 		return ComponentActivityPanel.currentPanel?.lastDiagramImageDataUrl;
 	}
 
+	
+	// Renders value.
 	public static render(extensionUri: Uri) {
 		const initialDocument = ComponentActivityPanel.getPreferredDocumentStatic();
 
@@ -155,6 +171,8 @@ export class ComponentActivityPanel {
 		ComponentActivityPanel.currentPanel = new ComponentActivityPanel(panel, extensionUri, initialDocument);
 	}
 
+	
+	// Handles show diagram from source text.
 	public static async showDiagramFromSourceText(
 		extensionUri: Uri,
 		sourceText: string,
@@ -178,6 +196,7 @@ export class ComponentActivityPanel {
 		}
 	}
 
+	// Handles constructor.
 	private constructor(panel: WebviewPanel, extensionUri: Uri, initialDocument?: TextDocument) {
 		this.panel = panel;
 
@@ -203,6 +222,8 @@ export class ComponentActivityPanel {
 		);
 	}
 
+	
+	// Handles dispose.
 	public dispose() {
 		ComponentActivityPanel.currentPanel = undefined;
 		this.isWebviewReady = false;
@@ -232,10 +253,14 @@ export class ComponentActivityPanel {
 		}
 	}
 
+	
+	// Handles post message.
 	public postMessage(message: ActivityExtensionToWebviewMessage) {
 		void this.panel.webview.postMessage(message);
 	}
 
+	
+	// Handles request diagram image.
 	public requestDiagramImage() {
 		this.postMessage({
 			type: "diagram/requestImage",
@@ -243,6 +268,8 @@ export class ComponentActivityPanel {
 		});
 	}
 
+	
+	// Handles request diagram image data url.
 	public async requestDiagramImageDataUrl(timeoutMs = 8000): Promise<string | undefined> {
 		await this.waitUntilReady();
 
@@ -264,6 +291,8 @@ export class ComponentActivityPanel {
 		});
 	}
 
+	
+	// Handles refresh visible graph.
 	public async refreshVisibleGraph(timeoutMs = 2000): Promise<ActivityGraph | undefined> {
 		if (!this.isWebviewReady) {
 			return this.lastVisibleActivityGraph;
@@ -290,6 +319,8 @@ export class ComponentActivityPanel {
 		});
 	}
 
+	
+	// Handles wait until ready.
 	private waitUntilReady(): Promise<void> {
 		if (this.isWebviewReady) return Promise.resolve();
 		return new Promise<void>((resolve) => {
@@ -297,6 +328,8 @@ export class ComponentActivityPanel {
 		});
 	}
 
+	
+	// Handles on webview ready.
 	private async onWebviewReady() {
 		if (this.isWebviewReady) return;
 		this.isWebviewReady = true;
@@ -310,6 +343,8 @@ export class ComponentActivityPanel {
 		await this.runPendingIntent();
 	}
 
+	
+	// Handles run pending intent.
 	private async runPendingIntent() {
 		const intent = this.pendingIntent;
 		this.pendingIntent = { kind: "none" };
@@ -327,6 +362,8 @@ export class ComponentActivityPanel {
 		}
 	}
 
+	
+	// Returns preferred document static.
 	private static getPreferredDocumentStatic(): TextDocument | undefined {
 		const active = window.activeTextEditor?.document;
 		if (active && active.uri.scheme === "file") return active;
@@ -334,6 +371,8 @@ export class ComponentActivityPanel {
 		return visible?.document;
 	}
 
+	
+	// Returns preferred document.
 	private getPreferredDocument(): TextDocument | undefined {
 		const active = this.toSupportedDocument(window.activeTextEditor?.document);
 		if (active) return active;
@@ -346,11 +385,15 @@ export class ComponentActivityPanel {
 		return workspace.textDocuments.find((doc) => this.isSupportedDocument(doc));
 	}
 
+	
+	// Handles to supported document.
 	private toSupportedDocument(document?: TextDocument): TextDocument | undefined {
 		if (!document) return undefined;
 		return this.isSupportedDocument(document) ? document : undefined;
 	}
 
+	
+	// Checks whether is supported document.
 	private isSupportedDocument(document?: TextDocument): boolean {
 		if (!document) return false;
 		if (document.uri.scheme !== "file") return false;
@@ -358,6 +401,8 @@ export class ComponentActivityPanel {
 		return [".ts", ".tsx", ".js", ".jsx"].includes(extension);
 	}
 
+	
+	// Handles active editor changed.
 	private handleActiveEditorChanged(editor: TextEditor | undefined) {
 		if (this.diagramSource.kind !== "document") return;
 
@@ -367,6 +412,8 @@ export class ComponentActivityPanel {
 		this.diagramSource = { kind: "document", uri: document.uri };
 	}
 
+	
+	// Handles document changed.
 	private handleDocumentChanged(document: TextDocument) {
 		if (!this.isWebviewReady) return;
 		if (this.diagramSource.kind !== "document") return;
@@ -376,6 +423,8 @@ export class ComponentActivityPanel {
 		void this.publishCurrentDocument();
 	}
 
+	
+	// Returns current document.
 	private getCurrentDocument(): TextDocument | undefined {
 		if (this.diagramSource.kind === "document") {
 			const match = workspace.textDocuments.find(
@@ -386,12 +435,16 @@ export class ComponentActivityPanel {
 		return this.getPreferredDocument();
 	}
 
+	
+	// Returns current file path.
 	private getCurrentFilePath(): string | undefined {
 		if (this.diagramSource.kind === "document") return this.diagramSource.uri.fsPath;
 		if (this.diagramSource.kind === "snippet") return this.diagramSource.sourceFile;
 		return this.getCurrentDocument()?.uri.fsPath;
 	}
 
+	
+	// Handles post diagram type.
 	private postDiagramType() {
 		this.postMessage({
 			type: "diagram/type",
@@ -399,22 +452,32 @@ export class ComponentActivityPanel {
 		});
 	}
 
+	
+	// Parses and send diagram.
 	private async parseAndSendDiagram(sourceText: string, sourceFile?: string) {
 		const rootDir = sourceFile ? path.dirname(sourceFile) : ".";
 
 		try {
 			const parsedComponent = await parseActivityComponent(sourceText, rootDir);
 
-			this.lastKnownActivityGraph = {
+			const parsedGraph: ActivityGraph = {
 				nodes: parsedComponent.nodes,
 				edges: parsedComponent.edges,
+			};
+
+			
+			
+			this.lastKnownActivityGraph = parsedGraph;
+			this.lastVisibleActivityGraph = {
+				nodes: [...parsedGraph.nodes],
+				edges: [...parsedGraph.edges],
 			};
 
 			this.postMessage({
 				type: "code/data",
 				data: {
-					nodes: parsedComponent.nodes,
-					edges: parsedComponent.edges,
+					nodes: parsedGraph.nodes,
+					edges: parsedGraph.edges,
 					sourceFile,
 				},
 			});
@@ -429,11 +492,15 @@ export class ComponentActivityPanel {
 		}
 	}
 
+	
+	// Handles replace diagram from source.
 	private async replaceDiagramFromSource(sourceText: string, sourceFile?: string) {
 		const normalizedSource = this.extractFunctionBodyIfWrapped(sourceText);
 		await this.parseAndSendDiagram(normalizedSource, sourceFile);
 	}
 
+	
+	// Handles publish current document.
 	private async publishCurrentDocument() {
 		const document = this.getCurrentDocument();
 		if (!document) return;
@@ -442,6 +509,8 @@ export class ComponentActivityPanel {
 		await this.parseAndSendDiagram(document.getText(), document.uri.fsPath);
 	}
 
+	
+	// Generates code from current diagram.
 	public static async generateCodeFromCurrentDiagram(): Promise<string> {
 		const panel = ComponentActivityPanel.currentPanel;
 		if (!panel) throw new Error("Activity panel is not open.");
@@ -462,6 +531,8 @@ export class ComponentActivityPanel {
 		);
 	}
 
+	
+	// Generates and enrich skeleton from diagram.
 	private async generateAndEnrichSkeletonFromDiagram(
 		nodes: Node[],
 		edges: Edge[],
@@ -492,6 +563,8 @@ export class ComponentActivityPanel {
 		return generatedCode;
 	}
 
+	
+	// Builds diagram context.
 	private buildDiagramContext(
 		availability: DiagramContext["availability"],
 		nodes: unknown[],
@@ -520,37 +593,9 @@ export class ComponentActivityPanel {
 		};
 	}
 
-	/**
-	 * Unwrap a single layer of "wrapper" around a piece of source so the
-	 * parser sees only the body it should diagram. The expandable's
-	 * sourceText is a complete, self-contained statement; here we strip
-	 * the wrapper so the diagram shows what the user expects to see when
-	 * they click into the node.
-	 *
-	 * Recognised wrappers (in order of precedence — first match wins):
-	 *
-	 *   1. Hook calls — `useEffect(() => { BODY }, [...]);`
-	 *      Drill INTO the callback body. Without this branch the parser
-	 *      would re-detect the hook call as another expandable, the inner
-	 *      diagram would be a 1:1 copy of the outer, and drill-down would
-	 *      do nothing visible.
-	 *
-	 *   2. `const x = useCallback(() => { BODY }, []);` — same as (1) but
-	 *      the call is wrapped in a variable declaration.
-	 *
-	 *   3. `return <fn-like>;` — drill INTO the returned function.
-	 *
-	 *   4. Plain function declarations / expressions / arrow functions:
-	 *        `function f() { BODY }` → BODY
-	 *        `() => { BODY }`        → BODY
-	 *        `() => expr`            → `return expr;`
-	 *
-	 *   5. `const f = () => { BODY };` — strip the variable wrapper.
-	 *
-	 *   6. Class declarations / object literals — extract all functions.
-	 *
-	 *   7. Anything else — return unchanged.
-	 */
+	
+	
+	// Handles extract function body if wrapped.
 	private extractFunctionBodyIfWrapped(sourceText: string): string {
 		const trimmed = sourceText.trim();
 		if (!trimmed) return trimmed;
@@ -566,6 +611,8 @@ export class ComponentActivityPanel {
 		const first = sourceFile.statements[0];
 		if (!first) return trimmed;
 
+		
+		// Checks whether is supported function like.
 		const isSupportedFunctionLike = (
 			node: ts.Node
 		): node is
@@ -584,6 +631,8 @@ export class ComponentActivityPanel {
 			ts.isGetAccessorDeclaration(node) ||
 			ts.isSetAccessorDeclaration(node);
 
+		
+		// Returns node name.
 		const getNodeName = (node: ts.Node): string => {
 			if (ts.isConstructorDeclaration(node)) return "constructor";
 			if (
@@ -599,6 +648,8 @@ export class ComponentActivityPanel {
 			return "anonymous";
 		};
 
+		
+		// Returns block statements.
 		const getBlockStatements = (
 			node:
 				| ts.FunctionDeclaration
@@ -617,14 +668,9 @@ export class ComponentActivityPanel {
 			return [`return ${body.getText(sourceFile)};`];
 		};
 
-		/**
-		 * Get the hook name for a CallExpression if it's a recognised hook,
-		 * otherwise undefined.
-		 *
-		 *   useEffect(...)           -> "useEffect"
-		 *   React.useEffect(...)     -> "useEffect"
-		 *   doStuff(...)             -> undefined
-		 */
+		
+		
+		// Returns hook call name.
 		const getHookCallName = (call: ts.CallExpression): string | undefined => {
 			const callee = call.expression;
 			if (ts.isIdentifier(callee)) {
@@ -638,12 +684,9 @@ export class ComponentActivityPanel {
 			return undefined;
 		};
 
-		/**
-		 * If `call` is a hook call whose first argument is a function-like
-		 * expression we can drill into, extract the body of that function.
-		 * Returns the body's statements joined by newlines, or null if not
-		 * a drillable hook call.
-		 */
+		
+		
+		// Handles extract hook callback body.
 		const extractHookCallbackBody = (call: ts.CallExpression): string | null => {
 			if (!getHookCallName(call)) return null;
 
@@ -666,8 +709,10 @@ export class ComponentActivityPanel {
 			statements: string[];
 		}
 
+		
+		// Handles collect functions.
 		const collectFunctions = (node: ts.Node): ExtractedFn[] => {
-			// Hook expression statement: useEffect(() => {...}, [...]);
+			
 			if (ts.isExpressionStatement(node) && ts.isCallExpression(node.expression)) {
 				const body = extractHookCallbackBody(node.expression);
 				if (body !== null) {
@@ -675,9 +720,9 @@ export class ComponentActivityPanel {
 				}
 			}
 
-			// Hook variable declaration:
-			//   const x = useCallback(() => {...}, []);
-			//   const [s, setS] = useState(() => {...});
+			
+			
+			
 			if (ts.isVariableStatement(node)) {
 				for (const decl of node.declarationList.declarations) {
 					if (decl.initializer && ts.isCallExpression(decl.initializer)) {
@@ -689,7 +734,7 @@ export class ComponentActivityPanel {
 				}
 			}
 
-			// Plain function-like at top level.
+			
 			if (isSupportedFunctionLike(node)) {
 				const statements = getBlockStatements(node);
 				if (statements) {
@@ -697,7 +742,7 @@ export class ComponentActivityPanel {
 				}
 			}
 
-			// Variable with function-like initializer (no hook).
+			
 			if (ts.isVariableStatement(node)) {
 				const results: ExtractedFn[] = [];
 				for (const decl of node.declarationList.declarations) {
@@ -712,7 +757,7 @@ export class ComponentActivityPanel {
 				return results;
 			}
 
-			// `return () => { ... };` — descend into the returned function.
+			
 			if (ts.isReturnStatement(node) && node.expression) {
 				return collectFunctions(node.expression);
 			}
@@ -781,6 +826,8 @@ export class ComponentActivityPanel {
 			.join("\n\n");
 	}
 
+	
+	// Returns webview content.
 	private getWebviewContent(webview: Webview, extensionUri: Uri) {
 		const stylesUri = getUri(webview, extensionUri, [
 			ComponentActivityPanel.WEBVIEW_DIR,
@@ -795,7 +842,7 @@ export class ComponentActivityPanel {
 
 		const nonce = getNonce();
 
-		return /*html*/ `
+		return  `
 			<!DOCTYPE html>
 			<html lang="en">
 			<head>
@@ -814,6 +861,8 @@ export class ComponentActivityPanel {
 		`;
 	}
 
+	
+	// Handles webview message listener.
 	private webviewMessageListener(message: unknown) {
 		if (!!message && typeof message === "object") {
 			const type = (message as { type?: unknown }).type;

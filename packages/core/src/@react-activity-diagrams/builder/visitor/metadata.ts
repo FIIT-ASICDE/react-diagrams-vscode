@@ -15,6 +15,8 @@ const effectHooks = new Set(['useEffect', 'useLayoutEffect', 'useInsertionEffect
 const callbackHooks = new Set(['useCallback', 'useMemo']);
 const lazyInitHooks = new Set(['useState']);
 
+
+// Checks whether a call expression is forEach-like.
 export function isForEachLikeCall(callExpression: CallExpression): boolean {
   const callee = callExpression.getExpression();
 
@@ -31,6 +33,7 @@ export function isForEachLikeCall(callExpression: CallExpression): boolean {
   return false;
 }
 
+// Returns the callback body node for a call expression.
 export function getCallbackBranch(callExpression: CallExpression): MorphNode | undefined {
   const callbackArgument = callExpression.getArguments()[0];
 
@@ -45,6 +48,7 @@ export function getCallbackBranch(callExpression: CallExpression): MorphNode | u
   return undefined;
 }
 
+// Resolves the hook name from a call expression.
 function getHookName(callExpression: CallExpression): string | undefined {
   const callee = callExpression.getExpression();
 
@@ -59,17 +63,7 @@ function getHookName(callExpression: CallExpression): string | undefined {
   return undefined;
 }
 
-/**
- * Convert an arrow function to canonical block-bodied form:
- *   `() => expr`              -> `() => { return expr; }`
- *   `() => { ... }`           -> unchanged
- *
- * Block-bodied form is required so that the diagram round-trip pipeline
- * can reliably find the OUTERMOST `{ ... }` to act as wrapper boundaries
- * when syncing a child diagram back into its parent expandable. A concise
- * arrow body has no braces, so wrapper extraction would fall through and
- * corrupt the parent's sourceText.
- */
+// Converts an arrow function to a block-body form.
 function normalizeArrowToBlockBody(arrow: ArrowFunction): string {
   const body = arrow.getBody();
   if (MorphNode.isBlock(body)) {
@@ -86,19 +80,7 @@ function normalizeArrowToBlockBody(arrow: ArrowFunction): string {
   return `${asyncKw}${typeParamsText}(${params})${returnTypeText} => { return ${body.getText()}; }`;
 }
 
-/**
- * Build a self-contained variable declaration from its parts.
- * Preserves the original keyword (const/let/var), variable name, and
- * type annotation if present.
- *
- *   `const x = (a) => a + 1;`        -> `const x = (a) => { return a + 1; };`
- *   `let foo = function () {...};`   -> `let foo = function () {...};`
- *   `const C = class { ... };`       -> `const C = class { ... };`
- *
- * Used in two places: (1) regular function-like initializers via
- * getExpandableMeta, and (2) hook calls that are stored in a variable via
- * getHookMeta (useCallback/useMemo/useState).
- */
+// Builds a variable declaration wrapper string.
 function buildVariableWrapper(
   variableStmt: VariableStatement,
   declaration: VariableDeclaration,
@@ -112,24 +94,13 @@ function buildVariableWrapper(
   return `${keyword} ${name}${typeAnnotation} = ${initializerSource};`;
 }
 
-/**
- * Re-stringify a hook call expression with its callback normalized to
- * block-bodied form. Other arguments (deps array, etc.) are kept verbatim
- * so e.g. `[value, delayMs]` round-trips exactly.
- *
- *   useEffect(() => doStuff(), [a])
- *     -> useEffect(() => { return doStuff(); }, [a])
- *
- *   useEffect(() => { doStuff(); }, [a])
- *     -> useEffect(() => { doStuff(); }, [a])  (already block-bodied)
- */
+// Rebuilds a hook call text with a normalized callback argument.
 function rebuildHookCall(callExpression: CallExpression): string {
   const callee = callExpression.getExpression().getText();
   const args = callExpression.getArguments();
 
   const renderedArgs = args.map((arg, index) => {
     if (index === 0) {
-      // Callback (or initial value, in case of useState).
       let candidate = arg;
       while (MorphNode.isParenthesizedExpression(candidate)) {
         candidate = candidate.getExpression();
@@ -137,7 +108,6 @@ function rebuildHookCall(callExpression: CallExpression): string {
       if (MorphNode.isArrowFunction(candidate)) {
         return normalizeArrowToBlockBody(candidate);
       }
-      // FunctionExpression and any other arg type: keep verbatim.
     }
     return arg.getText();
   });
@@ -145,6 +115,7 @@ function rebuildHookCall(callExpression: CallExpression): string {
   return `${callee}(${renderedArgs.join(', ')})`;
 }
 
+// Returns normalized callback source text for a hook call.
 function getHookCallbackSourceText(callExpression: CallExpression): string | undefined {
   const callbackArgument = callExpression.getArguments()[0];
 
@@ -168,28 +139,7 @@ function getHookCallbackSourceText(callExpression: CallExpression): string | und
   return undefined;
 }
 
-/**
- * Build a hook expandable's sourceText that is a complete, self-contained
- * statement including the hook wrapper.
- *
- * Three shapes:
- *
- *   1. Bare expression statement (effect hooks):
- *        `useEffect(() => { ... }, [deps]);`
- *
- *   2. Variable destructuring (useState):
- *        `const [s, setS] = useState(() => { ... });`
- *
- *   3. Single variable (useCallback / useMemo):
- *        `const handler = useCallback(() => { ... }, [deps]);`
- *
- * In all cases the inner arrow function is normalized to block body so the
- * diagram round-trip pipeline can find the matching braces during sync.
- *
- * If the hook call is an ExpressionStatement (case 1), `variableStmt` is
- * undefined; we just suffix the call with `;`. For variable forms we go
- * through buildVariableWrapper.
- */
+// Builds source text for a hook statement or declaration.
 function buildHookSourceText(
   callExpression: CallExpression,
   variableStmt: VariableStatement | undefined,
@@ -198,10 +148,6 @@ function buildHookSourceText(
   const rebuiltCall = rebuildHookCall(callExpression);
 
   if (variableStmt && declaration) {
-    // Use the original variable declaration's text up to the `=`, then
-    // splice in the rebuilt call. This preserves destructuring patterns
-    // (`const [s, setS] = ...`) which buildVariableWrapper can't render
-    // because it only knows how to write a plain `name`.
     const declText = declaration.getText();
     const eqIndex = declText.indexOf('=');
     if (eqIndex >= 0) {
@@ -209,13 +155,13 @@ function buildHookSourceText(
       const keyword = variableStmt.getDeclarationKindKeywords()[0].getText();
       return `${keyword} ${lhs} = ${rebuiltCall};`;
     }
-    // Fallback: simple name
     return buildVariableWrapper(variableStmt, declaration, rebuiltCall);
   }
 
   return `${rebuiltCall};`;
 }
 
+// Extracts hook metadata from a call expression.
 function getHookMetaFromCall(
   callExpression: CallExpression,
   variableName?: string,
@@ -234,9 +180,6 @@ function getHookMetaFromCall(
     return undefined;
   }
 
-  // Verify the callback (first arg) is a function we can drill into. If
-  // it's not (e.g. `useState(0)` or `useEffect(someExternalFn)`), we don't
-  // create an expandable — the call falls through to a regular action.
   const callbackSourceText = getHookCallbackSourceText(callExpression);
   if (!callbackSourceText) {
     return undefined;
@@ -251,9 +194,6 @@ function getHookMetaFromCall(
       ? `${hookName} initializer`
       : `${hookName} callback`;
 
-  // sourceText is the FULL statement including the hook wrapper — not
-  // just the callback. CodeGen pastes it verbatim; drilldown extracts the
-  // callback body via extractFunctionBodyIfWrapped.
   const sourceText = buildHookSourceText(callExpression, variableStmt, declaration);
 
   return {
@@ -263,6 +203,7 @@ function getHookMetaFromCall(
   };
 }
 
+// Extracts hook metadata from a statement.
 export function getHookMeta(stmt: Statement): HookMeta | undefined {
   if (stmt.getKind() === SyntaxKind.VariableStatement) {
     const variableStmt = stmt as VariableStatement;
@@ -290,6 +231,10 @@ export function getHookMeta(stmt: Statement): HookMeta | undefined {
   return undefined;
 }
 
+
+
+
+// Returns expandable expression meta.
 function getExpandableExpressionMeta(node: MorphNode): { nodeKind: 'function' | 'class'; sourceText: string } | undefined {
   let candidate = node;
   while (MorphNode.isParenthesizedExpression(candidate)) {
@@ -316,6 +261,10 @@ function getExpandableExpressionMeta(node: MorphNode): { nodeKind: 'function' | 
   return undefined;
 }
 
+
+
+
+// Returns expandable meta.
 export function getExpandableMeta(stmt: Statement): ExpandableMeta | undefined {
   if (stmt.getKind() === SyntaxKind.FunctionDeclaration) {
     const name = stmt.asKind(SyntaxKind.FunctionDeclaration)?.getName() ?? 'anonymous';

@@ -26,7 +26,7 @@ const NODE_BUTTONS: { type: ActivityNodeType; label: string; symbol: string }[] 
 	{ type: 'end',        label: 'End',        symbol: '⊛' },
 ];
 
-// ─── Shared primitive styles ─────────────────────────────────────────────────
+
 
 const BASE_BTN =
 	'inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors focus:outline-none disabled:pointer-events-none disabled:opacity-40 cursor-pointer';
@@ -40,10 +40,14 @@ const PRIMARY_BTN =
 const DANGER_BTN =
 	`${BASE_BTN} text-[var(--vscode-errorForeground)] hover:bg-[var(--vscode-inputValidation-errorBackground,rgba(255,0,0,.12))]`;
 
+
+// Handles separator.
 function Separator() {
 	return <div className="mx-1 h-4 w-px shrink-0 bg-[var(--vscode-panel-border)]" />;
 }
 
+
+// Handles diagram toolbar.
 export function DiagramToolbar({
 	mode,
 	currentTitle,
@@ -66,9 +70,9 @@ export function DiagramToolbar({
 			className="z-10 flex flex-col border-b border-[var(--vscode-panel-border)] bg-[var(--vscode-editor-background)] select-none shrink-0"
 			style={{ boxShadow: '0 1px 4px rgba(0,0,0,.25)' }}
 		>
-			{/* ── Primary bar ────────────────────────────────────────── */}
+			{}
 			<div className="flex h-9 items-center gap-0.5 px-2">
-				{/* Back */}
+				{}
 				<button
 					type="button"
 					className={GHOST_BTN}
@@ -82,7 +86,7 @@ export function DiagramToolbar({
 
 				<Separator />
 
-				{/* Mode toggle — pill tabs */}
+				{}
 				<div
 					className="flex overflow-hidden rounded border border-[var(--vscode-panel-border)]"
 					role="tablist"
@@ -118,7 +122,7 @@ export function DiagramToolbar({
 
 				<Separator />
 
-				{/* Title */}
+				{}
 				<span
 					className="flex-1 truncate text-xs text-[var(--vscode-descriptionForeground)]"
 					title={isPlayground ? 'Playground' : currentTitle}
@@ -135,7 +139,7 @@ export function DiagramToolbar({
 
 				<Separator />
 
-				{/* Save PNG */}
+				{}
 				<button
 					type="button"
 					className={GHOST_BTN}
@@ -147,15 +151,15 @@ export function DiagramToolbar({
 				</button>
 			</div>
 
-			{/* ── Playground action bar ───────────────────────────────── */}
+			{}
 			{isPlayground && (
 				<div className="flex h-8 items-center gap-0.5 border-t border-[var(--vscode-panel-border)] px-2">
-					{/* Add-node label */}
+					{}
 					<span className="mr-1 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--vscode-descriptionForeground)]">
 						Add
 					</span>
 
-					{/* Node type buttons */}
+					{}
 					{NODE_BUTTONS.map(({ type, label, symbol }) => (
 						<button
 							key={type}
@@ -169,12 +173,12 @@ export function DiagramToolbar({
 						</button>
 					))}
 
-					{/* Spacer */}
+					{}
 					<div className="flex-1" />
 
 					<Separator />
 
-					{/* Generate */}
+					{}
 					<button
 						type="button"
 						className={PRIMARY_BTN}
@@ -184,7 +188,7 @@ export function DiagramToolbar({
 						<span>Generate Skeleton</span>
 					</button>
 
-					{/* Clear */}
+					{}
 					<button
 						type="button"
 						className={DANGER_BTN}
