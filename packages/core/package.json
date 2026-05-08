@@ -41,7 +41,7 @@
     "ts-morph": "^27.0.2"
   },
   "devDependencies": {
-    "@types/node": "22.x",
+    "@types/node": "^22.19.18",
     "@types/vscode-webview": "^1.57.5",
     "typescript": "^5.9.3"
   }
