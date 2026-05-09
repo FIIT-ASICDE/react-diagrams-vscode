@@ -21,10 +21,6 @@
 			padding: 26px 0 56px;
 		}
 		header {
-			display: grid;
-			grid-template-columns: 1fr auto;
-			gap: 24px;
-			align-items: end;
 			margin-bottom: 22px;
 		}
 		h1, h2, h3, p {
@@ -63,6 +59,13 @@
 			display: flex;
 			gap: 16px;
 			flex-wrap: wrap;
+			margin-top: 14px;
+		}
+		.report-tools {
+			display: grid;
+			grid-template-columns: 1fr auto;
+			gap: 18px;
+			align-items: center;
 			margin: 4px 2px 8px;
 		}
 		.legend-item {
@@ -185,7 +188,7 @@
 				width: min(100vw - 28px, 1250px);
 				padding-top: 24px;
 			}
-			header, .group-head, .row {
+			.report-tools, .group-head, .row {
 				grid-template-columns: 1fr;
 			}
 			.summary {
@@ -204,21 +207,21 @@
 <body>
 	<main>
 		<header>
-			<div>
-				<h1>Refactoring Experiment Report</h1>
-				<p class="meta">Generated 5/8/2026, 1:04:56 AM</p>
+			<h1>Refactoring Experiment Report</h1>
+			<p class="meta">Generated 5/9/2026, 12:19:02 PM</p>
+		</header>
+		<div class="report-tools">
+			<div class="legend">
+				<span class="legend-item"><span class="swatch" style="background:#3b82f6"></span>Logical LOC</span>
+				<span class="legend-item"><span class="swatch" style="background:#df75fb"></span>Max nested flow</span>
+				<span class="legend-item"><span class="swatch" style="background:#ffb66a"></span>Total node count</span>
+				<span class="legend-item"><span class="swatch" style="background:#86c779"></span>Total transition count</span>
 			</div>
 			<div class="summary">
 				<span class="pill">5 baseline files</span>
 				<span class="pill">2 test groups</span>
 				<span class="pill">Scale +/-50.0%</span>
 			</div>
-		</header>
-		<div class="legend">
-			<span class="legend-item"><span class="swatch" style="background:#3b82f6"></span>Logical LOC</span>
-			<span class="legend-item"><span class="swatch" style="background:#df75fb"></span>Max nested flow</span>
-			<span class="legend-item"><span class="swatch" style="background:#ffb66a"></span>Total node count</span>
-			<span class="legend-item"><span class="swatch" style="background:#86c779"></span>Total transition count</span>
 		</div>
 		<section>
 	<div class="group-head">

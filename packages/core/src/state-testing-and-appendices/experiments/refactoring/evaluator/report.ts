@@ -44,10 +44,6 @@ export function renderHtmlReport(report: ExperimentReport) {
 			padding: 26px 0 56px;
 		}
 		header {
-			display: grid;
-			grid-template-columns: 1fr auto;
-			gap: 24px;
-			align-items: end;
 			margin-bottom: 22px;
 		}
 		h1, h2, h3, p {
@@ -86,6 +82,13 @@ export function renderHtmlReport(report: ExperimentReport) {
 			display: flex;
 			gap: 16px;
 			flex-wrap: wrap;
+			margin-top: 14px;
+		}
+		.report-tools {
+			display: grid;
+			grid-template-columns: 1fr auto;
+			gap: 18px;
+			align-items: center;
 			margin: 4px 2px 8px;
 		}
 		.legend-item {
@@ -208,7 +211,7 @@ export function renderHtmlReport(report: ExperimentReport) {
 				width: min(100vw - 28px, 1250px);
 				padding-top: 24px;
 			}
-			header, .group-head, .row {
+			.report-tools, .group-head, .row {
 				grid-template-columns: 1fr;
 			}
 			.summary {
@@ -227,18 +230,18 @@ export function renderHtmlReport(report: ExperimentReport) {
 <body>
 	<main>
 		<header>
-			<div>
-				<h1>Refactoring Experiment Report</h1>
-				<p class="meta">Generated ${escapeHtml(new Date(report.generatedAt).toLocaleString())}</p>
+			<h1>Refactoring Experiment Report</h1>
+			<p class="meta">Generated ${escapeHtml(new Date(report.generatedAt).toLocaleString())}</p>
+		</header>
+		<div class="report-tools">
+			<div class="legend">
+				${METRIC_KEYS.map((metric) => `<span class="legend-item"><span class="swatch" style="background:${METRIC_COLORS[metric]}"></span>${escapeHtml(METRIC_LABELS[metric])}</span>`).join('\n\t\t\t\t')}
 			</div>
 			<div class="summary">
 				<span class="pill">${report.baselines.length} baseline files</span>
 				<span class="pill">${report.groups.length} test groups</span>
 				<span class="pill">Scale +/-${formatPct(maxAbs)}</span>
 			</div>
-		</header>
-		<div class="legend">
-			${METRIC_KEYS.map((metric) => `<span class="legend-item"><span class="swatch" style="background:${METRIC_COLORS[metric]}"></span>${escapeHtml(METRIC_LABELS[metric])}</span>`).join('\n\t\t\t')}
 		</div>
 		${report.groups.map((group) => renderGroup(group, maxAbs)).join('\n')}
 	</main>
