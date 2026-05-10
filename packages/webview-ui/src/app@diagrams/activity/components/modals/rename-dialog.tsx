@@ -52,6 +52,7 @@ const EDGE_LABEL_OPTIONS = [
 	'yes',
 	'no',
 	'each',
+	'next',
 	'try',
 	'exception',
 	'finally',

@@ -12,6 +12,7 @@ import {
 
 const LABEL_OFFSET_FROM_END = 34;
 const STUB = 28;
+const BACK_EDGE_LANE_OFFSET = 48;
 const POINTS_FRESHNESS_TOLERANCE = 10;
 const MIN_SEGMENT = 6;
 const CORNER_RADIUS = 8;
@@ -86,6 +87,93 @@ function selfRoute(args: {
 		source,
 		sourceStub,
 		{ x: targetStub.x, y: sourceStub.y },
+		targetStub,
+		target,
+	]);
+}
+
+
+// Routes back edges through an offset lane so they stay visible next to normal edges.
+function backEdgeRoute(args: {
+	sourceX: number;
+	sourceY: number;
+	targetX: number;
+	targetY: number;
+	sourcePosition: Position;
+	targetPosition: Position;
+}): Point[] {
+	const {
+		sourceX,
+		sourceY,
+		targetX,
+		targetY,
+		sourcePosition,
+		targetPosition,
+	} = args;
+
+	const source: Point = { x: sourceX, y: sourceY };
+	const target: Point = { x: targetX, y: targetY };
+
+	const sourceStub = offsetByPosition(source, sourcePosition, STUB);
+	const targetStub = offsetByPosition(target, targetPosition, STUB);
+
+	const sourceVertical =
+		sourcePosition === Position.Top || sourcePosition === Position.Bottom;
+	const targetVertical =
+		targetPosition === Position.Top || targetPosition === Position.Bottom;
+
+	if (sourceVertical && targetVertical) {
+		const centerX = (sourceStub.x + targetStub.x) / 2;
+		const sign = sourceStub.x <= targetStub.x ? 1 : -1;
+		const laneX = centerX + sign * BACK_EDGE_LANE_OFFSET;
+
+		return cleanPoints([
+			source,
+			sourceStub,
+			{ x: laneX, y: sourceStub.y },
+			{ x: laneX, y: targetStub.y },
+			targetStub,
+			target,
+		]);
+	}
+
+	if (!sourceVertical && !targetVertical) {
+		const centerY = (sourceStub.y + targetStub.y) / 2;
+		const sign = sourceStub.y <= targetStub.y ? 1 : -1;
+		const laneY = centerY + sign * BACK_EDGE_LANE_OFFSET;
+
+		return cleanPoints([
+			source,
+			sourceStub,
+			{ x: sourceStub.x, y: laneY },
+			{ x: targetStub.x, y: laneY },
+			targetStub,
+			target,
+		]);
+	}
+
+	if (sourceVertical) {
+		const sign = sourceStub.x <= targetStub.x ? 1 : -1;
+		const laneX = targetStub.x + sign * BACK_EDGE_LANE_OFFSET;
+
+		return cleanPoints([
+			source,
+			sourceStub,
+			{ x: laneX, y: sourceStub.y },
+			{ x: laneX, y: targetStub.y },
+			targetStub,
+			target,
+		]);
+	}
+
+	const sign = sourceStub.y <= targetStub.y ? 1 : -1;
+	const laneY = targetStub.y + sign * BACK_EDGE_LANE_OFFSET;
+
+	return cleanPoints([
+		source,
+		sourceStub,
+		{ x: sourceStub.x, y: laneY },
+		{ x: targetStub.x, y: laneY },
 		targetStub,
 		target,
 	]);
@@ -214,7 +302,7 @@ export default function DynamicPathEdge(props: EdgeProps) {
 
 	const haveBaked = hasBakedPoints(data);
 	const isBackEdge = isBackEdgeProps(props);
- 	const bakedPoints = haveBaked ? data.points : undefined;
+	const bakedPoints = haveBaked ? data.points : undefined;
 
 	const points = useMemo(() => {
 		if (
@@ -232,6 +320,17 @@ export default function DynamicPathEdge(props: EdgeProps) {
 				targetX,
 				targetY,
 			);
+		}
+
+		if (isBackEdge) {
+			return backEdgeRoute({
+				sourceX,
+				sourceY,
+				targetX,
+				targetY,
+				sourcePosition,
+				targetPosition,
+			});
 		}
 
 		return selfRoute({
