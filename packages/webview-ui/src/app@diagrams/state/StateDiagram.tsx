@@ -37,6 +37,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	const [hiddenStateVariableIds, setHiddenStateVariableIds] = useState<Set<Id>>(() => new Set());
 
 	const modelCacheKey = useMemo(() => JSON.stringify(model ?? null), [model]);
+	const stateVariableIds = useMemo(() => model?.stateVariables?.map(stVar => stVar.id) ?? [], [model?.stateVariables]);
 	const hiddenStateVariableKey = useMemo(() => [...hiddenStateVariableIds].join('|'), [hiddenStateVariableIds]);
 	const hasModel = useMemo(() => Boolean(model?.stateVariables?.length), [model]);
 
@@ -78,19 +79,26 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 	}, [modelCacheKey, model?.stateVariables]);
 
 	const onStateVariableHiddenChange = useCallback((stateVariableId: Id, hidden: boolean) => {
-		setHiddenStateVariableIds((previous) => {
+		setHiddenStateVariableIds(previous => {
 			const next = new Set(previous);
-			if (hidden)
+			if (hidden) {
 				next.add(stateVariableId);
-			else
+				vscode.postMessage("onHideStateVariable", { stateVariableId });
+			}
+			else {
 				next.delete(stateVariableId);
+				vscode.postMessage("onShowStateVariable", { stateVariableId });
+			}
 			return next;
 		});
 	}, []);
 
-	const onShowAllStateVariables = useCallback(() => {
-		setHiddenStateVariableIds((previous) => previous.size ? new Set() : previous);
-	}, []);
+	const onToggleAllStateVariables = useCallback(() => {
+		setHiddenStateVariableIds(prev => { 
+			// vscode.postMessage("onToggleAllStateVariables", { hide: !prev.size });
+			return prev.size ? new Set() : new Set(stateVariableIds) 
+		});
+	}, [stateVariableIds]);
 
 	const onDoubleClick = (event: React.MouseEvent, node: Node | StateUpdate) => {
 		vscode.postMessage("nodeDblClick", { data: { ...((node as any)?.data ?? node), name: undefined, children: undefined } });
@@ -179,7 +187,7 @@ export default function StateDiagram({ model }: StateDiagramProps) {
 					console.debug(JSON.stringify(model, (key, value) => value === "" ? undefined : value));
 				}
 			}}>
-				<StateDetailsPanel model={model} hiddenStateVariableIds={hiddenStateVariableIds} onStateVariableHiddenChange={onStateVariableHiddenChange} onShowAllStateVariables={onShowAllStateVariables} onStateDoubleClick={onDoubleClick} />
+				<StateDetailsPanel model={model} hiddenStateVariableIds={hiddenStateVariableIds} onStateVariableHiddenChange={onStateVariableHiddenChange} onToggleAllStateVariables={onToggleAllStateVariables} onStateDoubleClick={onDoubleClick} />
 			</div>
 		</div>
 	);

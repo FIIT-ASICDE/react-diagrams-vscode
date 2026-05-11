@@ -218,6 +218,11 @@ export class ComponentStatePanel {
 					this.pendingImageRequest = undefined;
 				});
 				return;
+
+			case "onShowStateVariable":
+			case "onHideStateVariable":
+				componentStateCache.deleteImage();
+				return;
 		}
 	}
 }

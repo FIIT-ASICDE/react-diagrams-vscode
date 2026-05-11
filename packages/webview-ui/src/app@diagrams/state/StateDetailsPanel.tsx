@@ -14,7 +14,7 @@ type StateDetailsPanelProps = {
 	onStateDoubleClick?: StateData;
 	hiddenStateVariableIds?: ReadonlySet<Id>;
 	onStateVariableHiddenChange?: (stateVariableId: Id, hidden: boolean) => void;
-	onShowAllStateVariables?: () => void;
+	onToggleAllStateVariables?: () => void;
 };
 
 function StatCard({ label, value }: { label: string; value: string | number | React.JSX.Element }) {
@@ -121,7 +121,7 @@ const StateMutatorAccordions = ({ analysis, expandedStateVariables, hiddenStateV
 	</Accordion>
 )
 
-export default function StateDetailsPanel({ model, title, className, hiddenStateVariableIds, onStateVariableHiddenChange, onShowAllStateVariables, onStateDoubleClick}: StateDetailsPanelProps) {
+export default function StateDetailsPanel({ model, title, className, hiddenStateVariableIds, onStateVariableHiddenChange, onToggleAllStateVariables, onStateDoubleClick}: StateDetailsPanelProps) {
 	const analysis = useMemo(() => analyzeStateDiagram(model), [model]);
 	const hiddenStateVariableCount = hiddenStateVariableIds?.size ?? 0;
 
@@ -131,7 +131,9 @@ export default function StateDetailsPanel({ model, title, className, hiddenState
 		<div className={cn(`h-full overflow-y-auto [scrollbar-width:thin] border-l border-(--vscode-editorWidget-border) bg-(--vscode-editor-background)`, className)}>
 			<div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-(--vscode-editorWidget-border) bg-(--vscode-editor-background) px-3 py-2">
 				<h2 className="text-[16px] font-semibold max-w-72 not-hover:truncate text-(--vscode-foreground)">{title || `${analysis.metrics.componentName ?? 'Unknown'}`}</h2>
-				{!!hiddenStateVariableCount && <VSCodeButton appearance="secondary" className='min-w-18.25 h-5.75' onClick={onShowAllStateVariables}>Show all</VSCodeButton>}
+				<VSCodeButton appearance="secondary" className='min-w-18.25 h-5.75' disabled={!analysis.stateVariables.length} onClick={onToggleAllStateVariables}>
+					{hiddenStateVariableCount ? 'Show all' : 'Hide all'}
+				</VSCodeButton>
 			</div>
 
 			<div className="space-y-3 p-1">

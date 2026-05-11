@@ -69,6 +69,15 @@ export class ParsingCache<T = any> {
 		return this.entries.get(normPath) ?? this.updateEntry(filePath);
 	}
 
+	delete(filePath: TextDocument | string | undefined = this.getCurrentDocument()) {
+		if (typeof filePath == "string")
+			return this.entries.delete(normalizeFilePath(filePath));
+
+		if (!filePath) 
+			return undefined;
+		return this.entries.delete(normalizeFilePath(filePath.uri.fsPath));
+	}
+
 	clear() {
 		this.entries.clear();
 	}
@@ -130,5 +139,13 @@ export class ParsingImageCache<T = any> extends ParsingCache<T> {
 			return undefined;
 		}
 		return image;
+	}
+
+	deleteImage(filePath: TextDocument | string | undefined = this.getCurrentDocument()) {
+		if (!filePath)
+			return undefined;
+		if (typeof filePath == "string")
+			return this.images.delete(normalizeFilePath(filePath));
+		return this.images.delete(normalizeFilePath(filePath.uri.fsPath));
 	}
 }

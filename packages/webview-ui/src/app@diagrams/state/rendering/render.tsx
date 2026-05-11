@@ -19,6 +19,22 @@ export const MutatorLabel = ({ name, args, type, className }: { name: string; ar
 	)
 }
 
+const commonLadledGroupClass = `rounded-lg border-0 text-(--vscode-foreground)`
+
+const hiddenDiagramNode: Node = {
+	id: 'state-diagram-hidden-placeholder',
+	type: 'labeledGroupNode',
+	position: { x: 0, y: 0 },
+	data: {
+		name: <span className="text-white leading-0 font-semibold">Everything is hidden</span>,
+		color: 'color-mix(in srgb, #454545 88%, transparent)',
+		children: <p className='text-gray-400 italic'>Use Show all to restore the diagram.</p>
+	} as GroupNodeProps,
+	width: 280,
+	height: 84,
+	className: commonLadledGroupClass,
+};
+
 export async function renderXyFlow(model?: StateDiagram, transitionRouting: string = 'POLYLINE', hiddenStateVariableIds?: ReadonlySet<Id>) {
 	const nodes: Node[] = [];
 	const edges: Edge[] = [];
@@ -28,7 +44,7 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 
 	const stateVarsFiltered = hiddenStateVariableIds?.size ? model.stateVariables.filter(stateVar => !hiddenStateVariableIds.has(stateVar.id)) : model.stateVariables;
 	if (!stateVarsFiltered.length)
-		return { nodes, edges };
+		return { nodes: [hiddenDiagramNode], edges };
 
 	const stateVariableLayouts = await Promise.all(stateVarsFiltered.map(stateVar => layoutStateVariable(stateVar, { 'elk.edgeRouting': transitionRouting })));
 	const { layoutedItems: layoutedStateVariables } = await layoutBoxRow(stateVariableLayouts, { gap: LAYOUT.state.gap, padding: elkPadd(LAYOUT.canvasPadding, LAYOUT.canvasPadding) });
@@ -46,7 +62,7 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 			} as GroupNodeProps,
 			width: stateVar.width,
 			height: stateVar.height,
-			className: 'rounded-lg border-0 text-(--vscode-foreground)',
+			className: commonLadledGroupClass,
 		});
 
 		for (const { id: mutatorId, ...mutatorLayout } of layoutedMutators) {
@@ -63,7 +79,7 @@ export async function renderXyFlow(model?: StateDiagram, transitionRouting: stri
 				} as GroupNodeProps,
 				width: mutatorLayout.width,
 				height: mutatorLayout.height,
-				className: 'rounded-lg border-0 text-(--vscode-foreground)',
+				className: commonLadledGroupClass,
 			});
 
 			for (const { id: nodeId, ...graphNode } of mutatorLayout.layoutedNodes) {
