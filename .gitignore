@@ -3,5 +3,9 @@ dist
 node_modules
 .vscode-test/
 *.vsix
+*.github
+*.tsbuildinfo
+*.draft.md
 
-.vscode/settings.json
+**/.vscode/settings.json
+**/.waylog/

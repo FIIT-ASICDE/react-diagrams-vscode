@@ -1,6 +1,22 @@
-@import "tailwindcss";
+@import "tailwindcss" important;
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+/* @import "@fontsource-variable/inter"; */
 
-.vscode-bg {
-	background-color: var(--vscode-editor-background, #252526);
-	color: var(--vscode-foreground, #252526);
+@import "./app/App.sass";
+
+@layer base {
+	@import "@xyflow/react/dist/style.css";
+}
+
+.diagram-image-export .react-flow__edgelabel-renderer > div {
+	max-width: 220px !important;
+}
+
+.diagram-image-export .react-flow__node [class*="max-w-30"] {
+	max-width: 10rem !important;
+}
+
+.diagram-image-export .react-flow__node [class*="max-w-58"] {
+	max-width: 18rem !important;
 }

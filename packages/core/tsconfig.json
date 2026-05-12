@@ -14,10 +14,15 @@
     "types": [
       "node"
     ],
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "allowUnreachableCode": false
+    // "paths": { // dsnt work for god knows what reason...
+    //   "#/*": ["./src/*"]
+    // }
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts", 
+    "src/tests/playground.ts"
   ],
   "exclude": [
     "node_modules",

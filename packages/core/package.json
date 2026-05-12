@@ -4,21 +4,42 @@
   "private": true,
   "type": "commonjs",
   "main": "./dist/index.js",
+  "module": "./dist/esm/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./app@*": {
+      "types": "./dist/app@*/index.d.ts",
+      "import": "./dist/esm/app@*/index.js",
+      "require": "./dist/app@*/index.js",
+      "default": "./dist/app@*/index.js"
+    }
+  },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p .",
-    "watch": "tsc -p . -w",
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc -p .",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "watch": "concurrently \"tsc -p . -w\" \"tsc -p tsconfig.esm.json -w\"",
     "lint": "echo \"No lint task configured for @react-diagrams/core\"",
-    "test": "node -e \"console.log('No tests configured for @react-diagrams/core yet')\""
+    "evals": "nodemon --watch src/tests --ext ts,tsx,js,jsx --exec \"bun src/tests/experiments/refactoring/evaluator/index.ts\""
   },
   "dependencies": {
-    "ts-morph": "^24.0.0"
+    "elkjs": "^0.11.1",
+    "imurmurhash": "^0.1.4",
+    "ts-morph": "^27.0.2"
   },
   "devDependencies": {
+    "@types/imurmurhash": "^0.1.4",
     "@types/node": "22.x",
+    "@types/vscode-webview": "^1.57.5",
     "typescript": "^5.9.3"
   }
 }

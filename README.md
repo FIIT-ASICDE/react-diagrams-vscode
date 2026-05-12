@@ -4,16 +4,18 @@ This repository is organized as an npm workspace monorepo.
 
 ## Packages
 
-- `@react-diagrams/core` in `packages/core`: parser and shared logic, testable independently.
+- `@react-diagrams/core` in `packages/core`: parsers and shared logic, testable independently.
 - `@react-diagrams/vscode-extension` in `packages/vscode-extension`: VS Code extension host package.
 - `@react-diagrams/webview-ui` in `packages/webview-ui`: React webview application used by the extension.
 
 ## Setup
 1. Make sure your VS Code API is at least 1.111.0 (Help > About).
-2. Install Node 20+.
+2. Install Node 22.12+.
 3. From the monorepo root, run `npm i`.
-4. Open new terminal and run to build core and rebuild when changed: `npm run watch:dev`.
-5. Press F11 (Run > Start Debugging) and Debug Anyway if necessary...
+3. Next `npm run build`.
+4. Open new terminal `npm run watch:dev` while developing so the changes are reflected.
+   - Note that the "hotreload" is far from perfect and is recommended to reopen the Extension-related panels after each reload.
+6. Press F11 (Run > Start Debugging) and Debug Anyway if necessary...
 
 ## Common commands
 
