@@ -9,9 +9,13 @@ function AppStateDiagrams() {
 	useEffect(() => {
 		const onMessage = (event: MessageEvent<Message<UpdatePayload>>) => {
 			if (event.data?.type != 'update')
+			{
+				if (event.data?.type === 'settings/config' && event.data.data && typeof event.data.data === 'object') {
+					setSettingsConfig(event.data.data as ChatSettingsConfig);
+				}
 				return;
-			
-			//console.debug(event.data.data);
+			}
+
 			const nextPayload = event.data.data ?? {};
 			setUpdatePayload(nextPayload);
 			vscode.setState(nextPayload);
@@ -19,9 +23,19 @@ function AppStateDiagrams() {
 
 		window.addEventListener('message', onMessage);
 		vscode.postMessage("refresh"); // rdy
+		vscode.postMessage('settings/get');
 		return () => window.removeEventListener('message', onMessage);
 	}, []);
 	const model = updatePayload?.model;
+
+	const onApplySettings = (value: unknown) => {
+		if (!value || typeof value != 'object')
+			return;
+
+		const nextConfig = value as ChatSettingsConfig;
+		setSettingsConfig(nextConfig);
+		vscode.postMessage('settings/update', nextConfig);
+	};
 
 	return (
 		<div className="flex h-screen flex-col overflow-hidden px-1.5 vscode-bg">

@@ -3,10 +3,9 @@ import * as path from "node:path";
 import { Node, Project, SyntaxKind } from "ts-morph";
 import { DiagramBuilder } from "../../../@react-activity-diagrams";
 import { Edge, Node as Nds } from "@xyflow/react";
-/**
- * Resolve a tsconfig/jsconfig near the provided root so ts-morph can parse with
- * project-aware compiler settings when available.
- */
+
+
+// Finds config file.
 function findConfigFile(rootDir: string): string | undefined {
 	const candidates = [
 		path.join(rootDir, "tsconfig.json"),
@@ -22,10 +21,9 @@ function findConfigFile(rootDir: string): string | undefined {
 	return undefined;
 }
 
-/**
- * Create a ts-morph project instance. If there is no config file, we still
- * create a project with default settings so parsing can proceed.
- */
+
+
+// Creates project.
 function createProject(rootDir: string): Project {
 	const configFile = findConfigFile(rootDir);
 
@@ -43,8 +41,10 @@ function createProject(rootDir: string): Project {
 	});
 }
 
-// Parse the provided source text as a temporary file in a ts-morph project.
-// Use custom diagram builder to convert the source file into a graph of nodes and edges representing the activity diagram.
+
+
+
+// Parses activity component.
 export async function parseActivityComponent(sourceText: string, rootDir = ".", tempFileName = "__activity_temp__.tsx"): Promise<{nodes: Nds[], edges: Edge[]}> {
 	const project = createProject(rootDir);
 	const sourceFile = project.createSourceFile(tempFileName, sourceText, { overwrite: true });

@@ -3,47 +3,129 @@ import {
   Statement,
   SourceFile,
 } from 'ts-morph';
-import { GraphWriter, type WriterState } from './graph-writer';
-import { StatementVisitor } from './visitors';
-import { applyElkLayout } from './elkLayout';
+import { GraphWriter } from './graph-writer';
+import { StatementVisitor } from './visitor';
+
 export class DiagramBuilder {
   private nodes: Node[] = [];
   private edges: Edge[] = [];
-  private nodeIdCounter = 0;
 
+  // Builds a graph from a source file AST.
   public async build(ast: SourceFile): Promise<{ nodes: Node[]; edges: Edge[] }> {
     return this.buildStatements(ast.getStatements());
   }
 
+  // Builds a graph from a statement list.
   public async buildStatements(statements: Statement[]): Promise<{ nodes: Node[]; edges: Edge[] }> {
     this.reset();
 
-    const state: WriterState = { nodeIdCounter: 0 };
-    const writer = new GraphWriter(this.nodes, this.edges, state);
+    const writer = new GraphWriter(this.nodes, this.edges);
     const visitor = new StatementVisitor(writer);
 
     const startId = writer.addFlowNode('initial', 'Start');
     const main = visitor.visitStatements(statements);
 
-    this.nodeIdCounter = state.nodeIdCounter;
+    if (!main.entry) {
+      const endId = writer.addFlowNode('end', 'End');
+      writer.addEdge(startId, endId);
+      this.normalizeGraphStructure();
+      this.reindexEdgeIds();
+      return { nodes: this.nodes, edges: this.edges };
+    }
 
-    const endId = writer.addFlowNode('end', 'End');
+    writer.addEdge(startId, main.entry, main.entryEdgeLabel);
 
-    if (main.entry) {
-      writer.addEdge(startId, main.entry);
-      for (const exit of main.exits) {
-        writer.addEdge(exit, endId);
-      }
-    } else {
+    const successSources = [
+      ...new Set([...main.exits, ...main.returnExits]),
+    ];
+
+    this.wireSourcesToSeparateTerminals(writer, successSources, 'End');
+
+    const throwSources = [...new Set(main.throwExits)];
+
+    this.wireSourcesToSeparateTerminals(writer, throwSources, 'ErrorEnd');
+
+    if (successSources.length === 0 && throwSources.length === 0) {
+      const endId = writer.addFlowNode('end', 'End');
       writer.addEdge(startId, endId);
     }
-	const layoutedGraph = await applyElkLayout(this.nodes, this.edges);
-    return { nodes: layoutedGraph.nodes, edges: layoutedGraph.edges };
+
+    this.normalizeGraphStructure();
+    this.reindexEdgeIds();
+
+    return { nodes: this.nodes, edges: this.edges };
   }
 
+  // Connects source nodes to dedicated terminal nodes.
+  private wireSourcesToSeparateTerminals(
+    writer: GraphWriter,
+    sources: string[],
+    terminalLabel: 'End' | 'ErrorEnd',
+  ): void {
+    if (sources.length === 0) return;
+
+    for (const source of sources) {
+      const sourceType = writer.getNodeType(source);
+      const label = sourceType === 'decision' || sourceType === 'loop' ? 'no' : undefined;
+      const terminalId = writer.addFlowNode('end', terminalLabel);
+      writer.addEdge(
+        source,
+        terminalId,
+        label,
+        false,
+      );
+    }
+  }
+
+  // Applies post-processing passes to normalize graph structure.
+  private normalizeGraphStructure(): void {
+    this.removeDanglingEdges();
+    this.removeDuplicateEdges();
+  }
+
+  // Removes duplicate edges while keeping insertion order.
+  private removeDuplicateEdges(): void {
+    const seen = new Set<string>();
+    const normalized: Edge[] = [];
+
+    for (const edge of this.edges) {
+      const key = [
+        String(edge.source),
+        String(edge.target),
+        String(edge.label ?? ''),
+        String(edge.type ?? ''),
+        String(edge.sourceHandle ?? ''),
+        String(edge.targetHandle ?? ''),
+      ].join('|');
+
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      normalized.push(edge);
+    }
+
+    this.edges = normalized;
+  }
+
+  // Removes edges that reference missing source or target nodes.
+  private removeDanglingEdges(): void {
+    const nodeIds = new Set(this.nodes.map((node) => String(node.id)));
+    this.edges = this.edges.filter((edge) => nodeIds.has(String(edge.source)) && nodeIds.has(String(edge.target)));
+  }
+
+  // Reassigns edge ids to a stable sequential format.
+  private reindexEdgeIds(): void {
+    this.edges = this.edges.map((edge, index) => ({
+      ...edge,
+      id: `edge-${index}`,
+    }));
+  }
+
+  // Clears current node and edge buffers.
   private reset() {
     this.nodes = [];
     this.edges = [];
-    this.nodeIdCounter = 0;
   }
 }

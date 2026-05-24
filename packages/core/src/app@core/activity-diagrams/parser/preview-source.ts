@@ -1,5 +1,7 @@
 import { SyntaxKind, type Statement, type SourceFile } from "ts-morph";
 
+
+// Returns preview statements.
 export function getPreviewStatements(sourceFile: SourceFile): Statement[] | undefined {
 	const methodDeclaration = sourceFile.getDescendantsOfKind(SyntaxKind.MethodDeclaration)[0];
 	if (methodDeclaration) {
@@ -28,6 +30,11 @@ export function getPreviewStatements(sourceFile: SourceFile): Statement[] | unde
 		const body = arrowFunction.getBody();
 		if (body && SyntaxKind.Block === body.getKind() && typeof (body as { getStatements?: () => Statement[] }).getStatements === "function") {
 			return ((body as unknown) as { getStatements: () => Statement[] }).getStatements();
+		}
+
+		
+		if (body && body.getKind() !== SyntaxKind.Block) {
+			return [body as unknown as Statement];
 		}
 	}
 

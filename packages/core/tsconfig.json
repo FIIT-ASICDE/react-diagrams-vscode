@@ -15,10 +15,15 @@
       "node"
     ],
     "noImplicitAny": false,
-    "allowUnreachableCode": false
+    "allowUnreachableCode": false,
     // "paths": { // dsnt work for god knows what reason...
     //   "#/*": ["./src/*"]
     // }
+    "typeRoots": [
+      "../../node_modules/@types",
+      "./node_modules/@types"
+    ],
+    "noImplicitAny": false
   },
   "include": [
     "src/**/*.ts", 

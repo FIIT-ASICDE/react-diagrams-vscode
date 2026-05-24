@@ -1,0 +1,153 @@
+import {
+  ArrowFunction,
+  CallExpression,
+  ExpressionStatement,
+  FunctionExpression,
+  Node as MorphNode,
+  PropertyAccessExpression,
+  ReturnStatement,
+  SyntaxKind,
+  ThrowStatement,
+} from 'ts-morph';
+import { getCallbackBranch, isForEachLikeCall } from '../metadata';
+import type { BuildResult, HookMeta } from '../types';
+import { compactLabel } from '../utils';
+import type { StatementVisitorHost } from './host-context';
+
+// Visits a hook statement and creates an expandable hook node.
+export function visitHook(host: StatementVisitorHost, hookMeta: HookMeta): BuildResult {
+  const bodyId = host.writer.addFlowNode('expandable', compactLabel(hookMeta.label), {
+    sourceText: hookMeta.sourceText,
+    construct: 'hook',
+    deps: hookMeta.dependencyText,
+  });
+
+  return { entry: bodyId, exits: [bodyId], returnExits: [], throwExits: [] };
+}
+
+// Visits an expression statement and handles forEach-like calls.
+export function visitExpressionStatement(host: StatementVisitorHost, stmt: ExpressionStatement): BuildResult {
+  const expression = stmt.getExpression();
+
+  if (MorphNode.isCallExpression(expression) && isForEachLikeCall(expression)) {
+    return visitForEachLike(host, expression);
+  }
+
+  return visitAction(host, expression.getText(), stmt.getText());
+}
+
+// Extracts iterable and callback metadata from a forEach-like call.
+function extractForEachMeta(callExpression: CallExpression): {
+  iterable: string;
+  callee: string;
+  params: string;
+} {
+  const calleeExpression = callExpression.getExpression();
+
+  let iterable = '';
+  let callee = 'forEach';
+
+  if (calleeExpression.isKind(SyntaxKind.PropertyAccessExpression)) {
+    const propAccess = calleeExpression as PropertyAccessExpression;
+    iterable = propAccess.getExpression().getText();
+    callee = propAccess.getName();
+  } else {
+    iterable = calleeExpression.getText();
+  }
+
+  const args = callExpression.getArguments();
+  const callback = args[0];
+
+  let params = '(item)';
+  if (callback?.isKind(SyntaxKind.ArrowFunction)) {
+    params = formatParams(callback as ArrowFunction);
+  } else if (callback?.isKind(SyntaxKind.FunctionExpression)) {
+    params = formatParams(callback as FunctionExpression);
+  }
+
+  return { iterable, callee, params };
+}
+
+// Formats callback parameters into a compact tuple string.
+function formatParams(fn: ArrowFunction | FunctionExpression): string {
+  const parts = fn.getParameters().map((p) => p.getText());
+  return `(${parts.join(', ')})`;
+}
+
+// Visits a forEach-like call and renders it as a loop.
+export function visitForEachLike(host: StatementVisitorHost, callExpression: CallExpression): BuildResult {
+  const meta = extractForEachMeta(callExpression);
+
+  const loopId = host.createLoopNode(
+    compactLabel(meta.iterable),
+    meta.iterable,
+  );
+
+  host.writer.updateNodeData(loopId, {
+    construct: 'foreach',
+    forEachIterable: meta.iterable,
+    forEachCallee: meta.callee,
+    forEachParams: meta.params,
+  });
+
+  const ctx = host.pushLoopContext(loopId);
+  try {
+    const callbackBranch = getCallbackBranch(callExpression);
+    const body = callbackBranch ? host.visitBranch(callbackBranch) : undefined;
+
+    if (body?.entry) {
+      host.writer.addEdge(loopId, body.entry, 'next', false);
+      host.connectLoopBackEdges(body.exits, loopId);
+    } else {
+      host.writer.addEdge(loopId, loopId, 'next', true);
+    }
+
+    for (const continueId of [...new Set(ctx.pendingContinues)].filter(Boolean)) {
+      host.writer.addEdge(continueId, loopId, '', true);
+    }
+
+    return {
+      entry: loopId,
+      exits: [loopId, ...ctx.pendingBreaks],
+      exitLabels: {
+        [loopId]: 'done',
+      },
+      returnExits: body?.returnExits ?? [],
+      throwExits: body?.throwExits ?? [],
+    };
+  } finally {
+    host.popContext();
+  }
+}
+
+// Visits a generic statement as an action node.
+export function visitAction(host: StatementVisitorHost, label: string, sourceText?: string): BuildResult {
+  const id = host.writer.addFlowNode('action', compactLabel(label), {
+    sourceText,
+  });
+  return { entry: id, exits: [id], returnExits: [], throwExits: [] };
+}
+
+// Visits a return statement and marks it as a return exit.
+export function visitReturn(host: StatementVisitorHost, stmt: ReturnStatement): BuildResult {
+  const expressionText = stmt.getExpression()?.getText();
+  const label = expressionText ? `return ${expressionText}` : 'return';
+  const id = host.writer.addFlowNode('action', compactLabel(label), {
+    sourceText: stmt.getText(),
+    construct: 'return',
+  });
+
+  return { entry: id, exits: [], returnExits: [id], throwExits: [] };
+}
+
+// Visits a throw statement and marks it as a throw exit.
+export function visitThrow(host: StatementVisitorHost, stmt: ThrowStatement): BuildResult {
+  const expressionText = stmt.getExpression()?.getText();
+  const label = expressionText ? `throw ${expressionText}` : 'throw';
+  const id = host.writer.addFlowNode('action', compactLabel(label), {
+    sourceText: stmt.getText(),
+    construct: 'throw',
+  });
+
+  return { entry: id, exits: [], returnExits: [], throwExits: [id] };
+}

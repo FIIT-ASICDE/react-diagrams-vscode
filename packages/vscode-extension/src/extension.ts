@@ -1,14 +1,14 @@
-import { commands, ExtensionContext, ExtensionMode, LanguageModelChatMessage, LanguageModelDataPart, LanguageModelTextPart, lm, RelativePattern, Uri, window, workspace } from "vscode";
+import { commands, ExtensionContext, ExtensionMode, lm, RelativePattern, Uri, window, workspace } from "vscode";
 import { ComponentActivityPanel } from "./app@panels/ComponentActivityPanel";
 import { ComponentStatePanel } from "./app@panels/ComponentStatePanel";
 import { getConfigOption, normalizeFilePath } from "./app@utils";
-// import { registerDiagramChatParticipant } from "@/app@ai/chat/BaseChatParticipant";
 import { componentStateCache } from "./app@utils/cache";
 import StateDiagramParticipant from "./app@ai/chat/state-diagrams/StateDiagramParticipant";
 import GetCurrentStateDiagramTool from "./app@ai/chat/state-diagrams/tools/GetCurrentStateDiagramTool";
 import GetCurrentStateDiagramImageTool from "./app@ai/chat/state-diagrams/tools/GetCurrentStateDiagramImageTool";
 import createStateDiagramAgent from "./app@ai/chat/state-diagrams/agents/state-diagram.agent";
-
+import { registerDiagramChatParticipant } from "./chat/diagram";
+import { registerCreateActivityDiagramTool, registerCreateCodeTool } from "./chat/diagramTool";
 export function activate(context: ExtensionContext) {
 	const showComponentStateDiagram = commands.registerCommand("react-diagrams.componentState", () => {
 		ComponentStatePanel.render(context.extensionUri);
@@ -58,7 +58,24 @@ export function activate(context: ExtensionContext) {
 	});
 
 	const autoRestartInDev = setupAutoRestartInDevelopment(context);
-	context.subscriptions.push(showComponentStateDiagram, requestStateDiagramImage, refreshStatePanelOnSave, stateDiagramChatParticipantReg, ...stateDiagramTools, installStateDiagramAgent, showActivityCommand, settingsChange, autoRestartInDev);
+	const diagramChatParticipant = registerDiagramChatParticipant(context);
+	const createActivityDiagramTool = registerCreateActivityDiagramTool(context);
+	const createCodeTool = registerCreateCodeTool(context);
+
+	context.subscriptions.push(
+		showComponentStateDiagram,
+		requestStateDiagramImage,
+		refreshStatePanelOnSave,
+		settingsChange,
+		stateDiagramChatParticipantReg,
+		...stateDiagramTools,
+		installStateDiagramAgent,
+		showActivityCommand,
+		autoRestartInDev,
+		diagramChatParticipant,
+		createActivityDiagramTool,
+		createCodeTool
+	);
 }
 
 function setupAutoRestartInDevelopment(context: ExtensionContext) {
@@ -76,6 +93,7 @@ function setupAutoRestartInDevelopment(context: ExtensionContext) {
 		if (restartTimer)
 			clearTimeout(restartTimer);
 
+		// Debounce rebuild bursts so we restart the extension host only once.
 		restartTimer = setTimeout(() => {
 			restartTimer = undefined;
 			void commands.executeCommand("workbench.action.restartExtensionHost");
