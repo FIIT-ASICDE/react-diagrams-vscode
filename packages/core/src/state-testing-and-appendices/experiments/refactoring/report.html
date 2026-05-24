@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Refactoring Experiment Report</title>
+	<style>
+		:root {
+			color-scheme: light;
+			font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+			background: #f6f3ee;
+			color: #23272f;
+		}
+		body {
+			margin: 0;
+			background: #f6f3ee;
+		}
+		main {
+			width: min(1250px, calc(100vw - 48px));
+			margin: 0 auto;
+			padding: 26px 0 56px;
+		}
+		header {
+			margin-bottom: 22px;
+		}
+		h1, h2, h3, p {
+			margin: 0;
+		}
+		h1 {
+			font-size: 30px;
+			line-height: 1.15;
+			font-weight: 760;
+		}
+		h2 {
+			font-size: 22px;
+			line-height: 1.2;
+			margin-bottom: 10px;
+		}
+		.meta {
+			color: #626b78;
+			font-size: 13px;
+			margin-top: 4px;
+		}
+		.summary {
+			display: flex;
+			gap: 10px;
+			flex-wrap: wrap;
+			justify-content: flex-end;
+		}
+		.pill {
+			border: 1px solid #d8d1c5;
+			border-radius: 999px;
+			background: #fffaf2;
+			padding: 7px 11px;
+			font-size: 13px;
+			white-space: nowrap;
+		}
+		.legend {
+			display: flex;
+			gap: 16px;
+			flex-wrap: wrap;
+			margin-top: 14px;
+		}
+		.report-tools {
+			display: grid;
+			grid-template-columns: 1fr auto;
+			gap: 18px;
+			align-items: center;
+			margin: 4px 2px 8px;
+		}
+		.legend-item {
+			display: inline-flex;
+			align-items: center;
+			gap: 7px;
+			color: #4e5561;
+			font-size: 13px;
+		}
+		.swatch {
+			width: 12px;
+			height: 12px;
+			border-radius: 3px;
+		}
+		section {
+			background: #fffdf8;
+			border: 1px solid #ddd5c9;
+			border-radius: 8px;
+			padding: 22px;
+			margin-top: 10px;
+			box-shadow: 0 1px 2px rgba(31, 35, 40, 0.06);
+		}
+		.group-head {
+			display: grid;
+			grid-template-columns: 1fr auto;
+			gap: 18px;
+			align-items: start;
+		}
+		.overall {
+			display: grid;
+			grid-template-columns: repeat(4, minmax(105px, 1fr));
+			gap: 8px;
+			min-width: min(560px, 100%);
+		}
+		.overall-item {
+			border: 1px solid #e3ddd3;
+			border-radius: 6px;
+			padding: 8px 9px;
+			background: #fbf8f1;
+		}
+		.overall-label {
+			color: #626b78;
+			font-size: 12px;
+			font-weight: 600;
+		}
+		.overall-value {
+			font-size: 18px;
+			font-weight: 720;
+			margin-top: 3px;
+		}
+		.chart {
+			margin-top: 15px;
+			border-top: 1px solid #e7e0d5;
+		}
+		.row {
+			display: grid;
+			grid-template-columns: minmax(150px, 220px) 1fr minmax(88px, auto);
+			gap: 18px;
+			align-items: center;
+			min-height: 86px;
+			border-bottom: 1px solid #e7e0d5;
+		}
+		.file-label {
+			font-size: 15px;
+			font-weight: 650;
+			overflow-wrap: anywhere;
+		}
+		.run-count {
+			color: #626b78;
+			font-size: 12px;
+			margin-top: 4px;
+		}
+		.bar-area {
+			position: relative;
+			height: 66px;
+			background:
+				linear-gradient(to right, transparent calc(50% - 1px), #8a929d calc(50% - 1px), #8a929d calc(50% + 1px), transparent calc(50% + 1px)),
+				repeating-linear-gradient(to right, #ebe5db 0, #ebe5db 1px, transparent 1px, transparent 12.5%);
+			border-radius: 4px;
+		}
+		.bar {
+			position: absolute;
+			height: 8px;
+			border-radius: 999px;
+			top: var(--top);
+			left: var(--left);
+			width: var(--width);
+			background: var(--color);
+			box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.09);
+		}
+		.value {
+			position: absolute;
+			top: calc(var(--top) - 6px);
+			left: var(--value-left);
+			transform: var(--value-transform);
+			font-size: 12px;
+			font-weight: 680;
+			color: #313842;
+			white-space: nowrap;
+		}
+		.validity {
+			font-size: 12px;
+			color: #626b78;
+			text-align: right;
+			line-height: 1.45;
+		}
+		.validity strong {
+			color: #2f6f3f;
+		}
+		.validity .warn {
+			color: #9a3412;
+			font-weight: 700;
+		}
+		.empty-state {
+			color: #626b78;
+			padding: 18px 0 4px;
+		}
+		@media (max-width: 840px) {
+			main {
+				width: min(100vw - 28px, 1250px);
+				padding-top: 24px;
+			}
+			.report-tools, .group-head, .row {
+				grid-template-columns: 1fr;
+			}
+			.summary {
+				justify-content: flex-start;
+			}
+			.overall {
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				min-width: 0;
+			}
+			.validity {
+				text-align: left;
+			}
+		}
+	</style>
+</head>
+<body>
+	<main>
+		<header>
+			<h1>Refactoring Experiment Report</h1>
+			<p class="meta">Generated 5/9/2026, 12:19:02 PM</p>
+		</header>
+		<div class="report-tools">
+			<div class="legend">
+				<span class="legend-item"><span class="swatch" style="background:#3b82f6"></span>Logical LOC</span>
+				<span class="legend-item"><span class="swatch" style="background:#df75fb"></span>Max nested flow</span>
+				<span class="legend-item"><span class="swatch" style="background:#ffb66a"></span>Total node count</span>
+				<span class="legend-item"><span class="swatch" style="background:#86c779"></span>Total transition count</span>
+			</div>
+			<div class="summary">
+				<span class="pill">5 baseline files</span>
+				<span class="pill">2 test groups</span>
+				<span class="pill">Scale +/-50.0%</span>
+			</div>
+		</div>
+		<section>
+	<div class="group-head">
+		<div>
+			<h2>Code</h2>
+			<p class="meta">10/10 valid runs</p>
+		</div>
+		<div class="overall">
+			<div class="overall-item" style="border-color: #3b82f6">
+				<div class="overall-label">Logical LOC</div>
+				<div class="overall-value">12.9%</div>
+			</div>
+			<div class="overall-item" style="border-color: #df75fb">
+				<div class="overall-label">Max nested flow</div>
+				<div class="overall-value">13.3%</div>
+			</div>
+			<div class="overall-item" style="border-color: #ffb66a">
+				<div class="overall-label">Total node count</div>
+				<div class="overall-value">22.9%</div>
+			</div>
+			<div class="overall-item" style="border-color: #86c779">
+				<div class="overall-label">Total transition count</div>
+				<div class="overall-value">27.4%</div>
+			</div>
+		</div>
+	</div>
+	<div class="chart">
+		<div class="row">
+	<div>
+		<div class="file-label">CourseEnrollmentPanel.tsx</div>
+		<div class="run-count">2 runs</div>
+	</div>
+	<div class="bar-area" aria-label="CourseEnrollmentPanel.tsx improvement chart">
+		<span class="bar" title="Logical LOC: 24.1%" style="--top:9px;--left:50%;--width:24.11764705882353%;--color:#3b82f6"></span>
+		<span class="value" style="--top:9px;--value-left:75.71764705882353%;--value-transform:translateX(0)">24.1%</span>
+		<span class="bar" title="Max nested flow: 16.7%" style="--top:23px;--left:50%;--width:16.666666666666664%;--color:#df75fb"></span>
+		<span class="value" style="--top:23px;--value-left:68.26666666666665%;--value-transform:translateX(0)">16.7%</span>
+		<span class="bar" title="Total node count: 35.1%" style="--top:37px;--left:50%;--width:35.11904761904762%;--color:#ffb66a"></span>
+		<span class="value" style="--top:37px;--value-left:86.71904761904761%;--value-transform:translateX(0)">35.1%</span>
+		<span class="bar" title="Total transition count: 42.0%" style="--top:51px;--left:50%;--width:41.95402298850575%;--color:#86c779"></span>
+		<span class="value" style="--top:51px;--value-left:93.55402298850575%;--value-transform:translateX(0)">42.0%</span>
+	</div>
+	<div class="validity"><strong>valid</strong></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">InvoiceReview.tsx</div>
+		<div class="run-count">2 runs</div>
+	</div>
+	<div class="bar-area" aria-label="InvoiceReview.tsx improvement chart">
+		<span class="bar" title="Logical LOC: 10.5%" style="--top:9px;--left:50%;--width:10.465116279069766%;--color:#3b82f6"></span>
+		<span class="value" style="--top:9px;--value-left:62.06511627906977%;--value-transform:translateX(0)">10.5%</span>
+		<span class="bar" title="Max nested flow: 25.0%" style="--top:23px;--left:50%;--width:25%;--color:#df75fb"></span>
+		<span class="value" style="--top:23px;--value-left:76.6%;--value-transform:translateX(0)">25.0%</span>
+		<span class="bar" title="Total node count: 12.0%" style="--top:37px;--left:50%;--width:12.048192771084338%;--color:#ffb66a"></span>
+		<span class="value" style="--top:37px;--value-left:63.64819277108434%;--value-transform:translateX(0)">12.0%</span>
+		<span class="bar" title="Total transition count: 18.1%" style="--top:51px;--left:50%;--width:18.085106382978726%;--color:#86c779"></span>
+		<span class="value" style="--top:51px;--value-left:69.68510638297872%;--value-transform:translateX(0)">18.1%</span>
+	</div>
+	<div class="validity"><strong>valid</strong></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">RoomBooking.jsx</div>
+		<div class="run-count">2 runs</div>
+	</div>
+	<div class="bar-area" aria-label="RoomBooking.jsx improvement chart">
+		<span class="bar" title="Logical LOC: 15.5%" style="--top:9px;--left:50%;--width:15.517241379310342%;--color:#3b82f6"></span>
+		<span class="value" style="--top:9px;--value-left:67.11724137931034%;--value-transform:translateX(0)">15.5%</span>
+		<span class="bar" title="Max nested flow: 0.0%" style="--top:23px;--left:50%;--width:0%;--color:#df75fb"></span>
+		<span class="value" style="--top:23px;--value-left:51.6%;--value-transform:translateX(0)">0.0%</span>
+		<span class="bar" title="Total node count: 9.5%" style="--top:37px;--left:50%;--width:9.512195121951219%;--color:#ffb66a"></span>
+		<span class="value" style="--top:37px;--value-left:61.112195121951224%;--value-transform:translateX(0)">9.5%</span>
+		<span class="bar" title="Total transition count: 6.2%" style="--top:51px;--left:50%;--width:6.182795698924732%;--color:#86c779"></span>
+		<span class="value" style="--top:51px;--value-left:57.78279569892474%;--value-transform:translateX(0)">6.2%</span>
+	</div>
+	<div class="validity"><strong>valid</strong></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">StudentSubmissionManager.tsx</div>
+		<div class="run-count">2 runs</div>
+	</div>
+	<div class="bar-area" aria-label="StudentSubmissionManager.tsx improvement chart">
+		<span class="bar" title="Logical LOC: 10.4%" style="--top:9px;--left:50%;--width:10.36036036036036%;--color:#3b82f6"></span>
+		<span class="value" style="--top:9px;--value-left:61.96036036036036%;--value-transform:translateX(0)">10.4%</span>
+		<span class="bar" title="Max nested flow: 25.0%" style="--top:23px;--left:50%;--width:25%;--color:#df75fb"></span>
+		<span class="value" style="--top:23px;--value-left:76.6%;--value-transform:translateX(0)">25.0%</span>
+		<span class="bar" title="Total node count: 35.5%" style="--top:37px;--left:50%;--width:35.483870967741936%;--color:#ffb66a"></span>
+		<span class="value" style="--top:37px;--value-left:87.08387096774193%;--value-transform:translateX(0)">35.5%</span>
+		<span class="bar" title="Total transition count: 42.9%" style="--top:51px;--left:50%;--width:42.857142857142854%;--color:#86c779"></span>
+		<span class="value" style="--top:51px;--value-left:94.45714285714286%;--value-transform:translateX(0)">42.9%</span>
+	</div>
+	<div class="validity"><strong>valid</strong></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">UploadWiz.tsx</div>
+		<div class="run-count">2 runs</div>
+	</div>
+	<div class="bar-area" aria-label="UploadWiz.tsx improvement chart">
+		<span class="bar" title="Logical LOC: 3.9%" style="--top:9px;--left:50%;--width:3.888888888888889%;--color:#3b82f6"></span>
+		<span class="value" style="--top:9px;--value-left:55.48888888888889%;--value-transform:translateX(0)">3.9%</span>
+		<span class="bar" title="Max nested flow: 0.0%" style="--top:23px;--left:50%;--width:0%;--color:#df75fb"></span>
+		<span class="value" style="--top:23px;--value-left:51.6%;--value-transform:translateX(0)">0.0%</span>
+		<span class="bar" title="Total node count: 22.3%" style="--top:37px;--left:50%;--width:22.302158273381295%;--color:#ffb66a"></span>
+		<span class="value" style="--top:37px;--value-left:73.90215827338129%;--value-transform:translateX(0)">22.3%</span>
+		<span class="bar" title="Total transition count: 27.7%" style="--top:51px;--left:50%;--width:27.73722627737226%;--color:#86c779"></span>
+		<span class="value" style="--top:51px;--value-left:79.33722627737225%;--value-transform:translateX(0)">27.7%</span>
+	</div>
+	<div class="validity"><strong>valid</strong></div>
+</div>
+	</div>
+</section>
+<section>
+	<div class="group-head">
+		<div>
+			<h2>CodeAndDiagram</h2>
+			<p class="meta">10/10 valid runs</p>
+		</div>
+		<div class="overall">
+			<div class="overall-item" style="border-color: #3b82f6">
+				<div class="overall-label">Logical LOC</div>
+				<div class="overall-value">10.3%</div>
+			</div>
+			<div class="overall-item" style="border-color: #df75fb">
+				<div class="overall-label">Max nested flow</div>
+				<div class="overall-value">13.3%</div>
+			</div>
+			<div class="overall-item" style="border-color: #ffb66a">
+				<div class="overall-label">Total node count</div>
+				<div class="overall-value">15.1%</div>
+			</div>
+			<div class="overall-item" style="border-color: #86c779">
+				<div class="overall-label">Total transition count</div>
+				<div class="overall-value">17.5%</div>
+			</div>
+		</div>
+	</div>
+	<div class="chart">
+		<div class="row">
+	<div>
+		<div class="file-label">CourseEnrollmentPanel.tsx</div>
+		<div class="run-count">2 runs</div>
+	</div>
+	<div class="bar-area" aria-label="CourseEnrollmentPanel.tsx improvement chart">
+		<span class="bar" title="Logical LOC: 15.3%" style="--top:9px;--left:50%;--width:15.294117647058822%;--color:#3b82f6"></span>
+		<span class="value" style="--top:9px;--value-left:66.89411764705882%;--value-transform:translateX(0)">15.3%</span>
+		<span class="bar" title="Max nested flow: 16.7%" style="--top:23px;--left:50%;--width:16.666666666666664%;--color:#df75fb"></span>
+		<span class="value" style="--top:23px;--value-left:68.26666666666665%;--value-transform:translateX(0)">16.7%</span>
+		<span class="bar" title="Total node count: 13.1%" style="--top:37px;--left:50%;--width:13.095238095238097%;--color:#ffb66a"></span>
+		<span class="value" style="--top:37px;--value-left:64.6952380952381%;--value-transform:translateX(0)">13.1%</span>
+		<span class="bar" title="Total transition count: 14.4%" style="--top:51px;--left:50%;--width:14.367816091954023%;--color:#86c779"></span>
+		<span class="value" style="--top:51px;--value-left:65.96781609195402%;--value-transform:translateX(0)">14.4%</span>
+	</div>
+	<div class="validity"><strong>valid</strong></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">InvoiceReview.tsx</div>
+		<div class="run-count">2 runs</div>
+	</div>
+	<div class="bar-area" aria-label="InvoiceReview.tsx improvement chart">
+		<span class="bar" title="Logical LOC: 5.2%" style="--top:9px;--left:50%;--width:5.232558139534884%;--color:#3b82f6"></span>
+		<span class="value" style="--top:9px;--value-left:56.83255813953489%;--value-transform:translateX(0)">5.2%</span>
+		<span class="bar" title="Max nested flow: 25.0%" style="--top:23px;--left:50%;--width:25%;--color:#df75fb"></span>
+		<span class="value" style="--top:23px;--value-left:76.6%;--value-transform:translateX(0)">25.0%</span>
+		<span class="bar" title="Total node count: 12.0%" style="--top:37px;--left:50%;--width:12.048192771084338%;--color:#ffb66a"></span>
+		<span class="value" style="--top:37px;--value-left:63.64819277108434%;--value-transform:translateX(0)">12.0%</span>
+		<span class="bar" title="Total transition count: 18.1%" style="--top:51px;--left:50%;--width:18.085106382978726%;--color:#86c779"></span>
+		<span class="value" style="--top:51px;--value-left:69.68510638297872%;--value-transform:translateX(0)">18.1%</span>
+	</div>
+	<div class="validity"><strong>valid</strong></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">RoomBooking.jsx</div>
+		<div class="run-count">2 runs</div>
+	</div>
+	<div class="bar-area" aria-label="RoomBooking.jsx improvement chart">
+		<span class="bar" title="Logical LOC: 15.2%" style="--top:9px;--left:50%;--width:15.229885057471265%;--color:#3b82f6"></span>
+		<span class="value" style="--top:9px;--value-left:66.82988505747126%;--value-transform:translateX(0)">15.2%</span>
+		<span class="bar" title="Max nested flow: 0.0%" style="--top:23px;--left:50%;--width:0%;--color:#df75fb"></span>
+		<span class="value" style="--top:23px;--value-left:51.6%;--value-transform:translateX(0)">0.0%</span>
+		<span class="bar" title="Total node count: 7.6%" style="--top:37px;--left:50%;--width:7.560975609756097%;--color:#ffb66a"></span>
+		<span class="value" style="--top:37px;--value-left:59.1609756097561%;--value-transform:translateX(0)">7.6%</span>
+		<span class="bar" title="Total transition count: 2.4%" style="--top:51px;--left:50%;--width:2.419354838709678%;--color:#86c779"></span>
+		<span class="value" style="--top:51px;--value-left:54.01935483870968%;--value-transform:translateX(0)">2.4%</span>
+	</div>
+	<div class="validity"><strong>valid</strong></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">StudentSubmissionManager.tsx</div>
+		<div class="run-count">2 runs</div>
+	</div>
+	<div class="bar-area" aria-label="StudentSubmissionManager.tsx improvement chart">
+		<span class="bar" title="Logical LOC: 8.6%" style="--top:9px;--left:50%;--width:8.558558558558559%;--color:#3b82f6"></span>
+		<span class="value" style="--top:9px;--value-left:60.15855855855856%;--value-transform:translateX(0)">8.6%</span>
+		<span class="bar" title="Max nested flow: 25.0%" style="--top:23px;--left:50%;--width:25%;--color:#df75fb"></span>
+		<span class="value" style="--top:23px;--value-left:76.6%;--value-transform:translateX(0)">25.0%</span>
+		<span class="bar" title="Total node count: 29.4%" style="--top:37px;--left:50%;--width:29.435483870967744%;--color:#ffb66a"></span>
+		<span class="value" style="--top:37px;--value-left:81.03548387096774%;--value-transform:translateX(0)">29.4%</span>
+		<span class="bar" title="Total transition count: 35.3%" style="--top:51px;--left:50%;--width:35.33834586466165%;--color:#86c779"></span>
+		<span class="value" style="--top:51px;--value-left:86.93834586466164%;--value-transform:translateX(0)">35.3%</span>
+	</div>
+	<div class="validity"><strong>valid</strong></div>
+</div>
+<div class="row">
+	<div>
+		<div class="file-label">UploadWiz.tsx</div>
+		<div class="run-count">2 runs</div>
+	</div>
+	<div class="bar-area" aria-label="UploadWiz.tsx improvement chart">
+		<span class="bar" title="Logical LOC: 7.2%" style="--top:9px;--left:50%;--width:7.222222222222221%;--color:#3b82f6"></span>
+		<span class="value" style="--top:9px;--value-left:58.82222222222222%;--value-transform:translateX(0)">7.2%</span>
+		<span class="bar" title="Max nested flow: 0.0%" style="--top:23px;--left:50%;--width:0%;--color:#df75fb"></span>
+		<span class="value" style="--top:23px;--value-left:51.6%;--value-transform:translateX(0)">0.0%</span>
+		<span class="bar" title="Total node count: 13.3%" style="--top:37px;--left:50%;--width:13.309352517985609%;--color:#ffb66a"></span>
+		<span class="value" style="--top:37px;--value-left:64.90935251798561%;--value-transform:translateX(0)">13.3%</span>
+		<span class="bar" title="Total transition count: 17.2%" style="--top:51px;--left:50%;--width:17.153284671532845%;--color:#86c779"></span>
+		<span class="value" style="--top:51px;--value-left:68.75328467153284%;--value-transform:translateX(0)">17.2%</span>
+	</div>
+	<div class="validity"><strong>valid</strong></div>
+</div>
+	</div>
+</section>
+	</main>
+</body>
+</html>

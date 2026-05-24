@@ -1,9 +1,9 @@
 import * as path from "path";
 import { Disposable, TextDocument, TextEditor, Webview, WebviewPanel, window, Uri, ViewColumn, workspace } from "vscode";
-import { getNonce } from "../app@utils/crypto";
-import { getUri } from "../app@utils/urls";
+import { getNonce, getUri } from "../app@utils";
 import { generateActivitySkeletonFromGraph, parseActivityComponent, parseActivityPreview } from "@react-diagrams/core";
 import { Node, Edge } from "@xyflow/react";
+
 export class ComponentActivityPanel {
 	public static readonly WEBVIEW_DIR = "dist/webview";
 

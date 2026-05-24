@@ -1,6 +1,6 @@
 import { BaseEdge, type EdgeProps } from '@xyflow/react';
 
-function buildBackEdgePath(sourceX: number, sourceY: number, targetX: number, targetY: number, innerDecisionCount: number): string {
+export function buildBackEdgePath(sourceX: number, sourceY: number, targetX: number, targetY: number, innerDecisionCount: number): string {
 	const leftDetourDistance = 200 + innerDecisionCount * 125;
 	const leftDetourX = sourceX - leftDetourDistance;
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { parseReactComponent } from '../app@core/state-diagrams/parser/react-parser';
+import { parseReactComponent } from '../app@state-diagram';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 

@@ -1,2 +1,2 @@
-export * from "./state-diagrams";
+export * from "../app@state-diagram-model/graph/layouting";
 export * from "./utils";

@@ -1,338 +1,194 @@
-import { useEffect, useMemo, useState } from 'react';
-import ELK from 'elkjs/lib/elk.bundled.js';
-import { Background, Controls, MarkerType, Position, ReactFlow, useReactFlow, type Edge, type EdgeTypes, type Node, type NodeTypes } from '@xyflow/react';
-import type { Id, StateDiagram as StateDiagramModel, StateGraphNode, StateMutatingFunction } from '@react-diagrams/core';
-import FloatingEdge from '@/app@components/xyflow-react/components/FloatingEdge';
-import FloatingConnectionLine from '@/app@components/xyflow-react/components/FloatingConnectionLine';
-import LabeledGroupNode from '@/app@components/xyflow-react/components/LabeledGroupNode';
-import type { GroupNodeProps } from '@/app@shadcn/components/labeled-group-node';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Background, Controls, MarkerType, MiniMap, ReactFlow, useEdgesState, useNodesState, useReactFlow, type Edge, type Node } from '@xyflow/react';
+import { nodeTypes } from './rendering/nodes';
+import { edgeTypes } from './rendering/edges';
+import { renderXyFlow, type StateDiagramProps } from './rendering/render';
+import StateDetailsPanel from './StateDetailsPanel';
+import { downloadDiagramImage, htmlToImageToPng, snapdomToPngDataUrl } from '@/app@utils/utils';
+import { VSCodeButton } from "@vscode/webview-ui-toolkit/react";
+import { cn } from '@/app@shadcn/lib/utils';
+import { vscode } from '@/app@vscode/api';
+import type { Message } from '@react-diagrams/core/app@vscode';
+import { Camera, PanelRightClose, PanelRightOpen } from "lucide-react"
+import type { Id, StateUpdate } from '@react-diagrams/core/app@state-diagram-model';
 
-type StateDiagramProps = {
-	model?: StateDiagramModel;
-};
-
-const elk = new ELK();
-
-const LAYOUT = {
-	canvasPaddingX: 24,
-	canvasPaddingY: 24,
-
-	stateGroupMinWidth: 320,
-	stateGroupMinHeight: 180,
-	stateGroupGapX: 48,
-	stateGroupPaddingX: 24,
-	stateGroupPaddingY: 28,
-	stateGroupHeaderOffsetY: 28,
-
-	mutatorGroupMinWidth: 280,
-	mutatorGroupMinHeight: 170,
-	mutatorGroupGapX: 24,
-	mutatorGroupPaddingX: 18,
-	mutatorGroupPaddingY: 18,
-	mutatorGroupHeaderOffsetY: 24,
-
-	graphNodeWidth: 220,
-	graphNodeHeight: 56,
-};
-
-const ELK_OPTIONS = {
-	'elk.algorithm': 'layered',
-	'elk.direction': 'DOWN',
-	'elk.layered.spacing.nodeNodeBetweenLayers': '46',
-	'elk.spacing.nodeNode': '80',
-	'elk.layered.cycleBreaking.strategy': 'DEPTH_FIRST',
-	'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-	'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-	'elk.layered.feedbackEdges': 'true',
-	'elk.edgeRouting': 'ORTHOGONAL',
-};
-
-const edgeTypes: EdgeTypes = {
-	floating: FloatingEdge as EdgeTypes['floating'],
-};
-
-const nodeTypes: NodeTypes = {
-	labeledGroupNode: LabeledGroupNode,
-};
-
-function asNodeLabel(node: StateGraphNode) {
-	if (node.nodeType === 'state-update') {
-		const expr = node.expressionText ? `: ${node.expressionText}` : '';
-		return `${node.kind}${expr}`;
-	}
-
-	return `${node.kind}${node.label ? `: ${node.label}` : ''}`;
-}
-
-async function layoutMutator(mutator: StateMutatingFunction) {
-	if (!mutator.nodes.length) {
-		return {
-			mutator,
-			layoutedNodes: [],
-			transitions: [],
-			width: LAYOUT.mutatorGroupMinWidth,
-			height: LAYOUT.mutatorGroupMinHeight,
-		};
-	}
-
-	const graph = {
-		id: `elk:${mutator.id}`,
-		layoutOptions: ELK_OPTIONS,
-		children: mutator.nodes.map(node => ({
-			width: LAYOUT.graphNodeWidth,
-			height: LAYOUT.graphNodeHeight,
-			...node
-		})),
-		edges: mutator.transitions.map(transition => ({
-			sources: [transition.fromNodeId],
-			targets: [transition.toNodeId],
-			...transition
-		})),
-	};
-
-	const { children = [], edges: transitions } = await elk.layout(graph);
-	const layoutedNodes = children.map(node => ({
-		...node,
-		x: node.x ?? 0,
-		y: node.y ?? 0,
-		width: node.width ?? LAYOUT.graphNodeWidth,
-		height: node.height ?? LAYOUT.graphNodeHeight,
-	}));
-
-	const maxX = layoutedNodes.length ? Math.max(...layoutedNodes.map((node) => node.x + node.width)) : 0;
-	const maxY = layoutedNodes.length ? Math.max(...layoutedNodes.map((node) => node.y + node.height)) : 0;
-
-	return {
-		mutator,
-		layoutedNodes,
-		transitions,
-		width: Math.max(LAYOUT.mutatorGroupMinWidth, maxX + (LAYOUT.mutatorGroupPaddingX * 2)),
-		height: Math.max(LAYOUT.mutatorGroupMinHeight, maxY + (LAYOUT.mutatorGroupPaddingY * 2) + LAYOUT.mutatorGroupHeaderOffsetY),
-	};
-}
-
-async function toFlow(model?: StateDiagramModel) {
-	const nodes: Node[] = [];
-	const edges: Edge[] = [];
-
-	if (!model?.stateVariables?.length)
-		return { nodes, edges };
-
-	let stateGroupOffsetX = LAYOUT.canvasPaddingX;
-
-	for (const stateVariable of model.stateVariables) {
-		const mutators = stateVariable.mutators ?? [];
-		const hasMutators = mutators.length > 0;
-		const mutatorLayouts = await Promise.all(mutators.map((mutator) => layoutMutator(mutator)));
-		const tallestMutator = mutatorLayouts.length ? Math.max(...mutatorLayouts.map((layout) => layout.height)) : 0;
-		const stateGroupInnerWidth = mutatorLayouts.reduce((totalWidth, layout, index) => {
-			return totalWidth + layout.width + (index > 0 ? LAYOUT.mutatorGroupGapX : 0);
-		}, 0);
-
-		const stateGroupWidth = hasMutators
-			? Math.max(
-				LAYOUT.stateGroupMinWidth,
-				(LAYOUT.stateGroupPaddingX * 2) + stateGroupInnerWidth,
-			)
-			: LAYOUT.stateGroupMinWidth;
-
-		const stateGroupHeight = hasMutators
-			? Math.max(LAYOUT.stateGroupMinHeight, tallestMutator + (LAYOUT.stateGroupPaddingY * 2) + LAYOUT.stateGroupHeaderOffsetY)
-			: LAYOUT.stateGroupMinHeight;
-
-		const stateGroupId = `state-group:${stateVariable.id}`;
-		nodes.push({
-			id: stateGroupId,
-			type: 'labeledGroupNode',
-			position: { x: stateGroupOffsetX, y: LAYOUT.canvasPaddingY },
-			data: { label: stateVariable.name, position: 'top-left' } as GroupNodeProps,
-			width: stateGroupWidth,
-			height: stateGroupHeight,
-			style: {
-				borderRadius: 12,
-				border: 'none',
-				color: 'var(--vscode-foreground)',
-			},
-			draggable: false,
-		});
-
-		if (!hasMutators) {
-			nodes.push({
-				id: `${stateGroupId}:empty`,
-				position: { x: LAYOUT.stateGroupPaddingX, y: LAYOUT.stateGroupHeaderOffsetY + 28 },
-				parentId: stateGroupId,
-				extent: 'parent',
-				data: { label: 'No states or mutators' },
-				width: Math.min(stateGroupWidth - (LAYOUT.stateGroupPaddingX * 2), LAYOUT.graphNodeWidth + 40),
-				height: LAYOUT.graphNodeHeight,
-				style: {
-					padding: 14,
-					borderRadius: 8,
-					border: '1px dashed var(--vscode-descriptionForeground)',
-					background: 'var(--vscode-editor-background)',
-					color: 'var(--vscode-descriptionForeground)',
-					fontStyle: 'italic',
-					display: 'flex',
-					alignItems: 'center',
-				},
-				draggable: false,
-				selectable: false,
-			});
-		}
-
-		let mutatorOffsetX = LAYOUT.stateGroupPaddingX;
-		for (const mutatorLayout of mutatorLayouts) {
-			const mutatorGroupId = `${stateGroupId}-${mutatorLayout.mutator.id}`;
-			nodes.push({
-				id: mutatorGroupId,
-				type: 'labeledGroupNode',
-				position: {
-					x: mutatorOffsetX,
-					y: LAYOUT.stateGroupHeaderOffsetY,
-				},
-				parentId: stateGroupId,
-				extent: 'parent',
-				data: { label: mutatorLayout.mutator.name, position: 'top-left' } as GroupNodeProps,
-				width: mutatorLayout.width,
-				height: mutatorLayout.height,
-				style: {
-					borderRadius: 14,
-					border: 'none',
-					color: 'var(--vscode-foreground)',
-				},
-				draggable: false,
-			});
-
-			const nodeIdMap = new Map<Id, string>();
-			const layoutedNodesById = new Map(mutatorLayout.layoutedNodes.map((node) => [node.id, node]));
-			for (const graphNode of mutatorLayout.mutator.nodes) {
-				const flowNodeId = `${mutatorGroupId}:node:${graphNode.id}`;
-				nodeIdMap.set(graphNode.id, flowNodeId);
-				const layoutedNode = layoutedNodesById.get(graphNode.id);
-				const nodeX = layoutedNode?.x ?? 0;
-				const nodeY = layoutedNode?.y ?? 0;
-				const nodeWidth = layoutedNode?.width ?? LAYOUT.graphNodeWidth;
-				const nodeHeight = layoutedNode?.height ?? LAYOUT.graphNodeHeight;
-
-				nodes.push({
-					id: flowNodeId,
-					position: {
-						x: LAYOUT.mutatorGroupPaddingX + nodeX,
-						y: LAYOUT.mutatorGroupHeaderOffsetY + LAYOUT.mutatorGroupPaddingY + nodeY,
-					},
-					parentId: mutatorGroupId,
-					extent: 'parent',
-					data: { label: asNodeLabel(graphNode) },
-					targetPosition: Position.Top,
-					sourcePosition: Position.Bottom,
-					width: nodeWidth,
-					height: nodeHeight,
-					style: {
-						borderRadius: 8,
-						border: graphNode.nodeType === 'state-update'
-							? '1px solid var(--vscode-testing-iconPassed)'
-							: '1px solid var(--vscode-button-border)',
-						background: graphNode.nodeType === 'state-update'
-							? 'color-mix(in srgb, var(--vscode-testing-iconPassed) 12%, transparent)'
-							: 'var(--vscode-input-background)',
-						color: 'var(--vscode-foreground)',
-						fontSize: 12,
-					},
-					draggable: false,
-				});
-			}
-
-			for (const transition of mutatorLayout.mutator.transitions) {
-				const source = nodeIdMap.get(transition.fromNodeId);
-				const target = nodeIdMap.get(transition.toNodeId);
-
-				if (!source || !target)
-					continue;
-
-				edges.push({
-					id: `${mutatorGroupId}:edge:${transition.id}`,
-					source,
-					target,
-					label: transition.label,
-					type: 'floating',
-					animated: transition.kind !== 'normal',
-					markerEnd: { type: MarkerType.ArrowClosed },
-				});
-			}
-
-			mutatorOffsetX += mutatorLayout.width + LAYOUT.mutatorGroupGapX;
-		}
-
-		stateGroupOffsetX += stateGroupWidth + LAYOUT.stateGroupGapX;
-	}
-
-	return { nodes, edges };
-}
+const fitToViewOptions = { padding: 0.025, duration: 100 };
 
 function AutoFitView({ ready }: { ready: boolean }) {
 	const { fitView } = useReactFlow();
 
 	useEffect(() => {
 		if (ready) {
-			void fitView({ padding: 0.2, duration: 150 });
+			void fitView(fitToViewOptions);
 		}
 	}, [fitView, ready]);
 
 	return null;
 }
 
+const minimapNodeColor = node => node.type == 'labeledGroupNode' ? 'transparent' : node.data?.color ?? 'gray';
+const minimapNodeStrokeColor = node => node.type == 'labeledGroupNode' ? node.data?.color ?? 'gray' : 'transparent';
+
 export default function StateDiagram({ model }: StateDiagramProps) {
-	const [flowState, setFlowState] = useState<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] });
+	const [nodes, setNodes] = useNodesState<Node>([]);
+	const [edges, setEdges] = useEdgesState<Edge>([]);
+	const [cachedImage, setCachedImage] = useState<string | null>(null);
+	const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+	const [hiddenStateVariableIds, setHiddenStateVariableIds] = useState<Set<Id>>(() => new Set());
+
+	const modelCacheKey = useMemo(() => JSON.stringify(model ?? null), [model]);
+	const stateVariableIds = useMemo(() => model?.stateVariables?.map(stVar => stVar.id) ?? [], [model?.stateVariables]);
+	const hiddenStateVariableKey = useMemo(() => [...hiddenStateVariableIds].join('|'), [hiddenStateVariableIds]);
 	const hasModel = useMemo(() => Boolean(model?.stateVariables?.length), [model]);
+
+	const { bgColor, transitionRouting } = (window as any).CONFIG ?? {};
 
 	useEffect(() => {
 		let cancelled = false;
 
-		void (async () => {
-			try {
-				const nextFlowState = await toFlow(model);
-				if (!cancelled) {
-					setFlowState(nextFlowState);
-				}
-			} catch (error) {
-				console.error('Failed to layout state diagram with ELK', error);
-				if (!cancelled) {
-					setFlowState({ nodes: [], edges: [] });
-				}
+		renderXyFlow(model, transitionRouting, hiddenStateVariableIds).then((newState) => {
+			if (!cancelled) {
+				setNodes(newState.nodes);
+				setEdges(newState.edges);
+				// console.log(newState.nodes, newState.edges);
 			}
-		})();
+		}).catch((error) => {
+			console.error('Failed to layout state diagram with ELK', error);
+			if (!cancelled) {
+				setNodes([]);
+				setEdges([]);
+			}
+		});
 
-		return () => {
-			cancelled = true;
+		return () => { cancelled = true };
+	}, [hiddenStateVariableIds, model, setEdges, setNodes, transitionRouting]);
+
+	useEffect(() => {
+		setCachedImage(null);
+	}, [hiddenStateVariableKey, modelCacheKey]);
+
+	useEffect(() => {
+		setHiddenStateVariableIds((old) => {
+			if (!old.size)
+				return old;
+
+			const availableStateVariableIds = new Set(model?.stateVariables?.map(stateVariable => stateVariable.id) ?? []);
+			const next = new Set([...old].filter(stateVariableId => availableStateVariableIds.has(stateVariableId)));
+			return next.size == old.size ? old : next;
+		});
+	}, [modelCacheKey, model?.stateVariables]);
+
+	const onStateVariableHiddenChange = useCallback((stateVariableId: Id, hidden: boolean) => {
+		setHiddenStateVariableIds(previous => {
+			const next = new Set(previous);
+			if (hidden) {
+				next.add(stateVariableId);
+				vscode.postMessage("onHideStateVariable", { stateVariableId });
+			}
+			else {
+				next.delete(stateVariableId);
+				vscode.postMessage("onShowStateVariable", { stateVariableId });
+			}
+			return next;
+		});
+	}, []);
+
+	const onToggleAllStateVariables = useCallback(() => {
+		setHiddenStateVariableIds(prev => { 
+			// vscode.postMessage("onToggleAllStateVariables", { hide: !prev.size });
+			return prev.size ? new Set() : new Set(stateVariableIds) 
+		});
+	}, [stateVariableIds]);
+
+	const onDoubleClick = (event: React.MouseEvent, node: Node | StateUpdate) => {
+		vscode.postMessage("nodeDblClick", { data: { ...((node as any)?.data ?? node), name: undefined, children: undefined } });
+	}
+
+	let pendingImgRequest = useRef<Promise<string | null> | null>(null);
+	const onDiagramImage = useCallback(async (saveToDisk = true, useSnapdom = true) => { 
+		console.debug("Image creation requested", saveToDisk);
+		if (cachedImage) {
+			vscode.postMessage("onDiagramImage", { dataUrl: cachedImage, saveToDisk });
+			return;
+		}
+
+		try {
+			const imageGenFn = useSnapdom ? snapdomToPngDataUrl : htmlToImageToPng;
+			const dataUrl = await (pendingImgRequest.current ?? (pendingImgRequest.current = downloadDiagramImage(nodes, imageGenFn)));
+			setCachedImage(dataUrl);
+			vscode.postMessage("onDiagramImage", { dataUrl, saveToDisk });
+		}
+		catch (error) {
+			console.error("Download failed", error);
+		}
+		finally {
+			pendingImgRequest.current = null;
+		}
+	}, [nodes, cachedImage]);
+
+	useEffect(() => {
+		const onMessage = (event: MessageEvent<Message>) => {
+			// console.debug("Received message", event.data.data);
+			if (event.data?.type == 'requestDiagramImage')
+				void onDiagramImage(event.data.data?.saveToDisk, event.data.data?.useSnapdom);
 		};
-	}, [model]);
+
+		window.addEventListener('message', onMessage);
+		return () => window.removeEventListener('message', onMessage);
+	}, [onDiagramImage]);
 
 	return (
-		<div className="h-full w-full">
-			{!hasModel && (
-				<div className="absolute z-10 rounded border border-(--vscode-editorWidget-border) bg-(--vscode-editorWidget-background) px-3 py-2 text-xs text-(--vscode-descriptionForeground)">
-					No state variables found.
-				</div>
-			)}
-			<ReactFlow
-				nodes={flowState.nodes}
-				edges={flowState.edges}
-				nodesConnectable={false}
-				elementsSelectable
-				nodeTypes={nodeTypes}
-				edgeTypes={edgeTypes}
-				connectionLineComponent={FloatingConnectionLine}
-				fitViewOptions={{ padding: 0.2 }}
-				defaultEdgeOptions={{
-					type: 'floating',
-					markerEnd: { type: MarkerType.ArrowClosed },
-				}}
-				className='floating-edges'
-			>
-				<AutoFitView ready={flowState.nodes.length > 0} />
-				<Controls />
-				<Background gap={18} size={1} />
-			</ReactFlow>
+		<div className="flex h-full w-full">
+			<div className="relative min-w-0 flex-1">
+				{!hasModel && (
+					<div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 rounded border border-(--vscode-editorWidget-border) px-3 py-2 text-gray-400 text-center">
+						State diagram can't be generated from the current code. Please make sure you export default valid React components that has at least one active state variable.
+					</div>
+				)}
+				<ReactFlow
+					nodes={nodes}
+					edges={edges}
+					nodesConnectable={false}
+					elementsSelectable
+					nodeTypes={nodeTypes}
+					edgeTypes={edgeTypes}
+					fitViewOptions={fitToViewOptions}
+					defaultEdgeOptions={{
+						type: 'floating',
+						markerEnd: { type: MarkerType.ArrowClosed },
+					}}
+					className='floating-edges'
+					onNodeDoubleClick={onDoubleClick}
+					style={{ background: bgColor == 'light' ? '#e8eaed' : (bgColor == 'dark' ? '#1f1f1f' : undefined) }}
+					minZoom={0.25}
+					maxZoom={2.25}
+				>
+					{hasModel && <>
+						<VSCodeButton className={`z-10 absolute left-1.5 top-2 scale-[0.64] not-hover:opacity-85`} onClick={() => onDiagramImage(true)}>
+							<Camera className="w-full h-full" />
+						</VSCodeButton>
+						<VSCodeButton className={`z-10 absolute right-1.5 top-2 scale-[0.64] not-hover:opacity-85`}
+							onClick={() => setIsDetailsOpen(open => !open)}
+							title={isDetailsOpen ? 'Collapse details panel' : 'Expand details panel'}
+						>
+							{isDetailsOpen ? <PanelRightClose className="w-full h-full" /> : <PanelRightOpen className="w-full h-full" />}
+						</VSCodeButton>
+						<AutoFitView ready={nodes.length > 0} />
+						<Controls fitViewOptions={fitToViewOptions} className='not-hover:opacity-85 text-gray-400' />
+						<MiniMap pannable zoomable style={{width: 150, height: 100 }} className='not-hover:opacity-85' nodeColor={minimapNodeColor} nodeStrokeColor={minimapNodeStrokeColor} />
+					</>}
+					<Background gap={18} size={1} />
+				</ReactFlow>
+			</div>
+
+			<div className={cn(`h-full transition-[width] duration-200`, isDetailsOpen ? 'w-[clamp(340px,32vw,395px)]' : 'w-0 overflow-hidden')} onClick={(ev) => {
+				if (ev.ctrlKey && ev.shiftKey) {
+					console.debug(model);
+					console.debug(JSON.stringify(model, (key, value) => value === "" ? undefined : value));
+				}
+			}}>
+				<StateDetailsPanel model={model} hiddenStateVariableIds={hiddenStateVariableIds} onStateVariableHiddenChange={onStateVariableHiddenChange} onToggleAllStateVariables={onToggleAllStateVariables} onStateDoubleClick={onDoubleClick} />
+			</div>
 		</div>
 	);
 }

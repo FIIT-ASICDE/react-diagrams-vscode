@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 
-type NodeProps = {
+export type NodeProps = {
   data: {
     color: string;
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -11,7 +11,7 @@ type NodeProps = {
   isConnectable: boolean;
 };
 
-const nodeStyles = {
+export const nodeStyles = {
   shell: {
     width: 200,
     position: 'relative' as const,
@@ -102,10 +102,10 @@ function NodeShell({ children }: { children: React.ReactNode }) {
   return <div style={nodeStyles.shell}>{children}</div>;
 }
 
-function commonTargetHandles(isConnectable: boolean, sideInset = 0) {
+export function commonTargetHandles(isConnectable: boolean, sideInset = 0, opacity = 1) {
   return (
     <>
-      <Handle id="target-top" type="target" position={Position.Top} isConnectable={isConnectable} />
+      <Handle id="target-top" type="target" position={Position.Top} isConnectable={isConnectable} style={{ opacity }} />
       <Handle
         id="target-left"
         type="target"
@@ -113,14 +113,21 @@ function commonTargetHandles(isConnectable: boolean, sideInset = 0) {
         isConnectable={isConnectable}
         style={{ opacity: 0, left: sideInset }}
       />
+      <Handle
+        id="target-right"
+        type="target"
+        position={Position.Right}
+        isConnectable={isConnectable}
+        style={{ opacity: 0, right: sideInset }}
+      />
     </>
   );
 }
 
-function commonSourceHandles(isConnectable: boolean, sideInset = 0) {
+export function commonSourceHandles(isConnectable: boolean, sideInset = 0, opacity = 1) {
   return (
     <>
-      <Handle id="source-bottom" type="source" position={Position.Bottom} isConnectable={isConnectable} />
+      <Handle id="source-bottom" type="source" position={Position.Bottom} isConnectable={isConnectable} style={{ opacity }} />
       <Handle
         id="source-left"
         type="source"

@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "tailwindcss" important;
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 /* @import "@fontsource-variable/inter"; */
@@ -7,8 +7,16 @@
 
 @layer base {
 	@import "@xyflow/react/dist/style.css";
+}
 
-	.floating-edges .react-flow__handle {
-		@apply opacity-0 w-0 h-0 min-w-0 min-h-0 pointer-events-none;
-	}
+.diagram-image-export .react-flow__edgelabel-renderer > div {
+	max-width: 220px !important;
+}
+
+.diagram-image-export .react-flow__node [class*="max-w-30"] {
+	max-width: 10rem !important;
+}
+
+.diagram-image-export .react-flow__node [class*="max-w-58"] {
+	max-width: 18rem !important;
 }

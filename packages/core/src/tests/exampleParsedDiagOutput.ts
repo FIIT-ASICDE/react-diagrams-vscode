@@ -22,7 +22,7 @@ export const exampleParsedDiagram = {
           setterName: 'setAnswer',
           kind: 'expression',
           pos: { line: 26, column: 5 },
-          expressionText: 'e.target.value'
+          label: 'e.target.value'
         }
       ],
       mutators: [
@@ -39,7 +39,7 @@ export const exampleParsedDiagram = {
               setterName: 'setAnswer',
               kind: 'expression',
               pos: { line: 26, column: 5 },
-              expressionText: 'e.target.value'
+              label: 'e.target.value'
             },
             {
               id: 'flow:entry:handleTextareaChange:25:36',       
@@ -93,7 +93,7 @@ export const exampleParsedDiagram = {
           setterName: 'setError',
           kind: 'expression',
           pos: { line: 21, column: 7 },
-          expressionText: 'err'
+          label: 'err'
         }
       ],
       mutators: [
@@ -110,7 +110,7 @@ export const exampleParsedDiagram = {
               setterName: 'setError',
               kind: 'expression',
               pos: { line: 21, column: 7 },
-              expressionText: 'err'
+              label: 'err'
             },
             {
               id: 'flow:entry:handleSubmit:13:34',
@@ -202,7 +202,7 @@ export const exampleParsedDiagram = {
           setterName: 'setStatus',
           kind: 'direct',
           pos: { line: 15, column: 5 },
-          expressionText: "'submitting'"
+          label: "'submitting'"
         },
         {
           id: "update:status:direct:'success':18:7",
@@ -211,7 +211,7 @@ export const exampleParsedDiagram = {
           setterName: 'setStatus',
           kind: 'direct',
           pos: { line: 18, column: 7 },
-          expressionText: "'success'"
+          label: "'success'"
         },
         {
           id: "update:status:direct:'typing':20:7",
@@ -220,7 +220,7 @@ export const exampleParsedDiagram = {
           setterName: 'setStatus',
           kind: 'direct',
           pos: { line: 20, column: 7 },
-          expressionText: "'typing'"
+          label: "'typing'"
         }
       ],
       mutators: [
@@ -237,7 +237,7 @@ export const exampleParsedDiagram = {
               setterName: 'setStatus',
               kind: 'direct',
               pos: { line: 15, column: 5 },
-              expressionText: "'submitting'"
+              label: "'submitting'"
             },
             {
               id: "update:status:direct:'success':18:7",
@@ -246,7 +246,7 @@ export const exampleParsedDiagram = {
               setterName: 'setStatus',
               kind: 'direct',
               pos: { line: 18, column: 7 },
-              expressionText: "'success'"
+              label: "'success'"
             },
             {
               id: "update:status:direct:'typing':20:7",
@@ -255,7 +255,7 @@ export const exampleParsedDiagram = {
               setterName: 'setStatus',
               kind: 'direct',
               pos: { line: 20, column: 7 },
-              expressionText: "'typing'"
+              label: "'typing'"
             },
             {
               id: 'flow:entry:handleSubmit:13:34',

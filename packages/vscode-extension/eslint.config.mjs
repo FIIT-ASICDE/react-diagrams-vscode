@@ -25,5 +25,6 @@ export default [{
         semi: "warn",
         "@typescript-eslint/no-unused-vars": "warn",
         "@typescript-eslint/no-implicit-any": "off",
+        'no-unreachable': 'warn',
     },
 }];

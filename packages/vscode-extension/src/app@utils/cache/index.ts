@@ -1,6 +1,6 @@
 export * from "./parsing-cache";
 
 import { parseReactComponent } from "@react-diagrams/core";
-import { ParsingCache } from "./parsing-cache";
+import { ParsingImageCache } from "./parsing-cache";
 
-export const componentStateCache = new ParsingCache(parseReactComponent);
+export const componentStateCache = new ParsingImageCache(parseReactComponent);

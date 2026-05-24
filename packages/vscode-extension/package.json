@@ -1,7 +1,8 @@
 {
   "name": "@react-diagrams/vscode-extension",
-  "displayName": "vs-code-ext",
+  "displayName": "react-diagrams",
   "description": "",
+  "publisher": "FIIT-react-diagrams",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.111.0"
@@ -9,19 +10,213 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onChatParticipant:react-diagrams.diagram"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": [
+    "chatParticipants": [
       {
-        "command": "vs-code-ext.componentState",
-        "title": "React Component State"
+        "id": "react-diagrams.state-diagram",
+        "name": "state-diagram",
+        "fullName": "State Diagram Assistant",
+        "description": "Understands TypeScript, TSX, and state diagrams using your current code and diagram context.",
+        "isSticky": true
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "stateDiagram_getCurrentDiagram",
+        "toolReferenceName": "stateDiagram",
+        "displayName": "Get Current State Diagram",
+        "modelDescription": "Returns the current in-memory React component state diagram JSON representation for last valid saved file. After that, use 'source' path with 'read' vscode tool to read the corresponding source code if you havent done so, before submitting any code changes.",
+        "userDescription": "Get the current React component state diagram.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
       },
       {
-        "command": "vs-code-ext.componentActivity",
+        "name": "stateDiagram_getCurrentImage",
+        "toolReferenceName": "stateDiagramImage",
+        "displayName": "Get Current State Diagram Image",
+        "modelDescription": "Returns the render of currently viewed state diagram image. Available if the Component State Panel is open and visible.",
+        "userDescription": "Get the current state diagram screenshot.",
+        "canBeReferencedInPrompt": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
+    "commands": [
+      {
+        "command": "react-diagrams.componentState",
+        "title": "State Diagram: Component State Panel"
+      },
+      {
+        "command": "react-diagrams.requestStateDiagramImage",
+        "title": "State Diagram: Request Current Diagram Image"
+      },
+      {
+        "command": "react-diagrams.installStateDiagramAgent",
+        "title": "State Diagram: Install State Diagram Agent"
+      },
+      {
+        "command": "react-diagrams.componentActivity",
         "title": "React Component Activity"
       }
-    ]
+    ],
+    "keybindings": [
+      {
+        "command": "react-diagrams.componentState",
+        "key": "alt+d alt+s",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "react-diagrams.componentActivity",
+        "key": "alt+d alt+a",
+        "when": "editorTextFocus"
+      }
+    ],
+    "configuration": {
+      "title": "React diagrams",
+      "properties": {
+        "state.diagram.openStatePanelOnTheSide": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the Component State Panel in a split view on the side instead of the main area."
+        },
+        "state.diagram.useGuardsWhenPossible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use [guards] in the State Diagram transitions instead of decision nodes if possible."
+        },
+        "state.diagram.considerEarlyExits": {
+          "type": "boolean",
+          "default": true,
+          "description": "Consider early exits, return and throw, in the State Diagram transitions."
+        },
+        "state.diagram.backgroundColor": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "light",
+            "dark"
+          ],
+          "enumItemLabels": [
+            "Auto",
+            "Force Light",
+            "Force Dark"
+          ],
+          "enumDescriptions": [
+            "Uses the VS Code theme.",
+            "Use a white background for the state diagram.",
+            "Use a dark background for the state diagram."
+          ],
+          "description": "The background color mode of State Diagram."
+        },
+        "state.diagram.transitionRouting": {
+          "type": "string",
+          "default": "POLYLINE",
+          "enum": [
+            "POLYLINE",
+            "ORTHOGONAL",
+            "SPLINES"
+          ],
+          "enumDescriptions": [
+            "Shorter transition with graceful turns.",
+            "Longer transition with sharp turns.",
+            "Combination of POLYLINE and ORTHOGONAL."
+          ],
+          "description": "Specifies the routing algorithm for transitions in the state diagram."
+        },
+        "state.diagram.chatParticipantCapabilities": {
+          "type": "array",
+          "description": "Select the State Diagram chat participant capabilities i. e. what context it can access and utilize.",
+          "uniqueItems": true,
+          "default": ["code", "diagram"],
+          "items": {
+            "type": "string",
+            "enum": [
+              "code",
+              "diagram",
+              "diagramImage"
+            ],
+            "enumItemLabels": [
+              "Code",
+              "Diagram",
+              "Diagram Image"
+            ],
+            "enumDescriptions": [
+              "Enable participant to view current source file.",
+              "Enable participant to utilize serialized diagram representation.",
+              "Enable participant to view diagram as image (Component State Panel has to be opened and visible for this to work)."
+            ]
+          }
+        },
+        "state.diagram.knownStateVariableHooks": {
+          "type": "array",
+          "description": "List of hook function names that declare state variables (useState, useCustomState). The first argument is treated as the initial value and the result must be a n-tuple in format [getter, setter, ...], similar to React's useState.",
+          "default": ["useState"],
+          "items": {
+            "type": "string"
+          }
+        },
+        "state.diagram.knownRefVariableHooks": {
+          "type": "array",
+          "description": "List of hook function names that declare ref-like state variables in format refName = useRefLike(initialValue). Mutations are tracked only for direct writes to refName.current.",
+          "default": ["useRef"],
+          "items": {
+            "type": "string"
+          },
+          "tags": ["experimental"]
+        },
+        "state.diagram.requestDiagramImageStrategy": {
+          "type": "string",
+          "default": "ACCURACY",
+          "enum": [
+            "SPEED",
+            "ACCURACY"
+          ],
+          "enumDescriptions": [
+            "Prioritizes faster diagram image generation, with slight loss of accuracy.",
+            "Prioritizes higher accuracy in diagram image generation, but a lot slower."
+          ],
+          "description": "Specifies the image generation strategy 'State Diagram: Request Current Diagram Image' and '#stateDiagramImage' tool."
+        },
+        "state.diagram.mergeSquashingOptimization": {
+          "type": "array",
+          "uniqueItems": true,
+          "default": ["merge->merge", "merge->decision", "merge->exit"],
+          "items": {
+            "type": "string",
+            "enum": [
+              "merge->merge",
+              "merge->decision",
+              "merge->try",
+              "merge->switch",
+              "merge->loop",
+              "do->x",
+              "merge->exit"
+            ],
+            "enumDescriptions": [
+              "Squash merge nodes chains into a single merge node.",
+              "Emplace merge with the possible decision node.",
+              "Emplace merge with the possible try node.",
+              "Emplace merge with the possible switch node.",
+              "Emplace merge with the possible loop node (do-while excluded).",
+              "Emplace 'do' diamond with the following node.",
+              "Emplace merge with the possible exit node."
+            ]
+          },
+          "description": "Ways for reducing the number of diamonds/merge nodes in the diagram, that carry little semantic meaning and can be omitted for clarity. It works in a way that merge->X, merge transitioning to X, will be simplified to X. (Note: Combining some options with loop may result in unexpected behavior or non fully UML compliant diagrams).",
+          "tags": ["experimental"]
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build:webview && npm run package",
@@ -36,6 +231,7 @@
     "test": "vscode-test"
   },
   "devDependencies": {
+    "@types/data-urls": "^3.0.5",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@types/vscode": "^1.110.0",
@@ -50,6 +246,7 @@
     "webpack-cli": "^6.0.1"
   },
   "dependencies": {
-    "@react-diagrams/core": "file:../core"
+    "@react-diagrams/core": "file:../core",
+    "data-urls": "^7.0.0"
   }
 }
